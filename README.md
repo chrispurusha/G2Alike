@@ -1,0 +1,265 @@
+# G2Alike - Place-holder, pre-check-in.
+
+A MacOS GUI editor for the Nord G2 modular synthesizer, with an optional clean-room sound-engine reproduction inspired by the hardware.
+
+## Working with LLMs
+
+Development started as a solo project. As the project has evolved, I've recently incorporated LLM-assisted development into the workflow, using it as a tool for research, coding, debugging, and experimentation.
+
+## Installing a release
+
+Download the `.dmg` from the [releases page](https://github.com/chrispurusha/G2Alike/releases). It
+contains two things: the editor, and an optional VST3 plug-in. The same instructions travel inside
+the `.dmg` as `Read Me First.txt`.
+
+Requirements: macOS 12.0 (Monterey) or later, Apple Silicon or Intel.
+### The editor
+
+1. Drag `G2Alike.app` onto the Applications folder shown in the disk image window.
+2. Clear the quarantine flag — **do this after step 1**, because the command refers to the app in
+   Applications:
+
+```
+xattr -dr com.apple.quarantine "/Applications/G2Alike.app"
+```
+
+There is no paid Apple Developer membership behind this project, so the app is **not notarized**.
+macOS blocks the first launch and may claim the app is damaged — it isn't; that is simply what macOS
+says about any app it cannot check with Apple. The command above prints nothing if it worked, and is
+needed once per install, including after each update.
+
+If you would rather not use Terminal: double-click the app, dismiss the warning, then open System
+Settings > Privacy & Security, scroll down and click **Open Anyway**.
+
+### Windows (experimental)
+
+There is no Windows installer: a release has a `.zip` per architecture - `windows-x64` for an ordinary
+PC, `windows-arm64` for Windows on ARM (Parallels on an Apple silicon Mac) - holding `G2Alike.exe`,
+the G2 Alike plug-in and a `Read Me First.txt`. It is unsigned, so Windows SmartScreen warns on the first
+run: More info > Run anyway. The plug-in (experimental, VST3 only) is the single file `G2 Alike.vst3`:
+copy it into `C:\Program Files\Common Files\VST3` (deleting any `G2 Alike.vst3` *folder* an older release put
+there) and rescan in the host. Use the zip that matches the
+host - x64 for an ordinary PC, arm64 for a native Windows on ARM host. See
+[Docs/windows-port-plan.md](./Docs/windows-port-plan.md) for how it is built.
+
+**The G2 needs Windows' generic USB driver, WinUSB, once** - Clavia's driver will not work with this
+editor. With the G2 connected (in Parallels: Devices > USB & Bluetooth > the G2): Device Manager > the G2,
+usually under Other devices (Properties > Details > Hardware Ids reads `USB\VID_0FFC&PID_0002`) >
+Update driver > Browse my computer > Let me pick from a list > Universal Serial Bus devices > **WinUsb
+Device** / **WinUsb Device** > Next > Yes. [Zadig](https://zadig.akeo.ie) (Options > List All Devices,
+the G2, WinUSB, Install Driver) does the same, but fails on some machines, Windows on ARM among them.
+While the G2 has WinUSB, software using Clavia's driver cannot see it; Update driver back to Clavia's to undo.
+
+### Keyboard and mouse
+
+Once it is running, **Help > Keyboard and Mouse** lists everything the modifier keys do — Alt with
+the wheel to adjust the parameter under the pointer, Shift and Cmd for selection, Ctrl to drag a
+panel around, playing notes from the computer keyboard, and the rest. It is a floating panel, so it
+can be left open beside the patch while you try them.
+
+### The VST3 plug-in (optional)
+
+`G2 Alike.vst3` **plays** a patch rather than editing one, which is where the name comes from. It is
+experimental and in-progress. Many patches load without complaint. The editor does not need it, and it does not need the editor — skip this if you only want
+the editor.
+
+Copy it into your own VST3 folder and clear its quarantine flag too:
+
+```
+cp -R "/Volumes/G2Alike <version>/G2 Alike.vst3" /Library/Audio/Plug-Ins/VST3/
+xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/"G2 Alike.vst3"
+```
+
+In Finder instead: choose **Go > Go to Folder**, enter `/Library/Audio/Plug-Ins/VST3`, and drag the
+plug-in in — then still run the `xattr` line, or the host will refuse to load it without saying why.
+
+That is the system-wide folder, where installers put plug-ins and where hosts look first. An
+administrator account writes to it without `sudo`; if it says "Permission denied", or the folder is
+not there at all, prefix both lines with `sudo`. The per-user `~/Library/Audio/Plug-Ins/VST3` works
+too — use one or the other, since a copy in both means your host may list the plug-in twice and load
+whichever it reaches first.
+
+Rescan plug-ins in your host (most do it at startup). It appears as **G2 Alike** by Chris Purusha,
+as an instrument. It needs a VST3 host; it does not run on its own.
+
+## Building
+
+### Prerequisites
+
+Install the following via Homebrew (https://brew.sh):
+
+```
+brew install cmake autoconf automake libtool uncrustify
+```
+
+- **cmake** — builds glfw and freetype
+- **autoconf / automake / libtool** — builds libusb
+- **uncrustify** — code formatter (optional, only needed when editing source)
+
+Xcode and its command line tools are also required:
+
+```
+xcode-select --install
+```
+
+### 1. Clone with submodules
+
+The third-party libraries (glfw, freetype, libusb) are nested submodules inside SynthLib. The `--recurse-submodules` flag is required — without it the build will fail.
+
+```
+git clone --recurse-submodules https://github.com/chrispurusha/G2Alike.git
+```
+
+If you already cloned without `--recurse-submodules`:
+
+```
+git submodule update --init --recursive
+```
+
+### 2. Update SynthLib (contributors / returning developers)
+
+SynthLib is a shared library submodule pinned to a specific commit. If SynthLib has been updated since you last pulled, advance the pin before building:
+
+```
+git submodule update --remote SynthLib
+git add SynthLib && git commit -m "Update SynthLib"
+```
+
+Do not manually copy files into the `SynthLib/` directory — this will cause conflicts on the next update.
+
+### 3. Build third-party libraries
+
+All commands run from the root of the cloned repository.
+
+**glfw:**
+
+```
+cmake -S SynthLib/ThirdParty/glfw -B SynthLib/ThirdParty/glfw/build \
+  -DBUILD_SHARED_LIBS=OFF \
+  -DGLFW_BUILD_DOCS=OFF \
+  -DGLFW_BUILD_EXAMPLES=OFF \
+  -DGLFW_BUILD_TESTS=OFF \
+  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.5
+cmake --build SynthLib/ThirdParty/glfw/build
+```
+
+**freetype:**
+
+```
+cmake -S SynthLib/ThirdParty/freetype -B SynthLib/ThirdParty/freetype/build \
+  -DBUILD_SHARED_LIBS=OFF \
+  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=11.5 \
+  -DFT_DISABLE_BROTLI=ON \
+  -DFT_DISABLE_BZIP2=ON \
+  -DFT_DISABLE_HVF=ON \
+  -DFT_DISABLE_PNG=ON \
+  -DFT_DISABLE_ZLIB=ON
+cmake --build SynthLib/ThirdParty/freetype/build
+```
+
+**libusb:**
+
+```
+cd SynthLib/ThirdParty/libusb
+export CFLAGS="-arch arm64 -arch x86_64"
+export CXXFLAGS="-arch arm64 -arch x86_64"
+export LDFLAGS="-arch arm64 -arch x86_64"
+autoreconf -fi
+./configure --disable-shared --enable-static
+make
+cd ../../..
+```
+
+### 4. Build with Xcode
+
+Open `G2Alike.xcodeproj` and build normally.
+
+### 5. Code formatting (optional)
+
+After editing source files, run from the repository root:
+
+```
+./do-uncrustify
+```
+
+Note this covers `src/` and `SynthLib/src/` only — **not** `plugin/` or `SynthLib/plugin/`.
+
+## Building the plug-ins (experimental)
+
+The sound engine can also be built as a plug-in, in **two formats from the same sources**: a VST3
+and an Audio Unit. It plays a `.pch2` file rather than talking to a G2, and it renders through the
+same `soundEngine.c` the application uses.
+
+### Prerequisites
+
+Only the VST3 needs anything extra. Download the
+[VST3 SDK](https://github.com/steinbergmedia/vst3sdk) — MIT licensed, so it is compatible with this
+project's GPLv3 — and place it at `~/Documents/vst3sdk`, or point `VST3_SDK` at wherever you put it.
+Only its `pluginterfaces/` directory is compiled, plus one file from `public.sdk` that does nothing
+but instantiate interface IDs. No CMake is involved, and the SDK does **not** need building first.
+
+The Audio Unit needs nothing at all — it is written against the system's own C API — so
+`./do-plugin au` works on a machine that has never downloaded the SDK.
+
+### Build
+
+```
+./do-plugin            # both formats
+./do-plugin vst3       # or just one
+./do-plugin au
+```
+
+Writes `build/G2 Alike.vst3` and `build/G2 Alike.component` — universal (arm64 + x86_64), ad-hoc
+signed — and **installs each one** into the system-wide plug-in folder, over whatever was there
+before, clearing its quarantine flag:
+
+```
+/Library/Audio/Plug-Ins/VST3/G2 Alike.vst3
+/Library/Audio/Plug-Ins/Components/G2 Alike.component
+```
+
+Those folders are group-writable on an administrator account, so no `sudo` is needed. Pass
+`--no-install` to build without touching them. As with the application, there is no paid Apple
+Developer membership behind this, so a host would otherwise refuse to load the bundle until its
+quarantine flag was cleared — hence the automatic `xattr`.
+
+An Audio Unit is found through the system's component registry rather than by path, so `do-plugin`
+also restarts `AudioComponentRegistrar` after installing one. If a host still does not list it,
+quit the host and open it again.
+
+### Which patch it plays
+
+The plug-in has a **File** menu of its own, which opens a `.pch2` through the same code the
+application uses. It starts **empty **in all four slots, and loads nothing by itself.
+
+Watch for the sandbox trap: a host may deny the plug-in access to `~/Documents`, in which case a
+perfectly correct path still produces silence — and silence looks the same whatever caused it.
+
+### Controls
+
+The plug-in is called **G2 Alike**, since it plays a patch rather than editing one.
+
+**Its editor is the application's own canvas.** It draws the patch, with the same File, Settings,
+Controls, Tools, View and Help menus, and it is the same window whichever format your host loaded —
+the two wrappers are thin shells around one view.
+
+Ten parameters are exposed to the host and are all automatable: **Morph 1-8**, the G2's own
+performance controls, an **Output Level** trim and **Pitch Bend**. Pitch bend, the mod wheel,
+aftertouch, sustain and the control pedal all work, routed onto the morph groups the G2 itself wires
+them to.
+
+### What to expect
+
+The plug-in inherits exactly what the sound engine can do. [Docs/engine-module-status.md](./Docs/engine-module-status.md) lists the development status for each module. All four slots play at once - the active ones, as on the instrument - with performance-mode keyboard ranges; a NoteSend or CtrlSend aimed at MIDI out is still dropped.
+
+See [THIRD_PARTY.md](./THIRD_PARTY.md) for open-source acknowledgments.
+
+### An alternative...
+
+There are at least 2 other editors in development. The one linked below is a different approach by
+someone I'm in touch with, who has contributed to this project and I have been having technical discussions
+with. Different approaches is a good thing I'd say!
+
+[Burpy's Editor](https://github.com/JanBurp/NordModularG2-Editor)
