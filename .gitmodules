@@ -1,0 +1,3 @@
+[submodule "SynthLib"]
+	path = SynthLib
+	url = https://github.com/chrispurusha/SynthLib.git
