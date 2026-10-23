@@ -1,4 +1,4 @@
-# G2Alike - Place-holder, pre-check-in.
+# G2Alike
 
 A MacOS GUI editor for the Nord G2 modular synthesiser, with an optional clean-room sound-engine reproduction inspired by the hardware.
 
