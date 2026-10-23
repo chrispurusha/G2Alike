@@ -68,6 +68,7 @@ if [[ ! -f $DEPS/.built-libusb ]]; then
           --exclude 'libtool' --exclude 'libusb-1.0.pc' --exclude 'stamp-h1' --exclude '.deps' \
           $THIRD/libusb/ $OUT/libusb/
     ( cd $OUT/libusb &&
+      { [[ -x ./configure ]] || LIBTOOLIZE=glibtoolize ./bootstrap.sh >/dev/null 2>&1; } &&
       PATH=$LLVM_MINGW/bin:$PATH ./configure --host=$TRIPLE --prefix=$DEPS \
           --enable-static --disable-shared --disable-examples-build --disable-tests-build >/dev/null &&
       PATH=$LLVM_MINGW/bin:$PATH make -j$JOBS >/dev/null &&
