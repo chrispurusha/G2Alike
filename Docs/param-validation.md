@@ -1,0 +1,1392 @@
+G2Alike  parameter display-mapping validation
+==============================================================================
+generated 2026-08-10
+
+Each parameter of each module, with how the value G2Alike displays for it has
+been checked against the value the G2 itself shows.
+
+  OK    display mapping validated against reference values for the G2
+  GAP   the renderer has no branch for this module, so it shows an error
+  --    not yet checked
+
+532 of 918 parameters validated (0 flagged GAP).
+
+==============================================================================
+
+4-Out   [module type 3]
+-----------------------
+   0. Out to  Menu          OK   selector names match the G2 exactly
+   1. Bypass  Bypass        OK   confirmed by the owner
+   2. Pad     Menu          --   enumerated selector - name list not yet cross-checked
+
+2-Out   [module type 4]
+-----------------------
+   0. Out to  Menu          OK   selector names match the G2 exactly
+   1. Bypass  Bypass        OK   confirmed by the owner
+   2. Pad     Menu          --   enumerated selector - name list not yet cross-checked
+
+OscB   [module type 7]
+----------------------
+   0. Tune        OscFreq       --   
+   1. Cent        Fine          OK   cents = (v-64)*50/64
+   2. Kbt         Toggle        --   
+   3. Pitch       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Pitch Type  Menu          --   enumerated selector - name list not yet cross-checked
+   5. FM          CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. Shape       Shape         OK   percent = v*49/127 + 50
+   7. ShpM        CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   8. Waveform    Menu          OK   selector names match the G2 exactly
+   9. Bypass      Bypass        OK   confirmed by the owner
+  10. FM Type     Menu          OK   selector names match the G2 exactly
+
+OscShpB   [module type 8]
+-------------------------
+   0. Tune        OscFreq       --   
+   1. Cent        Fine          OK   cents = (v-64)*50/64
+   2. Kbt         Toggle        --   
+   3. Pitch       CommonDial    --   
+   4. Pitch Type  Menu          --   enumerated selector - name list not yet cross-checked
+   5. FM          CommonDial    --   
+   6. Shape       Shape         OK   percent = v*49/127 + 50
+   7. ShpCtrl     CommonDial    --   
+   8. Bypass      Bypass        OK   confirmed by the owner
+   9. FM Type     Menu          OK   selector names match the G2 exactly
+
+OscC   [module type 9]
+----------------------
+   0. Tune       OscFreq       --   
+   1. Cent       Fine          OK   cents = (v-64)*50/64
+   2. Kbt        Toggle        --   
+   3. Tune Mode  Menu          --   enumerated selector - name list not yet cross-checked
+   4. FM         CommonDial    --   
+   5. Bypass     Bypass        OK   confirmed by the owner
+   6. FM Type    Menu          OK   selector names match the G2 exactly
+   7. Pitch      CommonDial    --   
+
+Reverb   [module type 12]
+-------------------------
+   0. Time        CommonDial    --   
+   1. Brightness  CommonDial    --   
+   2. DryWet      CommonDial    --   
+   3. Bypass      Bypass        OK   confirmed by the owner
+
+OscString   [module type 13]
+----------------------------
+   0. OscString Tune        OscFreq       --   
+   1. Cent                  Fine          OK   cents = (v-64)*50/64
+   2. OscString Kbt         Toggle        --   
+   3. Pitch                 CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. OscString Pitch mode  Menu          --   enumerated selector - name list not yet cross-checked
+   5. Decay                 CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. Damp                  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   7. Bypass                Bypass        OK   confirmed by the owner
+
+Sw8-1 *** Needs more resources   [module type 15]
+-------------------------------------------------
+   0. Sel  Menu          --   enumerated selector - name list not yet cross-checked
+
+ValSw1-2   [module type 17]
+---------------------------
+   0. Val  Menu          --   enumerated selector - name list not yet cross-checked
+
+X-Fade   [module type 18]
+-------------------------
+   0. Mod        CommonDial    --   
+   1. X-fade     Pan           --   
+   2. (unnamed)  Menu          OK   selector names match the G2 exactly
+
+Mix4-1B   [module type 19]
+--------------------------
+   0. Lev1      CommonDial    --   
+   1. Lev2      CommonDial    --   
+   2. Lev3      CommonDial    --   
+   3. Lev4      CommonDial    --   
+   4. ExpLinDB  Menu          OK   selector names match the G2 exactly
+
+EnvvADSR   [module type 20]
+---------------------------
+   0. Env Shape     Menu          OK   selector names match the G2 exactly
+   1. Attack        ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   2. Decay         ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   3. Sus           UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   4. Rel           ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   5. Output Type   Menu          --   enumerated selector - name list not yet cross-checked
+   6. KB Active     Toggle        --   
+   7. Normal/Reset  Menu          OK   selector names match the G2 exactly
+
+PartQuant   [module type 22]
+----------------------------
+   0. Range  Partials      OK   raw - 64, signed; '*' past +/-32 per the manual
+
+ModADSR   [module type 23]
+--------------------------
+   0. A            ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   1. D            ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   2. S            UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   3. R            ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   4. Attack M     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Decay M      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. Sustain M    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   7. Release M    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   8. Output Type  Menu          --   enumerated selector - name list not yet cross-checked
+   9. KB           Toggle        --   
+
+LfoC   [module type 24]
+-----------------------
+   0. Rate     LFORate       OK   all four Range settings; BPM confirmed twice, independently
+   1. Mode     Menu          OK   selector names match the G2 exactly
+   2. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+   3. Range    Menu          --   enumerated selector - name list not yet cross-checked
+   4. Bypass   Bypass        OK   confirmed by the owner
+
+LfoShpA   [module type 25]
+--------------------------
+   0. Rate     LFORate       OK   all four Range settings; BPM confirmed twice, independently
+   1. Range    Menu          --   enumerated selector - name list not yet cross-checked
+   2. Kbt      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Rate M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Bypass   Bypass        OK   confirmed by the owner
+   5. Shape    LfoShape      --   NEEDS VALIDATING AGAINST THE G2 (2026-08-23). It was a
+                                 raw CommonDial; it is now its own type showing 1%..99% with the
+                                 neutral wave at the CENTRE of the dial, which is why its default is
+                                 64 and not 0 like the oscillators'. NOT the oscillators' Shape: that
+                                 one runs 50%..99% (osc_shape_percent) because an oscillator's Shape
+                                 only ever opens from neutral.
+                                 THE THREE ENDS ARE FROM THE MANUAL, which pins them for Sine ("At
+                                 50% Shape, the signal is a pure sine wave. At 1% Shape, the signal
+                                 is a down sawtooth and at 99% Shape, an up sawtooth") and quotes the
+                                 same 1%/99% ends for CosBell and TriBell. Measurement agrees
+                                 independently: the phase-warp breakpoint recovered from a capture
+                                 runs 0.02 to 0.48 and passes through the identity at the centre.
+                                 WHAT IS UNCONFIRMED IS THE SHAPE OF THE CURVE BETWEEN THEM. Linear
+                                 is assumed, giving 25.7% at raw 32 and 75.1% at raw 96 (and 50.4%
+                                 rather than exactly 50 at raw 64). If the G2 shows
+                                 anything else at those points, lfo_shape_percent() needs a curve.
+                                 The device declares this param as LfoShpAPW, which may name a
+                                 specific formatter worth matching.
+   6. Phase M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   7. Phase    Phase         OK   degrees = raw*360/128, 0 to 357   [was showing the raw number, 2026-08-10]
+   8. Shape M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   9. Mode     Menu          OK   selector names match the G2 exactly
+  10. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+  11. Wave     Menu          OK   selector names match the G2 exactly
+
+LfoA   [module type 26]
+-----------------------
+   0. Rate     LFORate       OK   all four Range settings; BPM confirmed twice, independently
+   1. Mode     Menu          OK   selector names match the G2 exactly
+   2. Kbt      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Rate M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Wave     Menu          --   enumerated selector - name list not yet cross-checked
+   5. Bypass   Bypass        OK   confirmed by the owner
+   6. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+   7. Range    Menu          --   enumerated selector - name list not yet cross-checked
+
+OscMaster   [module type 27]
+----------------------------
+   0. Pitch      OscFreq       --   
+   1. Cent       Fine          OK   cents = (v-64)*50/64
+   2. Kbt        Toggle        --   
+   3. Tune mode  Menu          --   enumerated selector - name list not yet cross-checked
+   4. Pitch M    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+
+Saturate   [module type 28]
+---------------------------
+   0. Amount     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. AmountMod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Bypass     Bypass        OK   confirmed by the owner
+   3. Curve      Menu          --   enumerated selector - name list not yet cross-checked
+
+MetNoise   [module type 29]
+---------------------------
+   0. Color    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Freq     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Bypass   Bypass        OK   confirmed by the owner
+   3. Freq M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Color M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+
+Noise   [module type 31]
+------------------------
+   0. Color   CommonDial    --   declared as NoiseColor, but rendered as the plain percent dial - check
+   1. Bypass  Bypass        OK   confirmed by the owner
+
+Eq2Band   [module type 32]
+--------------------------
+   0. Lo       dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   1. Hi       dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   2. Level    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. Bypass   Bypass        OK   confirmed by the owner
+   4. Lo Freq  Menu          --   enumerated selector - name list not yet cross-checked
+   5. Hi Freq  Menu          --   enumerated selector - name list not yet cross-checked
+
+Eq3Band   [module type 33]
+--------------------------
+   0. Lo       dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   1. MidGn    dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   2. Freq     GeneralFreq   OK   Hz = 100 * 80^(v/127)
+   3. Hi       dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   4. Level    CommonDial    --   
+   5. Bypass   Bypass        OK   confirmed by the owner
+   6. Lo Freq  Menu          --   enumerated selector - name list not yet cross-checked
+   7. Hi Freq  Menu          --   enumerated selector - name list not yet cross-checked
+
+ShpExp   [module type 34]
+-------------------------
+   0. Amount     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. AmountMod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Bypass     Bypass        OK   confirmed by the owner
+   3. Curve      Menu          OK   selector names match the G2 exactly
+
+Driver (hidden module)   [module type 35]
+-----------------------------------------
+   0. Stiffness   CommonDial    --   
+   1. Embouchure  CommonDial    --   
+
+SwOnOffM   [module type 36]
+---------------------------
+   0. On  Menu          OK   selector names match the G2 exactly
+
+Pulse   [module type 38]
+------------------------
+   0. Time     PulseTime     --   
+   1. TimeMod  CommonDial    --   
+   2. Range    Menu          --   enumerated selector - name list not yet cross-checked
+
+Mix8-1B   [module type 40]
+--------------------------
+   0. In1       MixLevel      --   
+   1. In2       MixLevel      --   
+   2. In3       MixLevel      --   
+   3. In4       MixLevel      --   
+   4. In5       MixLevel      --   
+   5. In6       MixLevel      --   
+   6. In7       MixLevel      --   
+   7. In8       MixLevel      --   
+   8. ExpLinDB  Menu          OK   selector names match the G2 exactly
+   9. Pad       Menu          OK   selector names match the G2 exactly
+
+EnvH   [module type 41]
+-----------------------
+   0. Hold  ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   1. Pos   Menu          --   enumerated selector - name list not yet cross-checked
+
+Delay (Logic Delay)   [module type 42]
+--------------------------------------
+   0. Time     PulseTime     --   
+   1. TimeMod  CommonDial    --   
+   2. Range    Menu          --   enumerated selector - name list not yet cross-checked
+
+Constant   [module type 43]
+---------------------------
+   0. Value    BipLevel      --   
+   1. Bip/Uni  Menu          --   enumerated selector - name list not yet cross-checked
+
+FltVoice   [module type 45]
+---------------------------
+   0. Vowel1    Menu          --   enumerated selector - name list not yet cross-checked
+   1. Vowel2    Menu          --   enumerated selector - name list not yet cross-checked
+   2. Vowel3    Menu          --   enumerated selector - name list not yet cross-checked
+   3. Level     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Vowel     BipLevel      --   
+   5. VowelMod  Bipolar       OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   6. Freq      BipLevel      --   
+   7. FreqMod   Bipolar       OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   8. Res       BipLevel      --   
+   9. Bypass    Bypass        OK   confirmed by the owner
+
+EnvAHD   [module type 46]
+-------------------------
+   0. Shape      Menu          OK   selector names match the G2 exactly
+   1. Attack     ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   2. Hold       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   3. Reset      Menu          OK   selector names match the G2 exactly
+   4. Release    ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   5. OutType    Menu          --   enumerated selector - name list not yet cross-checked
+   6. (unnamed)  Toggle        --   
+
+Pan   [module type 47]
+----------------------
+   0. PanMod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Pan     LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   2. LogLin  Menu          OK   selector names match the G2 exactly
+
+MixStereo   [module type 48]
+----------------------------
+   0. Lvl1       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Lvl2       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Lvl3       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. Lvl4       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Lvl5       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Lvl6       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. Pan1       LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   7. Pan2       LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   8. Pan3       LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   9. Pan4       LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+  10. Pan5       LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+  11. Pan6       LRDial        OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+  12. LvlMaster  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+
+FltMulti   [module type 49]
+---------------------------
+   0. Freq    Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Pitch   Pitch         --   
+   2. Kbt     Menu          --   enumerated selector - name list not yet cross-checked
+   3. GC      Toggle        --   
+   4. Res     ResonanceQ    OK   Q = 0.5/(1 - 0.9v/127)^2   [computed, table retired 2026-08-10]
+   5. dB      Menu          OK   selector names match the G2 exactly
+   6. Bypass  Bypass        OK   confirmed by the owner
+
+ConstSwT   [module type 50]
+---------------------------
+   0. Value    CommonDial    --   declared as LevBipUni, but rendered as the plain percent dial - check
+   1. Switch   Toggle        OK   selector names match the G2 exactly
+   2. Bip/Uni  Menu          --   enumerated selector - name list not yet cross-checked
+
+FltNord   [module type 51]
+--------------------------
+   0. Freq        Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Pitch       Pitch         --   
+   2. Kbt         Menu          --   enumerated selector - name list not yet cross-checked
+   3. GC          Toggle        --   
+   4. Res         ResonanceQ    OK   Q = 0.5/(1 - 0.9v/127)^2   [computed, table retired 2026-08-10]
+   5. dB/Oct      Menu          OK   selector names match the G2 exactly
+   6. Bypass      Bypass        OK   confirmed by the owner
+   7. Fm Lin      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   8. FilterType  Menu          OK   selector names match the G2 exactly
+   9. Res M       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+
+EnvMulti   [module type 52]
+---------------------------
+   0. L1       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   1. L2       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   2. L3       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   3. L4       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   4. T1       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   5. T2       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   6. T3       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   7. T4       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   8. Reset    Menu          OK   selector names match the G2 exactly
+   9. Sust     Menu          OK   selector names match the G2 exactly
+  10. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+  11. Kbt      Toggle        --   
+  12. Shape    Menu          OK   selector names match the G2 exactly
+
+FltStatic   [module type 54]
+----------------------------
+   0. Freq        Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Res         ResonanceQ    OK   Q = 0.5/(1 - 0.9v/127)^2   [computed, table retired 2026-08-10]
+   2. FilterType  Menu          OK   selector names match the G2 exactly
+   3. Bypass      Bypass        OK   confirmed by the owner
+   4. GC          Toggle        --   
+
+EnvD   [module type 55]
+-----------------------
+   0. Decay    ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   1. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+
+Resonator (hidden module)   [module type 56]
+--------------------------------------------
+   0. Tune        OscFreq       --   
+   1. Cent        Fine          OK   cents = (v-64)*50/64
+   2. Kbt         Toggle        --   
+   3. Pitch       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Pitch Type  Menu          --   enumerated selector - name list not yet cross-checked
+   5. Decay       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   6. Damp        UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   7. Bypass      Bypass        OK   confirmed by the owner
+   8. Pos         UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   9. Alg         Menu          --   enumerated selector - name list not yet cross-checked
+
+Automate *** We lack an UI element for the CTRL selector   [module type 57]
+---------------------------------------------------------------------------
+   0. Ctrl  Int           OK   plain 0..127 integer, one-to-one with the value sent
+   1. Val   Int           OK   plain 0..127 integer, one-to-one with the value sent
+   2. Ch    Menu          --   enumerated selector - name list not yet cross-checked
+   3. Echo  Menu          OK   selector names match the G2 exactly
+
+Drumsynth — 4 rows: MasterOsc(y=17) | NoiseFilter(y=33) | SlaveOsc(y=49) | Bend/Click/Noise(y=65)   [module type 58]
+--------------------------------------------------------------------------------------------------------------------
+   0. Master Freq       FreqDrum      OK   Hz = 20 * 2^(v*0.041675): 20.0 at 0 and 784.0 at 127, the manual's own range
+   1. Slave Ratio       DrumSlaveRatio OK  ratio = 2^(v/48): 1:1 at 0 and x6.26 at 127, the manual's own range. Was the
+                                           plain percent dial, which read "11.7" for a ratio  [fixed 2026-09-18]
+   2. Dcy               ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   3. Dcy               ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   4. Lev               CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Lev               CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. Freq              Freq          OK   Hz = 13.75 * 2^(v/12)
+   7. Res               Resonance     OK   percent = v*100/128, no decimal at 0/25/50/75/100  [corrected 2026-08-10]
+   8. Swp               CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   9. Dcy               ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+  10. Noise FilterType  Menu          OK   selector names match the G2 exactly
+  11. Amt               CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+  12. Dcy               ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+  13. Click             CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+  14. Noise             CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+  15. On                Bypass        --   an On/Off button (default On), NOT the preset - the preset is not a parameter [2026-09-16]
+
+CompLev   [module type 59]
+--------------------------
+   0. C  BipLevel      --   
+
+Mux8-1X   [module type 60]
+--------------------------
+   0. X-fade  CommonDial    --   
+
+Clip   [module type 61]
+-----------------------
+   0. Clip level M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Clip level    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Shape         Menu          OK   selector names match the G2 exactly
+   3. Bypass        Bypass        OK   confirmed by the owner
+
+OverDrive   [module type 62]
+----------------------------
+   0. Amount M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Amount    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Bypass    Bypass        OK   confirmed by the owner
+   3. Type      Menu          OK   selector names match the G2 exactly
+   4. Shape     Menu          OK   selector names match the G2 exactly
+
+Scratch   [module type 63]
+--------------------------
+   0. Ratio      ScratchRatio  OK   signed multiple (raw-64)/16, 0 is a standstill, top pinned to 4.00   [hardware-read 2026-08-10]
+   1. Ratio Mod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Delay      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Bypass     Bypass        OK   confirmed by the owner
+
+Mix2-1B   [module type 66]
+--------------------------
+   0. Inv1      Menu          --   enumerated selector - name list not yet cross-checked
+   1. Lvl1      CommonDial    --   
+   2. Inv2      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Lvl2      CommonDial    --   
+   4. ExpLinDB  Menu          OK   selector names match the G2 exactly
+
+ClkGen   [module type 68]
+-------------------------
+   0. Tempo *** needs new dial 24-214 BPM  CommonDial    --   declared as RateBpm, but rendered as the plain percent dial - check
+   1. Bypass                               Bypass        OK   confirmed by the owner
+   2. Source                               Menu          --   enumerated selector - name list not yet cross-checked
+   3. Sync every                           Menu          --   enumerated selector - name list not yet cross-checked
+   4. Swing                                Swing         OK   percent = raw/5.08 + 50, so 50.0 to 75.0   [was raw, 2026-08-10]
+
+ClkDiv   [module type 69]
+-------------------------
+   0. Divider *** needs other UI element  CommonDial    --   
+
+EnvFollow   [module type 71]
+----------------------------
+   0. Attack   StrMap        --   cross-checked against a second independent editor, all 128 entries
+   1. Release  StrMap        --   cross-checked against a second independent editor, all 128 entries
+
+NoteScaler   [module type 72]
+-----------------------------
+   0. Range  PlusMinusUnits OK   +/- (raw/2) units, top step 64.0   [hardware-read 2026-08-10]
+
+WaveWrap   [module type 74]
+---------------------------
+   0. Amount Mod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Amount      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Bypass      Bypass        OK   confirmed by the owner
+
+NoteQuant   [module type 75]
+----------------------------
+   0. Range  PlusMinusUnits OK   +/- (raw/2) units, top step 64.0   [hardware-read 2026-08-10]
+   1. Notes  OffNum        OK   0 reads Off, otherwise the plain count   [hardware-read 2026-08-10]
+
+SwOnOffT   [module type 76]
+---------------------------
+   0. On  Menu          OK   selector names match the G2 exactly
+
+Sw1-8   [module type 78]
+------------------------
+   0. Selector  Menu          --   enumerated selector - name list not yet cross-checked
+
+Sw4-1   [module type 79]
+------------------------
+   0. Selector  Menu          --   enumerated selector - name list not yet cross-checked
+
+LevAmp   [module type 81]
+-------------------------
+   0. Gain  LevAmpDial    OK   gain = 0.25 * 2^(v/32), top step 4.0    [corrected 2026-08-10]
+   1. Type  Menu          --   enumerated selector - name list not yet cross-checked
+
+Rect   [module type 82]
+-----------------------
+   0. Mode    Menu          OK   selector names match the G2 exactly
+   1. Bypass  Bypass        OK   confirmed by the owner
+
+ShpStatic   [module type 83]
+----------------------------
+   0. Mode    Menu          OK   selector names match the G2 exactly
+   1. Bypass  Bypass        OK   confirmed by the owner
+
+EnvADR   [module type 84]
+-------------------------
+   0. Shape                 Menu          OK   selector names match the G2 exactly
+   1. Attack                ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   2. Reset                 Menu          OK   selector names match the G2 exactly
+   3. Release/Decay time    ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   4. Trig/Gate             Menu          OK   selector names match the G2 exactly
+   5. OutType               Menu          --   enumerated selector - name list not yet cross-checked
+   6. (unnamed)             Toggle        --   
+   7. Decay/Release toggle  Menu          --   enumerated selector - name list not yet cross-checked
+
+WindSw   [module type 85]
+-------------------------
+   0. From  UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   1. To    UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+
+FltLP   [module type 87]
+------------------------
+   0. Freq     Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. FreqMod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Kbt      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Slope    Menu          --   enumerated selector - name list not yet cross-checked
+   4. Bypass   Bypass        OK   confirmed by the owner
+
+Sw1-4   [module type 88]
+------------------------
+   0. Selector  Menu          --   enumerated selector - name list not yet cross-checked
+
+Flanger   [module type 89]
+--------------------------
+   0. Rate      FlangerRate   OK   Hz = v*384000/2^24, half a step at v=0   [computed, table retired 2026-08-10]
+   1. Range     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Feedback  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. Bypass    Bypass        OK   confirmed by the owner
+
+Sw1-2   [module type 90]
+------------------------
+   0. Selector  Menu          --   enumerated selector - name list not yet cross-checked
+
+FltClassic   [module type 92]
+-----------------------------
+   0. Freq       Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Env        Pitch         --   
+   2. Kbt        Menu          --   enumerated selector - name list not yet cross-checked
+   3. Res        ResonanceQ    OK   Q = 0.5/(1 - 0.9v/127)^2   [computed, table retired 2026-08-10]
+   4. (unnamed)  Menu          OK   selector names match the G2 exactly
+   5. (unnamed)  Bypass        OK   confirmed by the owner
+
+StChorus   [module type 94]
+---------------------------
+   0. Detune     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Amount     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. (unnamed)  Bypass        OK   confirmed by the owner
+
+OscD   [module type 96]
+-----------------------
+   0. Tune    Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Cent    CommonDial    --   
+   2. Kbt     Toggle        OK   selector names match the G2 exactly
+   3. Pitch   CommonDial    --   
+   4. Bypass  Bypass        OK   confirmed by the owner
+
+OscA   [module type 97]
+-----------------------
+   0. Tune        OscFreq       --   
+   1. Cent        Fine          OK   cents = (v-64)*50/64
+   2. Kbt         Toggle        --   
+   3. Pitch       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Waveform    Menu          --   enumerated selector - name list not yet cross-checked
+   5. Bypass      Bypass        OK   confirmed by the owner
+   6. Pitch Type  Menu          --   enumerated selector - name list not yet cross-checked
+
+FreqShift   [module type 98]
+----------------------------
+   0. FreqShift  FreqShift     --   
+   1. Mod        CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Range      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Bypass     Bypass        OK   confirmed by the owner
+
+Sw2-1   [module type 100]
+-------------------------
+   0. Selector  Menu          --   enumerated selector - name list not yet cross-checked
+
+FltPhase   [module type 102]
+----------------------------
+   0. Pitch     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Freq      Freq          OK   Hz = 13.75 * 2^(v/12)
+   2. Spread M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. FB        Bipolar       OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   4. Notch     Menu          --   enumerated selector - name list not yet cross-checked
+   5. Spread    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. Bypass    Bypass        OK   confirmed by the owner
+   7. Level     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   8. FB Mod    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   9. Type      Menu          OK   selector names match the G2 exactly
+  10. Kbt       Menu          --   enumerated selector - name list not yet cross-checked
+
+EqPeak   [module type 103]
+--------------------------
+   0. Freq    Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Gain    dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   2. BW      Bandwidth     OK   octaves = (128-raw)/64, 2.00 down to 0.02 - runs backwards   [was raw, 2026-08-10]
+   3. Bypass  Bypass        OK   confirmed by the owner
+   4. Level   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+
+ValSw2-1   [module type 105]
+----------------------------
+   0. Val  Menu          --   enumerated selector - name list not yet cross-checked
+
+OscNoise   [module type 106]
+----------------------------
+   0. Tune        OscFreq       --   
+   1. Cent        Fine          OK   cents = (v-64)*50/64
+   2. Kbt         Toggle        OK   selector names match the G2 exactly
+   3. Pitch       CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Pitch Type  Menu          --   enumerated selector - name list not yet cross-checked
+   5. Width M     CommonDial    OK   percent = raw*100/128; the FACE called this Width until 2026-09-19 (§8.1)
+   6. Width       CommonDial    OK   percent = raw*100/128; the face called this Width M - the engine always had it right
+   7. Bypass      Bypass        OK   confirmed by the owner
+
+Vocoder   [module type 108]
+---------------------------
+   0. 1    Menu          --   enumerated selector - name list not yet cross-checked
+   1. 2    Menu          --   enumerated selector - name list not yet cross-checked
+   2. 3    Menu          --   enumerated selector - name list not yet cross-checked
+   3. 4    Menu          --   enumerated selector - name list not yet cross-checked
+   4. 5    Menu          --   enumerated selector - name list not yet cross-checked
+   5. 6    Menu          --   enumerated selector - name list not yet cross-checked
+   6. 7    Menu          --   enumerated selector - name list not yet cross-checked
+   7. 8    Menu          --   enumerated selector - name list not yet cross-checked
+   8. 9    Menu          --   enumerated selector - name list not yet cross-checked
+   9. 10   Menu          --   enumerated selector - name list not yet cross-checked
+  10. 11   Menu          --   enumerated selector - name list not yet cross-checked
+  11. 12   Menu          --   enumerated selector - name list not yet cross-checked
+  12. 13   Menu          --   enumerated selector - name list not yet cross-checked
+  13. 14   Menu          --   enumerated selector - name list not yet cross-checked
+  14. 15   Menu          --   enumerated selector - name list not yet cross-checked
+  15. 16   Menu          --   enumerated selector - name list not yet cross-checked
+  16. Emp  Menu          OK   selector names match the G2 exactly
+  17. Mon  Menu          OK   selector names match the G2 exactly
+
+LevAdd   [module type 112]
+--------------------------
+   0. Constant  CommonDial    --   declared as LevBipUni, but rendered as the plain percent dial - check
+   1. Bip/Uni   Menu          --   enumerated selector - name list not yet cross-checked
+
+Fade1-2   [module type 113]
+---------------------------
+   0. Mix    CommonDial    --   
+   1. Mix M  CommonDial    --   
+
+Fade2-1   [module type 114]
+---------------------------
+   0. Mix    CommonDial    --   
+   1. Mix M  CommonDial    --   
+
+LevScaler   [module type 115]
+-----------------------------
+   0. L    dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   1. BP   CommonDial    --   declared as FreqCoarse, but rendered as the plain percent dial - check
+   2. R    dB            OK   dB = (v-64)*18/64, one decimal, top step 128  [corrected 2026-08-10]
+   3. Kbt  Toggle        OK   selector names match the G2 exactly
+
+Mix8-1A   [module type 116]
+---------------------------
+   0. Pad  Menu          OK   selector names match the G2 exactly
+
+LevMod   [module type 117]
+--------------------------
+   0. ModDepth  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. ModType   CommonDial    --   declared as LevModAmRm, but rendered as the plain percent dial - check
+
+Digitizer   [module type 118]
+-----------------------------
+   0. Bits         Menu          --   enumerated selector - name list not yet cross-checked
+   1. Sample Rate  SampleRate    OK   Hz = 1760*2^((raw-69)/12), a pitch scale   [hardware-read 2026-08-10]
+   2. Rate         CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. Bypass       Bypass        OK   confirmed by the owner
+
+EnvADDSR   [module type 119]
+----------------------------
+   0. Kb       Toggle        --   
+   1. Shape    Menu          OK   selector names match the G2 exactly
+   2. A        ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   3. D1       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   4. L1       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   5. D2       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   6. L2       UniPol        OK   raw/2 shown as N.0 / N.5, top step 64.0
+   7. R        ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   8. Sustain  Menu          OK   selector names match the G2 exactly
+   9. Pos      Menu          --   enumerated selector - name list not yet cross-checked
+  10. Reset    Menu          OK   selector names match the G2 exactly
+
+SeqNote - params 0-15: note sliders, 16-31: step enables, 32: Cycle, 33: Length, 34: T/G, 35: Rnd, 36: Clr   [module type 121]
+------------------------------------------------------------------------------------------------------------------------------
+   0. Step1   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   1. Step2   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   2. Step3   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   3. Step4   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   4. Step5   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   5. Step6   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   6. Step7   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   7. Step8   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   8. Step9   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   9. Step10  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  10. Step11  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  11. Step12  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  12. Step13  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  13. Step14  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  14. Step15  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  15. Step16  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  16. Evnt1   Enable        --   enumerated selector - name list not yet cross-checked
+  17. Evnt2   Enable        --   enumerated selector - name list not yet cross-checked
+  18. Evnt3   Enable        --   enumerated selector - name list not yet cross-checked
+  19. Evnt4   Enable        --   enumerated selector - name list not yet cross-checked
+  20. Evnt5   Enable        --   enumerated selector - name list not yet cross-checked
+  21. Evnt6   Enable        --   enumerated selector - name list not yet cross-checked
+  22. Evnt7   Enable        --   enumerated selector - name list not yet cross-checked
+  23. Evnt8   Enable        --   enumerated selector - name list not yet cross-checked
+  24. Evnt9   Enable        --   enumerated selector - name list not yet cross-checked
+  25. Evnt10  Enable        --   enumerated selector - name list not yet cross-checked
+  26. Evnt11  Enable        --   enumerated selector - name list not yet cross-checked
+  27. Evnt12  Enable        --   enumerated selector - name list not yet cross-checked
+  28. Evnt13  Enable        --   enumerated selector - name list not yet cross-checked
+  29. Evnt14  Enable        --   enumerated selector - name list not yet cross-checked
+  30. Evnt15  Enable        --   enumerated selector - name list not yet cross-checked
+  31. Evnt16  Enable        --   enumerated selector - name list not yet cross-checked
+  32. Cycle   Toggle        OK   selector names match the G2 exactly
+  33. Length  Menu          --   enumerated selector - name list not yet cross-checked
+  34. T/G     Menu          OK   selector names match the G2 exactly
+  35. Rnd     Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+  36. Clr     Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+  37. Mag     CustomData    --   enumerated selector - name list not yet cross-checked
+  38. Oct     CustomData    --   enumerated selector - name list not yet cross-checked
+
+Mix4-1C   [module type 123]
+---------------------------
+   0. L1       CommonDial    --   
+   1. L2       CommonDial    --   
+   2. L3       CommonDial    --   
+   3. L4       CommonDial    --   
+   4. Enable1  Enable        --   enumerated selector - name list not yet cross-checked
+   5. Enable2  Enable        --   enumerated selector - name list not yet cross-checked
+   6. Enable3  Enable        --   enumerated selector - name list not yet cross-checked
+   7. Enable4  Enable        --   enumerated selector - name list not yet cross-checked
+   8. Pad      Menu          --   enumerated selector - name list not yet cross-checked
+   9. Curve    Menu          OK   selector names match the G2 exactly
+
+WahWah   [module type 125]
+--------------------------
+   0. Sweep M  Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Sweep    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Bypass   Bypass        OK   confirmed by the owner
+
+Fx-In   [module type 127]
+-------------------------
+   0. In from  Menu          OK   selector names match the G2 exactly
+   1. Bypass   Bypass        OK   confirmed by the owner
+   2. Pad      Menu          --   enumerated selector - name list not yet cross-checked
+
+FltHP   [module type 134]
+-------------------------
+   0. Freq     Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. FreqMod  CommonDial    --   
+   2. Kbt      Menu          --   enumerated selector - name list not yet cross-checked
+   3. Bypass   Bypass        OK   confirmed by the owner
+
+Mix4-1S   [module type 140]
+---------------------------
+   0. L1       CommonDial    --   
+   1. L2       CommonDial    --   
+   2. L3       CommonDial    --   
+   3. L4       CommonDial    --   
+   4. Enable1  Enable        --   enumerated selector - name list not yet cross-checked
+   5. Enable2  Enable        --   enumerated selector - name list not yet cross-checked
+   6. Enable3  Enable        --   enumerated selector - name list not yet cross-checked
+   7. Enable4  Enable        --   enumerated selector - name list not yet cross-checked
+   8. Curve    Menu          OK   selector names match the G2 exactly
+
+CtrlSend   [module type 141]
+----------------------------
+   0. Ctrl   Int           OK   plain 0..127 integer, one-to-one with the value sent
+   1. Value  Int           OK   plain 0..127 integer, one-to-one with the value sent
+   2. Chan   Menu          --   enumerated selector - name list not yet cross-checked
+
+PCSend   [module type 142]
+--------------------------
+   0. Program  Int           OK   plain 0..127 integer, one-to-one with the value sent
+   1. Chan     Menu          --   enumerated selector - name list not yet cross-checked
+
+NoteSend   [module type 143]
+----------------------------
+   0. Vel   Int           OK   plain 0..127 integer, one-to-one with the value sent
+   1. Note  NoteDial      OK   note = raw mod 12, octave = raw/12 - 1; C-1 at raw 0
+   2. Chan  Menu          --   enumerated selector - name list not yet cross-checked
+
+SeqEvent   [module type 144]
+----------------------------
+   0. Step1-1   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   1. Step1-2   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   2. Step1-3   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   3. Step1-4   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   4. Step1-5   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   5. Step1-6   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   6. Step1-7   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   7. Step1-8   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   8. Step1-9   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+   9. Step1-10  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  10. Step1-11  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  11. Step1-12  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  12. Step1-13  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  13. Step1-14  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  14. Step1-15  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  15. Step1-16  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  16. Step2-1   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  17. Step2-2   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  18. Step2-3   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  19. Step2-4   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  20. Step2-5   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  21. Step2-6   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  22. Step2-7   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  23. Step2-8   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  24. Step2-9   Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  25. Step2-10  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  26. Step2-11  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  27. Step2-12  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  28. Step2-13  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  29. Step2-14  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  30. Step2-15  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  31. Step2-16  Enable        OK   lit/unlit step button - tested on the hardware by the owner
+  32. Cycle     Toggle        OK   selector names match the G2 exactly
+  33. Length    Menu          --   enumerated selector - name list not yet cross-checked
+  34. T up      Menu          OK   selector names match the G2 exactly
+  35. T down    Menu          OK   selector names match the G2 exactly
+
+SeqVal   [module type 145]
+--------------------------
+   0. Step1-1   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   1. Step1-2   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   2. Step1-3   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   3. Step1-4   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   4. Step1-5   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   5. Step1-6   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   6. Step1-7   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   7. Step1-8   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   8. Step2-1   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   9. Step2-2   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  10. Step2-3   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  11. Step2-4   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  12. Step2-5   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  13. Step2-6   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  14. Step2-7   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  15. Step2-8   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  16. Step2-1   Enable        --   enumerated selector - name list not yet cross-checked
+  17. Step2-2   Enable        --   enumerated selector - name list not yet cross-checked
+  18. Step2-3   Enable        --   enumerated selector - name list not yet cross-checked
+  19. Step2-4   Enable        --   enumerated selector - name list not yet cross-checked
+  20. Step2-5   Enable        --   enumerated selector - name list not yet cross-checked
+  21. Step2-68  Enable        --   enumerated selector - name list not yet cross-checked
+  22. Step2-7   Enable        --   enumerated selector - name list not yet cross-checked
+  23. Step2-8   Enable        --   enumerated selector - name list not yet cross-checked
+  24. Step2-9   Enable        --   enumerated selector - name list not yet cross-checked
+  25. Step2-10  Enable        --   enumerated selector - name list not yet cross-checked
+  26. Step2-11  Enable        --   enumerated selector - name list not yet cross-checked
+  27. Step2-12  Enable        --   enumerated selector - name list not yet cross-checked
+  28. Step2-13  Enable        --   enumerated selector - name list not yet cross-checked
+  29. Step2-14  Enable        --   enumerated selector - name list not yet cross-checked
+  30. Step2-15  Enable        --   enumerated selector - name list not yet cross-checked
+  31. Step2-16  Enable        --   enumerated selector - name list not yet cross-checked
+  32. Cycle     Toggle        OK   selector names match the G2 exactly
+  33. Length    Menu          --   enumerated selector - name list not yet cross-checked
+  34. Cycle     Menu          --   enumerated selector - name list not yet cross-checked
+  35. T down    Menu          OK   selector names match the G2 exactly
+  36. Rnd       Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+  37. Clr       Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+
+SeqLev   [module type 146]
+--------------------------
+   0. Step1   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   1. Step2   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   2. Step3   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   3. Step4   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   4. Step5   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   5. Step6   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   6. Step7   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   7. Step8   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   8. Step9   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   9. Step10  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  10. Step11  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  11. Step12  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  12. Step13  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  13. Step14  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  14. Step15  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  15. Step16  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  16. Evnt1   Enable        --   enumerated selector - name list not yet cross-checked
+  17. Evnt2   Enable        --   enumerated selector - name list not yet cross-checked
+  18. Evnt3   Enable        --   enumerated selector - name list not yet cross-checked
+  19. Evnt4   Enable        --   enumerated selector - name list not yet cross-checked
+  20. Evnt5   Enable        --   enumerated selector - name list not yet cross-checked
+  21. Evnt6   Enable        --   enumerated selector - name list not yet cross-checked
+  22. Evnt7   Enable        --   enumerated selector - name list not yet cross-checked
+  23. Evnt8   Enable        --   enumerated selector - name list not yet cross-checked
+  24. Evnt9   Enable        --   enumerated selector - name list not yet cross-checked
+  25. Evnt10  Enable        --   enumerated selector - name list not yet cross-checked
+  26. Evnt11  Enable        --   enumerated selector - name list not yet cross-checked
+  27. Evnt12  Enable        --   enumerated selector - name list not yet cross-checked
+  28. Evnt13  Enable        --   enumerated selector - name list not yet cross-checked
+  29. Evnt14  Enable        --   enumerated selector - name list not yet cross-checked
+  30. Evnt15  Enable        --   enumerated selector - name list not yet cross-checked
+  31. Evnt16  Enable        --   enumerated selector - name list not yet cross-checked
+  32. Cycle   Toggle        OK   selector names match the G2 exactly
+  33. Length  Menu          --   enumerated selector - name list not yet cross-checked
+  34. Cycle   Menu          --   enumerated selector - name list not yet cross-checked
+  35. T down  Menu          OK   selector names match the G2 exactly
+  36. Rnd     Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+  37. Clr     Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+
+CtrRcv   [module type 147]
+--------------------------
+   0. Ctrl  Int           OK   plain 0..127 integer, one-to-one with the value sent
+   1. Chan  Menu          --   enumerated selector - name list not yet cross-checked
+
+NoteRcv   [module type 148]
+---------------------------
+   0. Note  NoteDial      OK   note = raw mod 12, octave = raw/12 - 1; C-1 at raw 0
+   1. Chan  Menu          --   enumerated selector - name list not yet cross-checked
+
+NoteZone   [module type 149]
+----------------------------
+   0. RChan  Menu          --   enumerated selector - name list not yet cross-checked
+   1. Min    NoteDial      OK   note = raw mod 12, octave = raw/12 - 1; C-1 at raw 0
+   2. Max    NoteDial      OK   note = raw mod 12, octave = raw/12 - 1; C-1 at raw 0
+   3. Trans  Bipolar       OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   4. SChan  Menu          --   enumerated selector - name list not yet cross-checked
+   5. Thru   Menu          --   enumerated selector - name list not yet cross-checked
+
+Compress   [module type 150]
+----------------------------
+   0. Thr        CommonDial    --   
+   1. Ratio      CommonDial    --   
+   2. Att        StrMap        --   cross-checked against a second independent editor, all 128 entries
+   3. Rel        StrMap        --   cross-checked against a second independent editor, all 128 entries
+   4. RefLvl     CommonDial    --   
+   5. (unnamed)  Toggle        --   
+   6. (unnamed)  Bypass        OK   confirmed by the owner
+
+KeyQuant   [module type 152]
+----------------------------
+   0. Range    PlusMinusUnits OK   +/- (raw/2) units, top step 64.0   [hardware-read 2026-08-10]
+   1. Capture  Menu          OK   selector names match the G2 exactly
+   2. Note E   Enable        --   enumerated selector - name list not yet cross-checked
+   3. Note F   Enable        --   enumerated selector - name list not yet cross-checked
+   4. Note F#  Enable        --   enumerated selector - name list not yet cross-checked
+   5. Note G   Enable        --   enumerated selector - name list not yet cross-checked
+   6. Note G#  Enable        --   enumerated selector - name list not yet cross-checked
+   7. Note A   Enable        --   enumerated selector - name list not yet cross-checked
+   8. Note A#  Enable        --   enumerated selector - name list not yet cross-checked
+   9. Note B   Enable        --   enumerated selector - name list not yet cross-checked
+  10. Note C   Enable        --   enumerated selector - name list not yet cross-checked
+  11. Note C#  Enable        --   enumerated selector - name list not yet cross-checked
+  12. Note D   Enable        --   enumerated selector - name list not yet cross-checked
+  13. Note D#  Enable        --   enumerated selector - name list not yet cross-checked
+
+SeqCtr   [module type 154]
+--------------------------
+   0. Step1   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   1. Step2   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   2. Step3   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   3. Step4   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   4. Step5   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   5. Step6   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   6. Step7   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   7. Step8   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   8. Step9   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   9. Step10  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  10. Step11  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  11. Step12  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  12. Step13  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  13. Step14  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  14. Step15  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  15. Step16  Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+  16. Evnt1   Enable        --   enumerated selector - name list not yet cross-checked
+  17. Evnt2   Enable        --   enumerated selector - name list not yet cross-checked
+  18. Evnt3   Enable        --   enumerated selector - name list not yet cross-checked
+  19. Evnt4   Enable        --   enumerated selector - name list not yet cross-checked
+  20. Evnt5   Enable        --   enumerated selector - name list not yet cross-checked
+  21. Evnt6   Enable        --   enumerated selector - name list not yet cross-checked
+  22. Evnt7   Enable        --   enumerated selector - name list not yet cross-checked
+  23. Evnt8   Enable        --   enumerated selector - name list not yet cross-checked
+  24. Evnt9   Enable        --   enumerated selector - name list not yet cross-checked
+  25. Evnt10  Enable        --   enumerated selector - name list not yet cross-checked
+  26. Evnt11  Enable        --   enumerated selector - name list not yet cross-checked
+  27. Evnt12  Enable        --   enumerated selector - name list not yet cross-checked
+  28. Evnt13  Enable        --   enumerated selector - name list not yet cross-checked
+  29. Evnt14  Enable        --   enumerated selector - name list not yet cross-checked
+  30. Evnt15  Enable        --   enumerated selector - name list not yet cross-checked
+  31. Evnt16  Enable        --   enumerated selector - name list not yet cross-checked
+  32. T/G     Menu          OK   selector names match the G2 exactly
+  33. Pol     Menu          --   enumerated selector - name list not yet cross-checked
+  34. XFade   Menu          OK   selector names match the G2 exactly
+  35. Rnd     Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+  36. Clr     Push          OK   Rnd / Clr one-shot buttons - tested on the hardware by the owner
+
+NoteDet   [module type 156]
+---------------------------
+   0. Note  NoteDial      OK   note = raw mod 12, octave = raw/12 - 1; C-1 at raw 0
+
+LevConv   [module type 157]
+---------------------------
+   0. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+   1. Input    Menu          OK   selector names match the G2 exactly
+
+Glide   [module type 158]
+-------------------------
+   0. Time          StrMap        --   cross-checked against a second independent editor, all 128 entries
+   1. Glide on/off  Menu          OK   selector names match the G2 exactly
+   2. Shape         Menu          OK   selector names match the G2 exactly
+
+MixFader   [module type 161]
+----------------------------
+   0. Lev1   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   1. Lev2   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   2. Lev3   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   3. Lev4   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   4. Lev5   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   5. Lev6   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   6. Lev7   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   7. Lev8   Slider        OK   bipolar raw-64 (top step 64, skipping 63); unipolar 0.0..64.0 in halves   [hardware-read 2026-08-10]
+   8. On1    Enable        --   enumerated selector - name list not yet cross-checked
+   9. On2    Enable        --   enumerated selector - name list not yet cross-checked
+  10. On3    Enable        --   enumerated selector - name list not yet cross-checked
+  11. On4    Enable        --   enumerated selector - name list not yet cross-checked
+  12. On5    Enable        --   enumerated selector - name list not yet cross-checked
+  13. On6    Enable        --   enumerated selector - name list not yet cross-checked
+  14. On7    Enable        --   enumerated selector - name list not yet cross-checked
+  15. On8    Enable        --   enumerated selector - name list not yet cross-checked
+  16. Curve  Menu          OK   selector names match the G2 exactly
+  17. Pad    Menu          OK   selector names match the G2 exactly
+
+FltComb   [module type 162]
+---------------------------
+   0. Freq    Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Pitch   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Kbt     Menu          --   enumerated selector - name list not yet cross-checked
+   3. FB      Bipolar       OK   raw - 64, so -64 to +63 with 0 at the centre   [hardware-confirmed 2026-08-10]
+   4. FB Mod  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Type    Menu          OK   selector names match the G2 exactly
+   6. Level   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   7. Bypass  Bypass        OK   confirmed by the owner
+
+OscShpA   [module type 163]
+---------------------------
+   0. Pitch           OscFreq       --   
+   1. Cent            Fine          OK   cents = (v-64)*50/64
+   2. Kbt             Toggle        OK   selector names match the G2 exactly
+   3. Pitch           CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Tune M          Menu          --   enumerated selector - name list not yet cross-checked
+   5. FM              CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. FM Pitch Track  Menu          OK   selector names match the G2 exactly
+   7. Shape           Shape         OK   percent = v*49/127 + 50
+   8. ShpCtrl         CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   9. Wave            Menu          --   enumerated selector - name list not yet cross-checked
+  10. Bypass          Bypass        OK   confirmed by the owner
+
+OscDual   [module type 164]
+---------------------------
+   0. Pitch   OscFreq       --   
+   1. Cent    Fine          OK   cents = (v-64)*50/64
+   2. Kbt     Toggle        OK   selector names match the G2 exactly
+   3. Pitch   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Tune M  Menu          --   enumerated selector - name list not yet cross-checked
+   5. SqrLvl  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. PW      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   7. SawLvl  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   8. Phase   Phase         OK   degrees = raw*360/128, 0 to 357   [was showing the raw number, 2026-08-10]
+   9. ubLvl   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+  10. Bypass  Bypass        OK   confirmed by the owner
+  11. Sqr M   CommonDial    --   declared as PW, but rendered as the plain percent dial - check
+  12. Saw M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+  13. Soft    Menu          OK   selector names match the G2 exactly
+
+DXRouter   [module type 165]
+----------------------------
+   0. Algorithm  Menu          --   enumerated selector - name list not yet cross-checked
+   1. Feedback   Menu          --   enumerated selector - name list not yet cross-checked
+
+PShift   [module type 167]
+--------------------------
+   0. Semi     PShiftSemi    OK   semitones = (raw-64)/4, so -16.0 to +15.75   [hardware-read 2026-08-10]
+   1. Fine     BipolarPinned OK   raw - 64, top step pinned to 64   [hardware-read 2026-08-10]
+   2. Shift M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. Delay    Menu          --   enumerated selector - name list not yet cross-checked
+   4. Bypass   Bypass        OK   confirmed by the owner
+
+ModAHD   [module type 169]
+--------------------------
+   0. Attack     ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   1. Hold       ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   2. Decay      ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   3. Attack M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Hold M     CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Attack M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   6. (unnamed)  Menu          --   enumerated selector - name list not yet cross-checked
+   7. (unnamed)  Toggle        --   
+
+2-In   [module type 170]
+------------------------
+   0. In from  Menu          OK   selector names match the G2 exactly
+   1. Bypass   Bypass        OK   confirmed by the owner
+   2. Pad      Menu          --   enumerated selector - name list not yet cross-checked
+
+4-In   [module type 171]
+------------------------
+   0. In from  Menu          OK   selector names match the G2 exactly
+   1. Bypass   Bypass        OK   confirmed by the owner
+   2. Pad      Menu          --   enumerated selector - name list not yet cross-checked
+
+DlySingleA   [module type 172]
+------------------------------
+   0. Time  Time          --   
+
+DlySingleB   [module type 173]
+------------------------------
+   0. Time    Time          --   
+   1. Time M  CommonDial    --   
+
+DelayDual   [module type 174]
+-----------------------------
+   0. Time1   Time          --   
+   1. Time M  CommonDial    --   
+   2. Time2   Time          --   
+   3. Time M  CommonDial    --   
+
+DelayQuad   [module type 175]
+-----------------------------
+   0. Time1     TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   1. Time1 M   CommonDial    --   
+   2. Time2     TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   3. Time2 M   CommonDial    --   
+   4. Time3     TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   5. Time3 M   CommonDial    --   
+   6. Time4     TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   7. Time4 M   CommonDial    --   
+   8. Time/Clk  Menu          --   enumerated selector - name list not yet cross-checked
+
+DelayA   [module type 176]
+--------------------------
+   0. Time      TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   1. FB        CommonDial    --   
+   2. Filter    CommonDial    --   
+   3. Dry/Wet   CommonDial    --   
+   4. Bypass    Bypass        OK   confirmed by the owner
+   5. Time/Clk  Menu          --   enumerated selector - name list not yet cross-checked
+
+DelayB   [module type 177]
+--------------------------
+   0. Time         TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   1. FB           CommonDial    --   
+   2. LP           Freq          OK   Hz = 13.75 * 2^(v/12)
+   3. Dry/Wet      CommonDial    --   
+   4. Time/Clk     Menu          --   enumerated selector - name list not yet cross-checked
+   5. FB Mod       CommonDial    --   
+   6. Dry/Wet Mod  CommonDial    --   
+   7. Bypass       Bypass        OK   confirmed by the owner
+   8. HP           Freq          OK   Hz = 13.75 * 2^(v/12)
+
+DlyClock   [module type 178]
+----------------------------
+   0. Sample delay  Int           OK   plain 0..127 integer, one-to-one with the value sent
+
+Operator   [module type 180]
+----------------------------
+   0. Kbt          Toggle        OK   selector names match the G2 exactly
+   1. Sync         Menu          OK   selector names match the G2 exactly
+   2. RatioFixes   Menu          OK   selector names match the G2 exactly
+   3. Coarse       Freq          --   DX7 law with Fine: Ratio x0.50/x1-x31 * (1+Fine/100), Fixed 10^(v%4) * 10^(Fine/100) Hz (paramCurves.c notes §41) - not yet compared with the G2's own display
+   4. Fine         Int           OK   plain 0..127 integer, one-to-one with the value sent
+   5. Detune       Menu          --   enumerated selector - name list not yet cross-checked
+   6. Vel          Menu          --   enumerated selector - name list not yet cross-checked
+   7. RateScale    Menu          --   enumerated selector - name list not yet cross-checked
+   8. R1           Int           OK   plain 0..127 integer, one-to-one with the value sent
+   9. L1           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  10. R2           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  11. L2           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  12. R3           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  13. L3           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  14. R4           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  15. L4           Int           OK   plain 0..127 integer, one-to-one with the value sent
+  16. AMod         Menu          --   enumerated selector - name list not yet cross-checked
+  17. BrPt         NoteDial      OK   note = raw mod 12, octave = raw/12 - 1; C-1 at raw 0
+  18. LDepth Mode  Menu          OK   selector names match the G2 exactly
+  19. Ldepth       Menu          --   enumerated selector - name list not yet cross-checked
+  20. RDepth Mode  Menu          OK   selector names match the G2 exactly
+  21. Rdepth       Menu          --   enumerated selector - name list not yet cross-checked
+  22. Level        Int           OK   plain 0..127 integer, one-to-one with the value sent
+  23. Bypass       Bypass        OK   confirmed by the owner
+  24. KBEnv        Toggle        OK   selector names match the G2 exactly
+
+DlyEight   [module type 181]
+----------------------------
+   0. Time  Time          --   
+
+DlyStereo   [module type 182]
+-----------------------------
+   0. Left      TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   1. Right     TimeClk       OK   confirmed on the hardware (DelayB, Range 1.0s + all 32 Clk slots)
+   2. FB L      CommonDial    --   
+   3. FB R      CommonDial    --   
+   4. X-FB L    CommonDial    --   
+   5. X-FB R    CommonDial    --   
+   6. Time/Clk  Menu          --   enumerated selector - name list not yet cross-checked
+   7. LP        Freq          OK   Hz = 13.75 * 2^(v/12)
+   8. Dry/Wet   CommonDial    --   
+   9. Bypass    Bypass        OK   confirmed by the owner
+  10. HP        Freq          OK   Hz = 13.75 * 2^(v/12)
+
+OscPM   [module type 183]
+-------------------------
+   0. Tune       OscFreq       --   
+   1. Cent       CommonDial    --   
+   2. Kbt        Toggle        OK   selector names match the G2 exactly
+   3. Tune Mode  Menu          --   enumerated selector - name list not yet cross-checked
+   4. PhM        CommonDial    --   
+   5. Bypass     Bypass        OK   confirmed by the owner
+   6. Pitch      CommonDial    --   
+
+Mix1-1A   [module type 184]
+---------------------------
+   0. Level    CommonDial    --   
+   1. Enable1  Enable        --   enumerated selector - name list not yet cross-checked
+   2. Exp      Menu          OK   selector names match the G2 exactly
+
+Mix1-1S   [module type 185]
+---------------------------
+   0. Level    CommonDial    --   
+   1. Enable1  Enable        --   enumerated selector - name list not yet cross-checked
+   2. Exp      Menu          OK   selector names match the G2 exactly
+
+Sw1-2M   [module type 186]
+--------------------------
+   0. Selector *** Needs new UI element  Menu          OK   selector names match the G2 exactly
+
+Sw2-1M   [module type 187]
+--------------------------
+   0. Selector *** Needs new UI element  Menu          OK   selector names match the G2 exactly
+
+ConstSwM   [module type 188]
+----------------------------
+   0. Level                              CommonDial    --   declared as LevBipUni, but rendered as the plain percent dial - check
+   1. Selector *** needs new UI element  Menu          OK   selector names match the G2 exactly
+   2. Bip/Uni                            Menu          --   enumerated selector - name list not yet cross-checked
+
+NoiseGate   [module type 189]
+-----------------------------
+   0. Threshold  StrMap        --   
+   1. Attack     StrMap        --   
+   2. Release    StrMap        --   cross-checked against a second independent editor, all 128 entries
+   3. Bypass     Bypass        OK   confirmed by the owner
+
+LfoB   [module type 190]
+------------------------
+   0. Rate     LFORate       OK   all four Range settings; BPM confirmed twice, independently
+   1. Rate M   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. Range    Menu          --   enumerated selector - name list not yet cross-checked
+   3. Kbt      Menu          --   enumerated selector - name list not yet cross-checked
+   4. Wave     Menu          --   enumerated selector - name list not yet cross-checked
+   5. Mode     Menu          OK   selector names match the G2 exactly
+   6. Phase    Phase         OK   degrees = raw*360/128, 0 to 357   [was showing the raw number, 2026-08-10]
+   7. Bypass   Bypass        OK   confirmed by the owner
+   8. OutType  Menu          --   enumerated selector - name list not yet cross-checked
+   9. Phase M  CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+
+Phaser   [module type 192]
+--------------------------
+   0. Type    Menu          OK   selector names match the G2 exactly
+   1. Rate    PhaserRate    OK   Hz = (floor(v^2/2)*24000 + 768000)/2^24   [computed, table retired 2026-08-10]
+   2. FB      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   3. Bypass  Bypass        OK   confirmed by the owner
+
+Mix2-1A   [module type 194]
+---------------------------
+   0. L1       CommonDial    --   
+   1. Enable1  Enable        --   enumerated selector - name list not yet cross-checked
+   2. L2       CommonDial    --   
+   3. Enable2  Enable        --   enumerated selector - name list not yet cross-checked
+   4. Exp      Menu          OK   selector names match the G2 exactly
+
+ModAmt   [module type 195]
+--------------------------
+   0. Depth    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Enable   Toggle        OK   selector names match the G2 exactly
+   2. Exp/Lin  Menu          OK   selector names match the G2 exactly
+   3. m/1-m    Menu          OK   selector names match the G2 exactly
+
+OscPerc   [module type 196]
+---------------------------
+   0. Tune       OscFreq       --   
+   1. Cent       Fine          OK   cents = (v-64)*50/64
+   2. Tune Mode  Menu          --   enumerated selector - name list not yet cross-checked
+   3. Kbt        Toggle        OK   selector names match the G2 exactly
+   4. Pitch      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Decay      ADRTime       OK   seconds = 45.0*((v+40.167)/167.167)^8, all 128 readings   [computed, 2026-08-10]
+   6. Click      CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   7. Punch      Toggle        OK   selector names match the G2 exactly
+   8. Bypass     Bypass        OK   confirmed by the owner
+
+PitchTrack   [module type 198]
+------------------------------
+   0. Threshold  ThresholdDb   OK   dB = 20*log10(raw/127), silent at the bottom   [hardware-read 2026-08-10]
+
+MonoKey   [module type 199]
+---------------------------
+   0. Priority  Menu          --   enumerated selector - name list not yet cross-checked
+
+RandomA   [module type 200]
+---------------------------
+   0. Rate            Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Poly/Mono mode  Menu          OK   selector names match the G2 exactly
+   2. OutType         Menu          OK   selector names match the G2 exactly
+   3. Range           Menu          --   enumerated selector - name list not yet cross-checked
+   4. Bypass          Bypass        OK   confirmed by the owner
+   5. Edge            Menu          --   enumerated selector - name list not yet cross-checked
+   6. Step            Menu          --   enumerated selector - name list not yet cross-checked
+
+RandomB   [module type 202]
+---------------------------
+   0. Rate            Freq          OK   Hz = 13.75 * 2^(v/12)
+   1. Poly/Mono mode  Menu          OK   selector names match the G2 exactly
+   2. Kbt             Menu          --   enumerated selector - name list not yet cross-checked
+   3. Rate            CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   4. Step            CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   5. Bypass          Bypass        OK   confirmed by the owner
+   6. OutType         Menu          OK   selector names match the G2 exactly
+   7. Range           Menu          --   enumerated selector - name list not yet cross-checked
+   8. Edge            Menu          --   enumerated selector - name list not yet cross-checked
+
+RndClkA   [module type 204]
+---------------------------
+   0. Step    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. Mode    Menu          --   enumerated selector - name list not yet cross-checked
+   2. Dice    Menu          --   enumerated selector - name list not yet cross-checked
+   3. Out     Menu          OK   selector names match the G2 exactly
+   4. On/Off  Bypass        OK   confirmed by the owner
+
+RndTrig   [module type 205]
+---------------------------
+   0. Step    CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   1. StepM   CommonDial    OK   percent = raw*100/128, no decimal at 0/25/50/75/100
+   2. On/Off  Bypass        OK   confirmed by the owner
+   3. Mode    Menu          --   enumerated selector - name list not yet cross-checked
+
+RndClkB   [module type 206]
+---------------------------
+   0. Step    CommonDial    --   
+   1. Out     Menu          OK   selector names match the G2 exactly
+   2. On/Off  Bypass        OK   confirmed by the owner
+   3. Mode    Menu          --   enumerated selector - name list not yet cross-checked
+   4. StepM   CommonDial    --   
+
+RndPattern   [module type 208]
+------------------------------
+   0. PatA    CommonDial    --   
+   1. PatB    CommonDial    --   
+   2. Step    CommonDial    --   
+   3. Loop    CommonDial    --   
+   4. StepM   CommonDial    --   
+   5. Out     Menu          OK   selector names match the G2 exactly
+   6. On/Off  Bypass        OK   confirmed by the owner
+

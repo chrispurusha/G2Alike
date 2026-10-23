@@ -1,0 +1,122 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/moduleResourcesAccess.h.md - "// notes §k" refers there.
+
+#ifndef __MODULE_RESOURCE_ACCESS_H__
+#define __MODULE_RESOURCE_ACCESS_H__
+
+#include "sysIncludes.h"
+#include "types.h"
+
+extern const char *             clkSyncStrMap[];
+extern const char *             noteNameStrMap[];
+extern const char *             morphStrMap[];
+extern const tRgb               gCableColourMap[];
+extern const tRgb               gModuleColourMap[];
+extern const uint32_t           gModuleColourFamily[MODULE_COLOUR_HUES][MODULE_COLOUR_SHADES];
+extern const tRgb               connectorColourMap[];
+extern const tModuleProperties  gModuleProperties[];
+extern const tModuleRole        gModuleRoleList[];
+extern const tPaletteEntry      gPaletteList[];
+extern const char *const        gPaletteGroupName[];
+extern const tParamLocation     paramLocationList[];
+extern const tDisplayLocation   displayLocationList[];
+extern const tModeLocation      modeLocationList[];
+extern const tConnectorLocation connectorLocationList[];
+extern const tVolumeLocation    volumeLocationList[];
+extern const tVolumeMeterConfig volumeMeterConfigList[];
+extern const tLedLocation       ledLocationList[];
+extern const tLabelLocation     labelLocationList[];
+extern const tButtonLocation    buttonLocationList[];
+extern const tGraphLocation     graphLocationList[];
+//extern const double             dbLvlMap[];
+//extern const double             ADRTimeMap[];
+//const double                    pulseLoTime[];
+extern const char *             pulseLoTimeStrMap[];
+extern const char *             freq_shift_hiStrMap[];
+extern const char *             freq_shift_loStrMap[];
+extern const char *             freq_shift_subStrMap[];
+extern const char *             patch_settings_glideStrMap[];
+
+tCableColour cable_colour_for_connector_type(tConnectorType type);
+// notes §1
+tConnectorType effective_connector_type(tConnectorType baseType, bool upRate);
+const tVolumeMeterConfig * find_volume_meter_config(tVolumeType volumeType);
+const tGraphLocation * find_graph_location(tModuleType moduleType);
+const tGraphLocation * find_graph_location_nth(tModuleType moduleType, uint32_t nth);
+uint32_t array_size_module_colour_map(void);
+uint32_t array_size_palette_list(void);
+uint32_t palette_group_modules(tPaletteGroup group, tModuleType * out, uint32_t max);
+const char * palette_group_name(tPaletteGroup group);
+
+tModuleGroup module_group(tModuleType moduleType);
+bool module_is_engine_only(tModuleType moduleType);
+bool param_value_is_engine_only(tModuleType moduleType, uint32_t param, uint32_t value);
+uint32_t param_value_for_g2(tModuleType moduleType, uint32_t param, uint32_t value);
+const char * module_role_for(tModuleType moduleType, tRoleKind kind, uint32_t index);
+uint32_t module_index_for_role(tModuleType moduleType, tRoleKind kind, const char * role);
+bool module_group_has_roles(tModuleGroup group);
+uint32_t array_size_module_role_list(void);
+
+uint32_t array_size_param_location_list(void);
+uint32_t array_size_label_location_list(void);
+uint32_t array_size_connector_location_list(void);
+uint32_t array_size_mode_location_list(void);
+uint32_t array_size_volume_location_list(void);
+uint32_t array_size_led_location_list(void);
+uint32_t array_size_display_location_list(void);
+uint32_t array_size_button_location_list(void);
+uint32_t array_size_str_map(const char ** strMap);
+
+// The DrumSynth's factory presets. A preset is only values for params 0-14, so which one a module
+// is on is worked out from its dials: drum_synth_preset_matching() gives -1 when none match.
+uint32_t drum_synth_preset_count(void);
+const char * drum_synth_preset_name(uint32_t preset);
+uint8_t drum_synth_preset_value(uint32_t preset, uint32_t paramIndex);
+int32_t drum_synth_preset_matching(const tParam * params);
+uint32_t module_param_count(tModuleType moduleType);
+uint32_t module_param_default(tModuleType moduleType, uint32_t paramIndex);
+uint32_t module_mode_default(tModuleType moduleType, uint32_t modeIndex);
+
+// The subset of those the DEVICE actually sends — paramTypeCustomData rows excluded, they are local
+// storage with their own wire message. For the patch-parse count check only; see the definition.
+uint32_t module_device_param_count(tModuleType moduleType);
+uint32_t module_connector_count(tModuleType moduleType);
+// Fills module->connector[].dir/.type from connectorLocationList. Must be called whenever a
+// module enters the database, because these fields are what every cable lookup reads and they
+// were previously a side effect of rendering — see the definition for what that broke.
+void populate_module_connectors(tModule * module);
+uint32_t module_mode_count(tModuleType moduleType);
+uint32_t module_volume_count(tModuleType moduleType);
+uint32_t module_led_count(tModuleType moduleType);
+uint32_t module_multibit_led_count(tModuleType moduleType);
+uint32_t module_led_row_count(tModuleType moduleType);
+bool default_mutation_lock(tModuleType moduleType);
+
+// Channel Select radio groups. The grid is DERIVED from the button count rather than tabulated,
+// because the shape the module faces use is exactly "up to four across, then wrap": 2 buttons sit
+// 2x1, 4 sit 4x1, and 8 sit 4x2 — a module face is not wide enough for a row of eight.
+uint32_t radio_columns(uint32_t buttonCount);
+uint32_t radio_rows(uint32_t buttonCount);
+// What button `buttonIndex` is captioned: the patch's own name for it if one has been set, else the
+// default from the resource table's string map. Never NULL.
+const char * radio_caption(tModule * module, uint32_t paramIndex, uint32_t buttonIndex, const char ** strMap);
+void init_module_resource_cache(void);
+
+#endif // __MODULE_RESOURCE_ACCESS_H__

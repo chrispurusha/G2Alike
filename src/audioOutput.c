@@ -1,0 +1,1052 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/audioOutput.c.md - "// notes §k" refers there.
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Disable warnings from external library headers etc.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+
+#include <AudioToolbox/AudioToolbox.h>
+#include <CoreAudio/CoreAudio.h>
+
+#pragma clang diagnostic pop
+
+#include <stdatomic.h>
+#include <pthread/qos.h>
+#include <mach/mach.h>
+#include <mach/thread_policy.h>
+#include <mach/mach_time.h>
+#include <dispatch/dispatch.h>
+#include <pthread.h>
+
+#include "defs.h"
+#include "synthlibDefs.h"
+#include "prefs.h"
+#include "synthlibGlobals.h"  // synthlib_request_redraw() - the rate listener wakes the loop
+#include "audioOutput.h"
+#include <os/workgroup.h>
+#include "soundEngine.h"
+#include "misc.h"            // platform_begin_audio_activity() - misc.mm notes §2a
+
+// notes §1
+
+#define OUTPUT_CHANNELS      (2)
+#define MAX_AUDIO_DEVICES    (32)
+#define DEVICE_NAME_SIZE     (96)
+#define DEVICE_UID_SIZE      AUDIO_DEVICE_UID_MAX    // audioOutput.h — one definition, since callers copy UIDs too
+
+#define PREF_KEY_DEVICE      "audioOutputDeviceUID"
+#define PREF_KEY_LEFT        "audioOutputLeftChannel"
+#define PREF_KEY_RIGHT       "audioOutputRightChannel"
+#define PREF_KEY_CHANNEL     "audioOutputFirstChannel"    // superseded; read once to migrate
+#define PREF_KEY_BUFFER      "audioOutputBufferFrames"
+#define PREF_KEY_AHEAD       "audioRenderAheadMs"
+#define PREF_KEY_LEVEL       "audioOutputLevelDb"
+
+typedef struct {
+    AudioObjectID id;
+    char          name[DEVICE_NAME_SIZE];
+    char          uid[DEVICE_UID_SIZE];
+    uint32_t      channels;
+} tAudioDevice;
+
+static AudioUnit    gOutputUnit                   = NULL;
+static bool         gRunning                      = false;
+static double       gSampleRate                   = 0.0;
+
+static tAudioDevice gDevice[MAX_AUDIO_DEVICES];
+static uint32_t     gDeviceCount                  = 0;
+
+// The chosen device is remembered by UID, not by index: indices shuffle as interfaces are plugged
+// and unplugged, and picking up the wrong device after a reboot is worse than falling back.
+static char         gSelectedUid[DEVICE_UID_SIZE] = {0};
+static uint32_t     gLeftChannel                  = 0;
+static uint32_t     gRightChannel                 = 1;
+
+// 0 means "whatever the device already has", which is what it was before this was selectable.
+static uint32_t     gBufferFrames                 = 0;
+static uint32_t     gAheadMs                      = 0;   // notes §7 - render ahead, 0 off
+
+// notes §2
+static int32_t      gLevelDb                      = 0;
+
+// Reads a CFString device property into a plain C buffer.
+static void device_string_property(AudioObjectID device, AudioObjectPropertySelector selector,
+                                   char * out, size_t outSize) {
+    AudioObjectPropertyAddress address = {
+        selector, kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    CFStringRef                text    = NULL;
+    UInt32                     size    = (UInt32)sizeof(text);
+
+    out[0] = '\0';
+
+    if (AudioObjectGetPropertyData(device, &address, 0, NULL, &size, &text) != noErr) {
+        return;
+    }
+
+    if (text != NULL) {
+        CFStringGetCString(text, out, (CFIndex)outSize, kCFStringEncodingUTF8);
+        CFRelease(text);
+    }
+}
+
+// How many output channels a device offers, summed across its streams.
+static uint32_t device_output_channels(AudioObjectID device) {
+    AudioObjectPropertyAddress address = {
+        kAudioDevicePropertyStreamConfiguration,
+        kAudioObjectPropertyScopeOutput,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32                     size    = 0;
+    AudioBufferList *          list    = NULL;
+    uint32_t                   count   = 0;
+    UInt32                     i       = 0;
+
+    if (AudioObjectGetPropertyDataSize(device, &address, 0, NULL, &size) != noErr) {
+        return 0;
+    }
+    list = (AudioBufferList *)malloc(size);
+
+    if (list == NULL) {
+        return 0;
+    }
+
+    if (AudioObjectGetPropertyData(device, &address, 0, NULL, &size, list) == noErr) {
+        for (i = 0; i < list->mNumberBuffers; i++) {
+            count += list->mBuffers[i].mNumberChannels;
+        }
+    }
+    free(list);
+    return count;
+}
+
+// Rebuilds the list of devices that can actually play something. Devices with no output channels —
+// microphones, aggregate inputs — are left out rather than offered and then failing to open.
+static void rebuild_device_list(void) {
+    AudioObjectPropertyAddress address = {
+        kAudioHardwarePropertyDevices,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    UInt32                     size    = 0;
+    AudioObjectID *            ids     = NULL;
+    uint32_t                   total   = 0;
+    uint32_t                   i       = 0;
+
+    gDeviceCount = 0;
+
+    if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &address, 0, NULL, &size) != noErr) {
+        return;
+    }
+    ids          = (AudioObjectID *)malloc(size);
+
+    if (ids == NULL) {
+        return;
+    }
+
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, ids) == noErr) {
+        total = size / (UInt32)sizeof(AudioObjectID);
+
+        for (i = 0; (i < total) && (gDeviceCount < MAX_AUDIO_DEVICES); i++) {
+            uint32_t channels = device_output_channels(ids[i]);
+
+            if (channels == 0) {
+                continue;
+            }
+            gDevice[gDeviceCount].id       = ids[i];
+            gDevice[gDeviceCount].channels = channels;
+            device_string_property(ids[i], kAudioDevicePropertyDeviceNameCFString,
+                                   gDevice[gDeviceCount].name, sizeof(gDevice[gDeviceCount].name));
+            device_string_property(ids[i], kAudioDevicePropertyDeviceUID,
+                                   gDevice[gDeviceCount].uid, sizeof(gDevice[gDeviceCount].uid));
+            gDeviceCount++;
+        }
+    }
+    free(ids);
+}
+
+// The device index matching the remembered UID, or the system default when there is no match — an
+// interface that is not plugged in should fall back rather than refusing to make a sound.
+static int32_t selected_device_index(void) {
+    uint32_t i = 0;
+
+    for (i = 0; i < gDeviceCount; i++) {
+        if ((gSelectedUid[0] != '\0') && (strcmp(gDevice[i].uid, gSelectedUid) == 0)) {
+            return (int32_t)i;
+        }
+    }
+
+    {
+        AudioObjectPropertyAddress address = {
+            kAudioHardwarePropertyDefaultOutputDevice,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        AudioObjectID              device  = 0;
+        UInt32                     size    = (UInt32)sizeof(device);
+
+        if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &address, 0, NULL, &size, &device) == noErr) {
+            for (i = 0; i < gDeviceCount; i++) {
+                if (gDevice[i].id == device) {
+                    return (int32_t)i;
+                }
+            }
+        }
+    }
+    return (gDeviceCount > 0) ? 0 : -1;
+}
+
+uint32_t audio_output_device_count(void) {
+    rebuild_device_list();
+    return gDeviceCount;
+}
+
+const char * audio_output_device_name(uint32_t index) {
+    return (index < gDeviceCount) ? gDevice[index].name : "";
+}
+
+uint32_t audio_output_device_channels(uint32_t index) {
+    return (index < gDeviceCount) ? gDevice[index].channels : 0;
+}
+
+bool audio_output_device_is_selected(uint32_t index) {
+    return (int32_t)index == selected_device_index();
+}
+
+// Valid only until the next audio_output_device_count(), like every other index here — which is
+// exactly why a menu takes a COPY of this at build time rather than keeping the index.
+const char * audio_output_device_uid(uint32_t index) {
+    return (index < gDeviceCount) ? gDevice[index].uid : "";
+}
+
+uint32_t audio_output_buffer_frames(void) {
+    return gBufferFrames;
+}
+
+// Asks the device for a buffer size. It is a property of the DEVICE, so it is shared with anything
+// else playing through it; CoreAudio arbitrates. Best effort — a device that refuses keeps what it
+// had, which costs responsiveness and nothing else.
+static void apply_buffer_frames(AudioObjectID device) {
+    AudioObjectPropertyAddress address = {
+        kAudioDevicePropertyBufferFrameSizeRange,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMain
+    };
+    AudioValueRange            range   = {0.0, 0.0};
+    UInt32                     size    = (UInt32)sizeof(range);
+    UInt32                     frames  = gBufferFrames;
+
+    if (gBufferFrames == 0) {
+        return;
+    }
+
+    if (AudioObjectGetPropertyData(device, &address, 0, NULL, &size, &range) == noErr) {
+        if ((double)frames < range.mMinimum) {
+            frames = (UInt32)range.mMinimum;
+        } else if ((double)frames > range.mMaximum) {
+            frames = (UInt32)range.mMaximum;
+        }
+    }
+    address.mSelector = kAudioDevicePropertyBufferFrameSize;
+
+    // Must happen BEFORE the device is bound to the unit. Once the HAL unit has the device, this is
+    // accepted and then quietly ignored — the size the unit was bound with is the one that sticks.
+    if (AudioObjectSetPropertyData(device, &address, 0, NULL, (UInt32)sizeof(frames), &frames) != noErr) {
+        LOG_ERROR("Sound engine: the device would not take a %u frame buffer\n", (unsigned)frames);
+    } else {
+        LOG_DEBUG("Sound engine: buffer set to %u frames\n", (unsigned)frames);
+    }
+}
+
+uint32_t audio_output_left_channel(void) {
+    return gLeftChannel;
+}
+
+uint32_t audio_output_right_channel(void) {
+    return gRightChannel;
+}
+
+uint32_t audio_output_selected_device_channels(void) {
+    int32_t index = selected_device_index();
+
+    return (index >= 0) ? gDevice[index].channels : 0;
+}
+
+void audio_output_load_settings(void) {
+    const char * uid = prefs_get_string(PREF_KEY_DEVICE, "");
+
+    if (uid != NULL) {
+        strncpy(gSelectedUid, uid, sizeof(gSelectedUid) - 1);
+    }
+    sound_engine_set_dac_emulation(prefs_get_int(PREF_KEY_DAC_EMULATION, 0) != 0);
+    // notes §3
+    gLevelDb      = (int32_t)prefs_get_int(PREF_KEY_LEVEL, 0);
+
+    if (gLevelDb > 0) {
+        gLevelDb = 0;
+    }
+    sound_engine_set_output_level_db((double)gLevelDb);
+
+    if (prefs_has_key(PREF_KEY_LEFT) == true) {
+        gLeftChannel  = (uint32_t)prefs_get_int(PREF_KEY_LEFT, 0);
+        gRightChannel = (uint32_t)prefs_get_int(PREF_KEY_RIGHT, 1);
+    } else {
+        uint32_t first = (uint32_t)prefs_get_int(PREF_KEY_CHANNEL, 0);
+
+        gLeftChannel  = first;
+        gRightChannel = first + 1;
+    }
+    gBufferFrames = (uint32_t)prefs_get_int(PREF_KEY_BUFFER, 0);
+    gAheadMs      = (uint32_t)prefs_get_int(PREF_KEY_AHEAD, 0);
+    // soundEngine notes §202 - on unless switched off here
+    sound_engine_set_split_mode((prefs_get_int(PREF_KEY_VOICETHREAD, 1) != 0) ? eSplitThreaded : eSplitSerial);
+    sound_engine_set_economy(prefs_get_int(PREF_KEY_ECONOMY, 0) != 0);   // soundEngine notes §205 - off unless chosen
+}
+
+// See audioOutput.h for why this takes a UID rather than an index, and why it has a return value.
+bool audio_output_select_device_by_uid(const char * uid) {
+    bool     wasRunning = gRunning;
+    uint32_t index      = 0;
+    bool     found      = false;
+
+    if ((uid == NULL) || (uid[0] == '\0')) {
+        return false;
+    }
+    // Against the CURRENT list, which is the point — the caller's list may be older than this one.
+    rebuild_device_list();
+
+    for (index = 0; index < gDeviceCount; index++) {
+        if (strcmp(gDevice[index].uid, uid) == 0) {
+            found = true;
+            break;
+        }
+    }
+
+    if (found == false) {
+        return false;   // unplugged between the menu being built and the item being clicked
+    }
+    strncpy(gSelectedUid, gDevice[index].uid, sizeof(gSelectedUid) - 1);
+    prefs_set_string(PREF_KEY_DEVICE, gSelectedUid);
+
+    // Channels that existed on the old device may not exist on this one.
+    if ((gLeftChannel >= gDevice[index].channels) || (gRightChannel >= gDevice[index].channels)) {
+        gLeftChannel  = 0;
+        gRightChannel = (gDevice[index].channels > 1) ? 1 : 0;
+        prefs_set_int(PREF_KEY_LEFT, (long)gLeftChannel);
+        prefs_set_int(PREF_KEY_RIGHT, (long)gRightChannel);
+    }
+
+    // The CHOICE is recorded above whether or not the device opens, deliberately: it is what the user
+    // asked for, it is what the tick should show, and a device that is busy now may be free later.
+    // Only the outcome of trying is reported.
+    if (wasRunning == true) {
+        audio_output_stop();
+        return audio_output_start();
+    }
+    return true;
+}
+
+static void reopen_if_running(void) {
+    if (gRunning == true) {
+        audio_output_stop();
+        (void)audio_output_start();
+    }
+}
+
+int32_t audio_output_level_db(void) {
+    return gLevelDb;
+}
+
+void audio_output_select_level_db(int32_t db) {
+    if (db > 0) {
+        db = 0;
+    }
+    gLevelDb = db;
+    prefs_set_int(PREF_KEY_LEVEL, (long)db);
+    sound_engine_set_output_level_db((double)db);
+}
+
+void audio_output_select_dac_emulation(bool on) {
+    prefs_set_int(PREF_KEY_DAC_EMULATION, on ? 1 : 0);
+    sound_engine_set_dac_emulation(on);
+}
+
+void audio_output_select_buffer_frames(uint32_t frames) {
+    gBufferFrames = frames;
+    prefs_set_int(PREF_KEY_BUFFER, (long)frames);
+    reopen_if_running();
+}
+
+void audio_output_select_left_channel(uint32_t channel) {
+    gLeftChannel = channel;
+    prefs_set_int(PREF_KEY_LEFT, (long)channel);
+    reopen_if_running();
+}
+
+void audio_output_select_right_channel(uint32_t channel) {
+    gRightChannel = channel;
+    prefs_set_int(PREF_KEY_RIGHT, (long)channel);
+    reopen_if_running();
+}
+
+// Real-time thread. Everything it calls must be lock-free and allocation-free, which is why it does
+// nothing but hand the buffer straight to the engine.
+// notes §6 - WHAT THE RENDER THREAD ACTUALLY IS. A callback doing 30% of its budget of work and
+// still overrunning is not late because of the work, so the question is whether the thread is
+// real-time at all: macOS puts a THREAD_TIME_CONSTRAINT_POLICY thread on a performance core and
+// leaves an ordinary one to the scheduler. Sampled once, on the first callback, because
+// thread_policy_get() is a syscall and has no business running per block.
+static _Atomic int gRenderQos      = -1;
+static _Atomic int gRenderRealTime = -1;        // -1 unknown, 0 no, 1 yes
+
+static void sample_render_thread_policy(void) {
+    thread_time_constraint_policy_data_t policy = {0};
+    mach_msg_type_number_t               count  = THREAD_TIME_CONSTRAINT_POLICY_COUNT;
+    boolean_t                            dflt   = FALSE;
+
+    atomic_store(&gRenderQos, (int)qos_class_self());
+
+    if (thread_policy_get(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY,
+                          (thread_policy_t)&policy, &count, &dflt) == KERN_SUCCESS) {
+        // `dflt` true means the thread carries no time-constraint policy of its own.
+        atomic_store(&gRenderRealTime, (dflt == TRUE) ? 0 : 1);
+    } else {
+        atomic_store(&gRenderRealTime, 0);
+    }
+}
+
+const char * audio_output_thread_text(void) {
+    static char  text[64];
+    int          qos = atomic_load(&gRenderQos);
+    int          rt  = atomic_load(&gRenderRealTime);
+    const char * name;
+
+    switch (qos) {
+        case QOS_CLASS_USER_INTERACTIVE:
+        {
+            name = "user-interactive";
+            break;
+        }
+        case QOS_CLASS_USER_INITIATED:
+        {
+            name = "user-initiated";
+            break;
+        }
+        case QOS_CLASS_DEFAULT:
+        {
+            name = "default";
+            break;
+        }
+        case QOS_CLASS_UTILITY:
+        {
+            name = "utility";
+            break;
+        }
+        case QOS_CLASS_BACKGROUND:
+        {
+            name = "BACKGROUND";
+            break;
+        }
+        case QOS_CLASS_UNSPECIFIED:
+        {
+            name = "unspecified";
+            break;
+        }
+        default:
+        {
+            name = "not sampled";
+            break;
+        }
+    }
+    snprintf(text, sizeof(text), "render thread %s, %s", name,
+             (rt < 0) ? "realtime unknown" : ((rt == 1) ? "REALTIME" : "NOT realtime"));
+    return text;
+}
+
+// notes §7 - RENDER AHEAD. Optional: a thread of our own renders into a ring the callback only copies
+// out of, so one slow block is absorbed by what is already rendered instead of breaking the output.
+// It makes everything later by the same amount, which is the price; off, the callback renders directly.
+#define AHEAD_MAX_CALLBACK    (8192u)   // frames one callback may ask for
+#define AHEAD_CHUNK           (64u)     // frames the render thread makes at a time
+
+static float *              gAheadRing      = NULL;
+static uint32_t             gAheadCapacity  = 0;   // frames
+static uint32_t             gAheadTarget    = 0;   // frames kept rendered ahead of the callback
+static _Atomic uint64_t     gAheadWritten   = 0;   // frames, ever
+static _Atomic uint64_t     gAheadRead      = 0;
+static _Atomic bool         gAheadQuit      = false;
+static _Atomic bool         gAheadRunning   = false;
+static _Atomic uint32_t     gAheadUnderruns = 0;
+static dispatch_semaphore_t gAheadWake      = NULL;
+static pthread_t            gAheadThread;
+
+static void ahead_make_realtime(double sampleRate) {
+    mach_timebase_info_data_t            base;
+    thread_time_constraint_policy_data_t policy;
+    double                               perMs = 0.0;
+    double                               chunk = 1000.0 * AHEAD_CHUNK / sampleRate;
+
+    (void)mach_timebase_info(&base);
+    perMs              = 1.0e6 * (double)base.denom / (double)base.numer;
+    policy.period      = (uint32_t)(chunk * perMs);
+    policy.computation = (uint32_t)(0.5 * chunk * perMs);
+    policy.constraint  = (uint32_t)(chunk * perMs);
+    policy.preemptible = 1;
+    (void)thread_policy_set(mach_thread_self(), THREAD_TIME_CONSTRAINT_POLICY,
+                            (thread_policy_t)&policy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
+}
+
+static void * ahead_thread(void * arg) {
+    double sampleRate = *(double *)arg;
+
+    free(arg);
+    ahead_make_realtime(sampleRate);
+
+    while (atomic_load(&gAheadQuit) == false) {
+        uint64_t written = atomic_load_explicit(&gAheadWritten, memory_order_relaxed);
+        uint64_t read    = atomic_load_explicit(&gAheadRead, memory_order_acquire);
+
+        if ((written - read) >= gAheadTarget) {
+            (void)dispatch_semaphore_wait(gAheadWake, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_MSEC));
+            continue;
+        }
+        uint32_t at      = (uint32_t)(written % gAheadCapacity);
+        uint32_t frames  = AHEAD_CHUNK;
+
+        if ((at + frames) > gAheadCapacity) {
+            frames = gAheadCapacity - at;   // up to the wrap; the next pass carries on from 0
+        }
+        sound_engine_render(&gAheadRing[at * OUTPUT_CHANNELS], frames, OUTPUT_CHANNELS);
+        atomic_store_explicit(&gAheadWritten, written + frames, memory_order_release);
+    }
+    return NULL;
+}
+
+static void ahead_start(double sampleRate) {
+    double * rate = NULL;
+
+    if ((gAheadMs == 0u) || (sampleRate <= 0.0)) {
+        return;
+    }
+    gAheadTarget   = (uint32_t)((sampleRate * gAheadMs) / 1000.0);
+    gAheadCapacity = gAheadTarget + AHEAD_MAX_CALLBACK + AHEAD_CHUNK;
+    gAheadRing     = (float *)calloc((size_t)gAheadCapacity * OUTPUT_CHANNELS, sizeof(float));
+    rate           = (double *)malloc(sizeof(double));
+
+    if ((gAheadRing == NULL) || (rate == NULL)) {
+        free(gAheadRing);
+        free(rate);
+        gAheadRing = NULL;
+        return;
+    }
+    *rate          = sampleRate;
+    atomic_store(&gAheadWritten, 0u);
+    atomic_store(&gAheadRead, 0u);
+    atomic_store(&gAheadQuit, false);
+
+    if (gAheadWake == NULL) {
+        gAheadWake = dispatch_semaphore_create(0);
+    }
+
+    if (pthread_create(&gAheadThread, NULL, ahead_thread, rate) != 0) {
+        free(gAheadRing);
+        free(rate);
+        gAheadRing = NULL;
+        return;
+    }
+    atomic_store(&gAheadRunning, true);
+}
+
+static void ahead_stop(void) {
+    if (atomic_load(&gAheadRunning) == false) {
+        return;
+    }
+    atomic_store(&gAheadQuit, true);
+    (void)dispatch_semaphore_signal(gAheadWake);
+    (void)pthread_join(gAheadThread, NULL);
+    atomic_store(&gAheadRunning, false);
+    free(gAheadRing);
+    gAheadRing = NULL;
+}
+
+// The callback's side: copy out what is there, and count a shortfall rather than wait for it.
+static void ahead_read(float * out, uint32_t frames, uint32_t channels) {
+    uint64_t read      = atomic_load_explicit(&gAheadRead, memory_order_relaxed);
+    uint64_t written   = atomic_load_explicit(&gAheadWritten, memory_order_acquire);
+    uint32_t available = (uint32_t)(written - read);
+    uint32_t take      = (available < frames) ? available : frames;
+
+    for (uint32_t f = 0; f < frames; f++) {
+        for (uint32_t c = 0; c < channels; c++) {
+            out[(f * channels) + c] = (f < take) ? gAheadRing[(((read + f) % gAheadCapacity) * OUTPUT_CHANNELS) + (c % OUTPUT_CHANNELS)] : 0.0f;
+        }
+    }
+
+    if (take < frames) {
+        atomic_fetch_add(&gAheadUnderruns, 1u);
+    }
+    atomic_store_explicit(&gAheadRead, read + take, memory_order_release);
+    (void)dispatch_semaphore_signal(gAheadWake);
+}
+
+uint32_t audio_output_render_ahead_ms(void) {
+    return gAheadMs;
+}
+
+void audio_output_select_render_ahead_ms(uint32_t ms) {
+    gAheadMs = ms;
+    prefs_set_int(PREF_KEY_AHEAD, (long)ms);
+    reopen_if_running();
+}
+
+// soundEngine notes §202 - the voices on a thread of their own; the next block follows a change
+bool audio_output_voice_thread(void) {
+    return prefs_get_int(PREF_KEY_VOICETHREAD, 1) != 0;
+}
+
+void audio_output_select_voice_thread(bool on) {
+    prefs_set_int(PREF_KEY_VOICETHREAD, on ? 1 : 0);
+    sound_engine_set_split_mode(on ? eSplitThreaded : eSplitSerial);
+}
+
+// soundEngine notes §205 - the graph at 48 kHz rather than 96; the device reopens to apply it
+bool audio_output_economy(void) {
+    return prefs_get_int(PREF_KEY_ECONOMY, 0) != 0;
+}
+
+void audio_output_select_economy(bool on) {
+    prefs_set_int(PREF_KEY_ECONOMY, on ? 1 : 0);
+    sound_engine_set_economy(on);
+    reopen_if_running();
+}
+
+uint32_t audio_output_render_ahead_underruns(void) {
+    return atomic_load(&gAheadUnderruns);
+}
+
+static OSStatus render_callback(void *                       inRefCon,
+                                AudioUnitRenderActionFlags * ioActionFlags,
+                                const AudioTimeStamp *       inTimeStamp,
+                                UInt32                       inBusNumber,
+                                UInt32                       inNumberFrames,
+                                AudioBufferList *            ioData) {
+    (void)inRefCon;
+    (void)ioActionFlags;
+    (void)inTimeStamp;
+    (void)inBusNumber;
+
+    if ((ioData == NULL) || (ioData->mNumberBuffers == 0)) {
+        return noErr;
+    }
+
+    if (atomic_load(&gRenderRealTime) < 0) {
+        sample_render_thread_policy();   // notes §6 - once, on the first callback
+    }
+
+    // Interleaved, so there is exactly one buffer holding all the channels.
+    if (atomic_load(&gAheadRunning) == true) {
+        ahead_read((float *)ioData->mBuffers[0].mData, (uint32_t)inNumberFrames,
+                   (uint32_t)ioData->mBuffers[0].mNumberChannels);
+    } else {
+        sound_engine_render((float *)ioData->mBuffers[0].mData,
+                            (uint32_t)inNumberFrames,
+                            (uint32_t)ioData->mBuffers[0].mNumberChannels);
+    }
+    return noErr;
+}
+
+static void stop_listening_for_rate_changes(void);
+
+// notes §4 - THE DEVICE'S RATE CAN CHANGE UNDER US: Audio MIDI Setup, or another application
+// taking the device first. Nothing told the engine, so it went on rendering at the rate the device
+// had when the unit was opened - which since §29a also decides the oversampling factor, so a change
+// leaves it doing the wrong amount of work as well as playing at the wrong speed.
+//
+// The listener only RAISES A FLAG. It is called on a HAL thread, and re-opening the unit from there
+// would tear down the very callback that may be running; rebuilding the decimators from there would
+// race the audio thread reading them. The render loop owns the restart - one owning thread, others
+// post.
+static _Atomic bool     gRateChanged   = false;
+// notes §5 - CoreAudio's OWN verdict on whether we missed the deadline. Nothing else here can tell
+// the engine being late apart from the device glitching for its own reasons, and every measurement
+// of the render time says it is not the engine.
+static _Atomic uint32_t gOverloadCount = 0;
+
+static OSStatus device_listener(AudioObjectID                      device,
+                                UInt32                             count,
+                                const AudioObjectPropertyAddress * addresses,
+                                void *                             context) {
+    (void)device;
+    (void)context;
+
+    for (UInt32 i = 0; i < count; i++) {
+        switch (addresses[i].mSelector) {
+            case kAudioDeviceProcessorOverload:
+            {
+                atomic_fetch_add(&gOverloadCount, 1u);
+                break;
+            }
+
+            // Any of these means the format we opened with is no longer the one we are running at,
+            // and the unit has to be re-opened to find out what it is now.
+            case kAudioDevicePropertyNominalSampleRate:
+            case kAudioDevicePropertyBufferFrameSize:
+            case kAudioDevicePropertyStreamFormat:
+            {
+                atomic_store(&gRateChanged, true);
+                synthlib_request_redraw();   // the loop draws only when asked, and the loop acts
+                break;
+            }
+
+            default:
+            {
+                break;
+            }
+        }
+    }
+
+    return noErr;
+}
+
+static AudioObjectID gRateListenerDevice = 0;
+
+// notes §4, §5
+static const UInt32  kWatchedSelectors[] = {
+    kAudioDevicePropertyNominalSampleRate,
+    kAudioDevicePropertyBufferFrameSize,
+    kAudioDevicePropertyStreamFormat,
+    kAudioDeviceProcessorOverload,
+};
+#define WATCHED_SELECTOR_COUNT    ((uint32_t)(sizeof(kWatchedSelectors) / sizeof(kWatchedSelectors[0])))
+
+static void listen_for_rate_changes(AudioObjectID device) {
+    if (gRateListenerDevice == device) {
+        return;
+    }
+    stop_listening_for_rate_changes();
+
+    for (uint32_t i = 0; i < WATCHED_SELECTOR_COUNT; i++) {
+        AudioObjectPropertyAddress address = {
+            kWatchedSelectors[i], kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
+        };
+
+        // REPORTED, not swallowed. A listener that silently failed to attach makes the overrun
+        // count below read zero forever, which is a false negative on the one question it exists
+        // to answer.
+        OSStatus                   status  = AudioObjectAddPropertyListener(device, &address, device_listener, NULL);
+
+        if (status != noErr) {
+            LOG_ERROR("Sound engine: could not watch device property %u (%d) - "
+                      "%s\n", (unsigned)i, (int)status,
+                      (kWatchedSelectors[i] == kAudioDeviceProcessorOverload)
+                      ? "the overrun count will stay at zero whether or not it overruns"
+                      : "a change of rate, buffer or format will go unnoticed");
+        }
+    }
+
+    gRateListenerDevice = device;
+}
+
+bool audio_output_start(void) {
+    AudioComponentDescription   description    = {0};
+    AudioComponent              component      = NULL;
+    AURenderCallbackStruct      callback       = {0};
+    AudioStreamBasicDescription format         = {0};
+    UInt32                      formatSize     = (UInt32)sizeof(format);
+    OSStatus                    status         = noErr;
+    uint32_t                    deviceChannels = 0;
+
+    if (gRunning == true) {
+        return true;
+    }
+    // Buffer size first, before an AudioUnit instance exists at all. Once this process has a unit —
+    // even an unbound one — the HAL appears to settle the device's buffer and later requests are
+    // accepted but ignored.
+    {
+        int32_t early = selected_device_index();
+
+        if (early >= 0) {
+            apply_buffer_frames(gDevice[early].id);
+        }
+    }
+    description.componentType         = kAudioUnitType_Output;
+    description.componentSubType      = kAudioUnitSubType_HALOutput;
+    description.componentManufacturer = kAudioUnitManufacturer_Apple;
+
+    component                         = AudioComponentFindNext(NULL, &description);
+
+    if (component == NULL) {
+        LOG_ERROR("Sound engine: no HAL output audio component\n");
+        return false;
+    }
+    status                            = AudioComponentInstanceNew(component, &gOutputUnit);
+
+    if ((status != noErr) || (gOutputUnit == NULL)) {
+        LOG_ERROR("Sound engine: AudioComponentInstanceNew failed (%d)\n", (int)status);
+        gOutputUnit = NULL;
+        return false;
+    }
+    // The HAL unit has output disabled on bus 0 by default; the default-output unit did not need
+    // this, which is an easy thing to miss when moving between the two.
+    {
+        UInt32 enable = 1;
+
+        status = AudioUnitSetProperty(gOutputUnit, kAudioOutputUnitProperty_EnableIO,
+                                      kAudioUnitScope_Output, 0, &enable, (UInt32)sizeof(enable));
+
+        if (status != noErr) {
+            LOG_ERROR("Sound engine: could not enable output on the HAL unit (%d)\n", (int)status);
+            audio_output_stop();
+            return false;
+        }
+    }
+
+    // Point the unit at the chosen device before anything else is asked of it — the stream format
+    // and the channel map below are both properties OF that device, so setting them first would
+    // configure whichever one the unit happened to default to.
+    {
+        int32_t index = selected_device_index();
+
+        if (index < 0) {
+            LOG_ERROR("Sound engine: no output device available\n");
+            audio_output_stop();
+            return false;
+        }
+        deviceChannels = gDevice[index].channels;
+        status         = AudioUnitSetProperty(gOutputUnit, kAudioOutputUnitProperty_CurrentDevice,
+                                              kAudioUnitScope_Global, 0,
+                                              &gDevice[index].id, (UInt32)sizeof(AudioObjectID));
+
+        if (status != noErr) {
+            LOG_ERROR("Sound engine: could not select output device '%s' (%d)\n",
+                      gDevice[index].name, (int)status);
+            audio_output_stop();
+            return false;
+        }
+        LOG_DEBUG("Sound engine: output device '%s', %u channels, L=out %u R=out %u\n",
+                  gDevice[index].name, (unsigned)deviceChannels,
+                  (unsigned)gLeftChannel + 1, (unsigned)gRightChannel + 1);
+        atomic_store(&gOverloadCount, 0);             // notes §5 - count this opening's overruns
+        listen_for_rate_changes(gDevice[index].id);   // notes §4
+    }
+
+    // Take the device's own rate rather than forcing one, so CoreAudio does no rate conversion on
+    // our behalf and the engine's idea of the rate is the real one.
+    status                   = AudioUnitGetProperty(gOutputUnit, kAudioUnitProperty_StreamFormat,
+                                                    kAudioUnitScope_Output, 0, &format, &formatSize);
+
+    if (status != noErr) {
+        LOG_ERROR("Sound engine: could not read the output stream format (%d)\n", (int)status);
+        audio_output_stop();
+        return false;
+    }
+    gSampleRate              = format.mSampleRate;
+
+    if (gSampleRate <= 0.0) {
+        gSampleRate = 48000.0;
+    }
+    // 32-bit float, interleaved, so the render callback gets a single buffer to fill.
+    format.mFormatID         = kAudioFormatLinearPCM;
+    format.mFormatFlags      = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked;
+    format.mSampleRate       = gSampleRate;
+    format.mChannelsPerFrame = OUTPUT_CHANNELS;
+    format.mBitsPerChannel   = 32;
+    format.mFramesPerPacket  = 1;
+    format.mBytesPerFrame    = (format.mBitsPerChannel / 8) * format.mChannelsPerFrame;
+    format.mBytesPerPacket   = format.mBytesPerFrame * format.mFramesPerPacket;
+
+    status                   = AudioUnitSetProperty(gOutputUnit, kAudioUnitProperty_StreamFormat,
+                                                    kAudioUnitScope_Input, 0, &format, (UInt32)sizeof(format));
+
+    if (status != noErr) {
+        LOG_ERROR("Sound engine: could not set the output stream format (%d)\n", (int)status);
+        audio_output_stop();
+        return false;
+    }
+    callback.inputProc       = render_callback;
+    status                   = AudioUnitSetProperty(gOutputUnit, kAudioUnitProperty_SetRenderCallback,
+                                                    kAudioUnitScope_Input, 0, &callback, (UInt32)sizeof(callback));
+
+    if (status != noErr) {
+        LOG_ERROR("Sound engine: could not install the render callback (%d)\n", (int)status);
+        audio_output_stop();
+        return false;
+    }
+
+    // notes §4
+    if (  (deviceChannels >= OUTPUT_CHANNELS)
+       && ((deviceChannels > OUTPUT_CHANNELS) || (gLeftChannel != 0) || (gRightChannel != 1))) {
+        SInt32 * map = NULL;
+
+        // Remembered channels that this device does not have would index off the end of the map.
+        if (gLeftChannel >= deviceChannels) {
+            gLeftChannel = 0;
+        }
+
+        if (gRightChannel >= deviceChannels) {
+            gRightChannel = (deviceChannels > 1) ? 1 : 0;
+        }
+        map = (SInt32 *)malloc(sizeof(SInt32) * deviceChannels);
+
+        if (map != NULL) {
+            uint32_t c = 0;
+
+            for (c = 0; c < deviceChannels; c++) {
+                map[c] = -1;
+            }
+
+            map[gLeftChannel]  = 0;
+            map[gRightChannel] = 1;
+
+            status             = AudioUnitSetProperty(gOutputUnit, kAudioOutputUnitProperty_ChannelMap,
+                                                      kAudioUnitScope_Output, 0,
+                                                      map, (UInt32)(sizeof(SInt32) * deviceChannels));
+            free(map);
+
+            if (status != noErr) {
+                LOG_ERROR("Sound engine: could not map to outputs %u and %u (%d)\n",
+                          (unsigned)gLeftChannel + 1, (unsigned)gRightChannel + 1, (int)status);
+            }
+        }
+    }
+    // The engine has to know the rate before the first callback can arrive, so tell it before the
+    // unit is initialised rather than after it is started.
+    sound_engine_set_sample_rate(gSampleRate);
+
+    status   = AudioUnitInitialize(gOutputUnit);
+
+    if (status != noErr) {
+        LOG_ERROR("Sound engine: AudioUnitInitialize failed (%d)\n", (int)status);
+        audio_output_stop();
+        return false;
+    }
+    ahead_start(gSampleRate);    // notes §7 - before the first callback, which reads its ring
+    status   = AudioOutputUnitStart(gOutputUnit);
+
+    if (status != noErr) {
+        LOG_ERROR("Sound engine: AudioOutputUnitStart failed (%d)\n", (int)status);
+        audio_output_stop();
+        return false;
+    }
+    gRunning = true;
+    platform_begin_audio_activity();   // misc.mm notes §2a - no App Nap while we are rendering
+
+    // soundEngine notes §208 - the device's audio workgroup, for the engine's voice threads to join
+    {
+        os_workgroup_t workgroup = NULL;
+        UInt32         size      = sizeof(workgroup);
+
+        if (  (AudioUnitGetProperty(gOutputUnit, kAudioOutputUnitProperty_OSWorkgroup, kAudioUnitScope_Global, 0,
+                                    &workgroup, &size) == noErr)
+           && (workgroup != NULL)) {
+            sound_engine_set_audio_workgroup((void *)workgroup);
+        }
+    }
+    LOG_DEBUG("Sound engine: audio output started at %.0f Hz\n", gSampleRate);
+    return true;
+}
+
+void audio_output_stop(void) {
+    platform_end_audio_activity();          // misc.mm notes §2a
+    sound_engine_set_audio_workgroup(NULL); // soundEngine notes §208 - the threads leave it at their next block
+
+    if (gOutputUnit == NULL) {
+        gRunning    = false;
+        gSampleRate = 0.0;
+        return;
+    }
+
+    // AudioOutputUnitStop waits for a render in flight to return, so once it has, the callback can
+    // no longer be running and the unit is safe to tear down.
+    if (gRunning == true) {
+        AudioOutputUnitStop(gOutputUnit);
+    }
+    ahead_stop();   // the callback has returned; now the thread that fed it
+    AudioUnitUninitialize(gOutputUnit);
+    AudioComponentInstanceDispose(gOutputUnit);
+
+    gOutputUnit = NULL;
+    gRunning    = false;
+    gSampleRate = 0.0;
+}
+
+static void stop_listening_for_rate_changes(void) {
+    if (gRateListenerDevice == 0) {
+        return;
+    }
+
+    for (uint32_t i = 0; i < WATCHED_SELECTOR_COUNT; i++) {
+        AudioObjectPropertyAddress address = {
+            kWatchedSelectors[i], kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain
+        };
+
+        (void)AudioObjectRemovePropertyListener(gRateListenerDevice, &address, device_listener, NULL);
+    }
+
+    gRateListenerDevice = 0;
+}
+
+// notes §5 - how many IO cycles CoreAudio has reported as overrun since the output was opened, or since the
+// selected slot's patch last changed (soundEngine notes §207), whichever is later
+uint32_t audio_output_overload_count(void) {
+    static uint32_t seenEpoch = 0;
+    static uint32_t base      = 0;
+    uint32_t        epoch     = sound_engine_stats_epoch();
+    uint32_t        count     = atomic_load(&gOverloadCount);
+
+    if (epoch != seenEpoch) {
+        seenEpoch = epoch;
+        base      = count;
+    }
+    return (count >= base) ? (count - base) : count;
+}
+
+// notes §4 - called from the render loop. Re-opening the unit is what re-reads the format and tells
+// the engine, so the restart does the whole job rather than patching the rate in behind it.
+bool audio_output_poll_rate_change(void) {
+    if (atomic_exchange(&gRateChanged, false) == false) {
+        return false;
+    }
+
+    if (gRunning == false) {
+        return false;
+    }
+    audio_output_stop();
+
+    if (audio_output_start() == false) {
+        LOG_ERROR("Sound engine: the device changed rate and would not re-open\n");
+        return false;
+    }
+    LOG_DEBUG("Sound engine: device changed rate, re-opened at %.0f Hz\n", gSampleRate);
+    return true;
+}
+
+double audio_output_sample_rate(void) {
+    return gRunning ? gSampleRate : 0.0;
+}
+
+#ifdef __cplusplus
+}
+#endif

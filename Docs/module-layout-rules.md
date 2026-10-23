@@ -1,0 +1,174 @@
+# Module layout rules
+
+Guidelines for positioning controls, connectors, labels and meters within a
+module's face (the per-module `paramLocationList` / `connectorLocationList` /
+`volumeLocationList` rows in `src/moduleResources.h`). Derived from the mixer
+layout cleanup (2026-07), but they apply to any module.
+
+## Coordinate reminders
+- Rect coords are **percentages**, scaled to `MODULE_WIDTH` (350px) on **both
+  axes** (`rectangle_scale_from_percent` in SynthLib `utilsGraphics.cpp`) — so
+  `y` values are also a fraction of 350, not of the module height.
+- **`y = 0` is the top of the BODY, just below the title bar** — not the
+  module's outer edge (changed 2026-08-29). The face renderers are handed a body
+  rectangle inset by `MODULE_BODY_TOP_PERCENT` (5%, i.e. 17.5px); the bar itself
+  is 17px, so the body starts half a pixel clear of it. Before this, every
+  top-anchored row had to leave room for the bar by hand, and they all settled on
+  `y = 5` — which is exactly why the inset is 5% and not the bar's own 4.857%:
+  the tables were already written against that figure, so the change cost no
+  coordinate its whole number and moved no pixel.
+- Which anchor you choose decides whether the inset touches you at all:
+  **bottom-anchored rows are unaffected** (the bottom edge does not move), top
+  ones start below the bar, and middle ones are centred on the body, which sits
+  8.75px lower than the module's own centre.
+- Module width is a fixed `MODULE_WIDTH` for **every** module; only height
+  varies (`tModuleProperties.height` = number of rows; drawn height =
+  `rows * MODULE_Y_SPAN - MODULE_Y_GAP`). You cannot widen a single module — fit
+  the content into the shared width.
+- A 2-row module is only ~81px tall; a dial is ~49px tall — so **vertical
+  jack-above-dial stacking only fits on taller (3–4 row) modules**. On 2-row
+  modules, pair a jack *beside* its dial instead.
+- **A dial row's rect is the DIAL, not the label+value block** (SynthLib
+  `render_dial_with_text`, dial-anchored since 2026-08-02). The value and label
+  are drawn in the two rows *above* it, growing upwards, so a dial's position no
+  longer depends on how many of those two strings exist: **`NULL` and `""` are
+  equivalent** and neither can move the dial. Dial rect heights are 7, not 14 —
+  do not "restore" the taller figure, and do not write `""` in place of `NULL`
+  to reserve a blank row.
+
+## Appearance and checking
+
+**Our own style throughout.** Colours, fonts, dial and jack styling are ours (CT, 2026-08-29: "Our own
+style is good."). A section heading is ordinary text in our style, and a graph is drawn in our palette.
+
+**Snap everything in a band to one `y`.** Few-pixel vertical offsets read as sloppiness at our scale.
+Keep the arrangement, not pixel offsets.
+
+**VALIDATE AT THE SMALLEST ZOOM, NOT AT 1.0.** Below roughly 0.7 the font stops
+shrinking with the module, so every label is proportionally *wider* at low zoom
+than at high. A top row that fits perfectly at `ZOOM 1.0` can run off the right
+edge at the 0.59 a user actually works at. Capture at both.
+
+**Section headings** go in `labelLocationList` (`tLabelLocation`, added 2026-08-29), which is a table of
+its own precisely because a `paramLocationList` row's *position* is the parameter index - a heading in
+the middle of a face would shift every parameter after it.
+
+**Leave room for graphs.** Where a face will carry a graph, leave its space empty - do not close the
+gaps up, or the graphs will have nowhere to go.
+
+**A control is not proof of a parameter.** Some bypass buttons are not patch parameters (Delay stores
+only three). Check a module against the hardware before adding a row - and `filecount == tablecount`
+proves nothing for a module the editor created, since we wrote both numbers; only a device-authored
+patch settles a count.
+
+## The rules
+1. **Nothing overlaps.** No component may sit on top of another — and that
+   includes a control's **label / value text**, not just its body. The rightmost
+   dial's value label overhangs its dial; leave room for it.
+
+2. **Give the volume meter clear space — its own column *when there's room*.**
+   On a wide-enough module, reserve a dedicated column for the meter (typically
+   the far-right edge). When width is tight, fit it into available space instead
+   — but never overlapping any control or label. Keep its **top and bottom gaps
+   symmetric**.
+
+3. **Standard dial width (7%)** across modules, for a consistent look — don't
+   shrink dials just to make room; respace instead.
+
+4. **Proximity encodes relatedness.** When a connector is associated with a
+   specific control (an input jack and the dial that scales it), group them: the
+   gap *within* a related pair must be **smaller** than the gap *between*
+   adjacent groups (≈1:3 reads cleanly). Pair horizontally (jack beside dial) on
+   2-row modules; vertically (jack directly above dial) on taller ones.
+
+5. **Equal pitch** between like groups, and **centre the group block** so the
+   left and right margins to the fixed clusters are balanced.
+
+6. **Far-right I/O column pattern** (from Mix4-1C; applied to Mix8-1B): stack
+   **Chain (top) → meter → Out (bottom)** on the right edge, and pull the channel
+   block left to clear it. Put the Chain jack's label where it won't run back
+   into the meter (label above, or high enough to clear).
+
+## The common face (2026-09-13)
+
+The owner's aims, in his words: "common approach on as many modules as possible, so they're
+familiar, spacing consistency, positioning consistency (e.g. main output at same position on the
+bottom right). Alignment where possible", and "anchoring around the edges". The numbers below are
+what the faces he has re-laid by hand already do - the oscillator family of 2026-09-08..10 above
+all, with EnvADSR, the approved mixers, the filters and the EQs - written down so that a face
+nobody has touched can be laid out by rule. They are applied by `tools/relayout.py`, one family at
+a time, and checked with `tools/face-shots`.
+
+1. **Main output: the bottom-right corner**, `{-3, -3} anchorBottomRight`, unlabelled. 133 modules
+   already have it there.
+2. **Main input: the top-right corner**, `{-3, 3} anchorTopRight`, unlabelled, directly above the
+   output - the right-hand I/O column the filters, EQs and 2-Out use (CT: "Main input should be at
+   the top right of the module, for consistency. Might not work for everything though"). A PAIR of
+   peer inputs or outputs - A and B, Min and Max - takes two columns, `-17` and `-3`, each labelled
+   to its left; at -12 a three-letter label does not fit between the jacks.
+3. **Secondary control inputs** (a Mod jack) go at `x = 3` in the bottom band, as the oscillators'
+   pitch inputs do; labelled `Up` when a control sits immediately to their right, `Right` otherwise.
+4. **The column grid: 12, 28, 44, 60, 76** - a 16% pitch, the oscillators'. Controls go left to
+   right, the module's mode selectors first and then its dials. A jack that feeds one dial sits 7%
+   to its left with a `"-"` label (from `x = 3` to a dial at 12 it is 9% and `"--"`).
+5. **Bands.** Dials and jacks at `y = -3 anchorBottomLeft`. A selector BESIDE a dial on a two-row
+   face goes at `y = -1`: a bottom-anchored selector draws at the TOP of its 7%-tall box (only the
+   middle anchors are centred - `centre_on_drawn_height()`), so at -3 it floats 1.5% above the dial
+   beside it, and -1 centres it between the dial and the jacks. On three rows or more a selector
+   belongs ABOVE the dial it qualifies, `y = -15` in the same column - Kbt over Pitch, PitchType
+   over Tune on the oscillators.
+6. **Two-row faces: column 12 takes only unlabelled controls.** A labelled dial there raises its
+   two lines of text into the module's title.
+7. **Bypass**, where there is one and the right-hand column holds In and Out: middle-right,
+   `{-3, 0} anchorMiddleRight`, between them.
+8. **Anchor to the nearest edge - or to the MIDDLE where the item is centred on that axis.** The
+   I/O column anchors right, the bottom band bottom, the grid columns left, and nothing is placed
+   relative to the far edge. But the owner anchors to the middle "where it makes sense", and the
+   table shows where that is: a Bypass between In and Out (`{-3, 0} anchorMiddleRight`, 13
+   modules); a level meter centred down the face (`anchorMiddleRight`: the I/O modules, Mix4-1B,
+   Mix4-1C, Mix4-1S, MixStereo, Compress); a face whose whole content is one band, sat on the
+   middle line (Invert, Gate - `anchorMiddleLeft` rows at y 1-2); a wave selector centred in its
+   column (LfoA, OscC, OscD); and a lone selector dead centre (Constant, `{0, 0} anchorMiddle`).
+   **Never convert a middle anchor to an edge one when re-laying a face** - the Level pass did that
+   to Constant on 2026-09-13 and it was put back.
+9. **Whole numbers** - the port's `40, -13.4` style is what these rules replace. `-1` is the one
+   deliberate exception in rule 5.
+10. **Group, then gap** (CT: "Grouping related items together, with a bit of a gap between them and
+    other components is good"). A channel's qualifier, jack and dial sit tight together; groups are
+    at equal pitch; and the last group ends well clear - 10% or more - of the I/O column, so the
+    main output reads as its own thing.
+11. **Exp has one slot** (CT asked for it to be "more consistently positioned across modules"):
+    top-left, straight after the Chain jack and its label where the module has one - `{21, 6}` on
+    the two-row mixers, `{33, 6}` on Mix1-1S, whose Chain is a pair - otherwise `{3, 6}` on two rows.
+    On three rows or more it is `{3, 9}` labelled "Curve", with Pad beside it at `{16, 9}`, as on
+    Mix4-1C, Mix4-1S and MixFader.
+12. **The Chain input** stays where the owner's approved faces put it: top-left on the two-row
+    mixers, top-right above the meter on the taller ones.
+13. **Nothing overlaps and nothing runs outside the module rectangle** (CT) - bodies, labels and
+    value text alike. The bodies are checked mechanically (a script over the location tables); the
+    text needs the renderer, so it is checked by eye at zoom 0.59.
+14. **Labels help where they fit**, unless the component is obvious - a main In or Out needs none
+    (CT). A label that cannot fit is left off rather than squeezed.
+15. **Individual LEDs go top-left, just under the module name** (CT), as on the envelopes, the
+    sequencers, NoiseGate and Invert.
+16. **The name band stays clear** (CT: "make sure a full 16 character name of all Ws, doesn't
+    clash"). A name may be 16 characters, and 16 Ws - the widest - run from x 1.5% to about 55%
+    and down to y 5% of the face (both in MODULE_WIDTH units, labels and value text included).
+    Nothing may be drawn in that band, and a little gap below it reads better than a component
+    touching it. `tools/face-shots --name-band` tints that area on every face it shoots.
+
+First family done: the Level group, all 16, 2026-09-13. Open question for the owner: on faces
+with one or two dials, left-aligning leaves the middle empty; the alternative is to fill the grid
+from the right, towards the I/O column.
+
+## Worked examples
+- **Mix4-1B** (2-row): jack-beside-dial pairs, Exp moved to the top-left
+  standard position above the Chain jack, meter in a slim right column with
+  symmetric gaps.
+- **Mix8-1B** (4-row): vertical jack-above-dial strips, far-right Chain/meter/Out
+  column, channel block centred between the Exp/Pad cluster and the meter.
+- **Mix4-1C / Mix4-1S**: the reference "good" modules the pattern was inferred
+  from.
+
+_Status: modules changed under these rules are flagged "NEEDS (CT) VERIFY" in
+`Module dev debug notes.md` until confirmed on hardware by the owner._

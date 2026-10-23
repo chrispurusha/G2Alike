@@ -1,0 +1,1354 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/appMenuBar.c.md - "// notes §k" refers there.
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stddef.h>
+
+#include "defs.h"
+#include "synthlibDefs.h"
+#include "types.h"
+#include "utilsGraphics.h"
+#include "contextMenu.h"
+#include "synthlibVersion.h"
+#include "globalVars.h"
+#include "misc.h"
+#include "graphics.h"
+#include "palette.h"
+#include "splitView.h"
+#include "mutatorUI.h"
+#include "paramPages.h"
+#include "paramOverview.h"
+#include "midiCcList.h"
+#include "virtualKeyboard.h"
+#include "patchAdjuster.h"
+#include "paramOverlay.h"
+#include "dataBase.h"
+#include "soundEngine.h"
+#include "audioOutput.h"
+#include "midiInput.h"
+#include "alertDialog.h"
+#include "prefs.h"
+#include "renderBackend.h"
+#include "menus.h"
+#include <unistd.h>
+
+#include "frontPanel.h"
+#include "appMenuBar.h"
+#include "helpPanel.h"
+#include "synthlibPersistence.h"
+
+// notes §1
+static void action_open_patch(int index) {
+    (void)index;
+    file_menu_open_patch();
+}
+
+// One entry of File > Open Recent. The item's param carries the index into the recent list rather
+// than the menu position, because the list and the menu are not the same length — the menu has a
+// Clear Menu row on the end of it.
+static void action_open_recent(int index) {
+    const char * path = recent_files_path(gContextMenu.items[index].param);
+
+    if (path != NULL) {
+        file_menu_open_path(path);
+    }
+}
+
+static void action_clear_recent(int index) {
+    (void)index;
+    recent_files_clear();
+}
+
+// §14 - a pair per operation, so the menu item says which of the two it is instead of the action
+// asking what mode the G2 is in.
+static void action_save_patch(int index) {
+    (void)index;
+    file_menu_save_patch(false);
+}
+
+static void action_save_perf(int index) {
+    (void)index;
+    file_menu_save_patch(true);
+}
+
+static void action_save_patch_current(int index) {
+    (void)index;
+    file_menu_save_patch_to_current_path(false);
+}
+
+static void action_save_perf_current(int index) {
+    (void)index;
+    file_menu_save_patch_to_current_path(true);
+}
+
+static void action_new_patch(int index) {
+    (void)index;
+    file_menu_new_patch();
+}
+
+static void action_load_patch_location(int index) {
+    (void)index;
+    file_menu_load_patch_location();
+}
+
+static void action_load_perf_location(int index) {
+    (void)index;
+    file_menu_load_perf_location();
+}
+
+static void action_delete_patch_location(int index) {
+    (void)index;
+    file_menu_delete_patch_location();
+}
+
+static void action_delete_perf_location(int index) {
+    (void)index;
+    file_menu_delete_perf_location();
+}
+
+static void action_store_to_bank(int index) {
+    (void)index;
+    file_menu_store_to_bank(false);
+}
+
+static void action_store_perf_to_bank(int index) {
+    (void)index;
+    file_menu_store_to_bank(true);
+}
+
+static void action_store_back_to_bank(int index) {
+    (void)index;
+    file_menu_store_back_to_bank(false);
+}
+
+static void action_store_perf_back_to_bank(int index) {
+    (void)index;
+    file_menu_store_back_to_bank(true);
+}
+
+// notes §2
+static bool sDeviceCapable = true;
+
+void app_menu_set_device_capable(bool capable) {
+    sDeviceCapable = capable;
+}
+
+// §14 - the Open Recent flyout, shared by both menus: a recent file can be either kind and the
+// loader settles which by reading it, so there is nothing to split.
+static tMenuItem * recent_files_flyout(void) {
+    static tMenuItem recentItems[RECENT_FILES_MAX + 2];
+    uint32_t         recentCount = recent_files_count();
+    uint32_t         r           = 0;
+
+    for (uint32_t n = 0; n < recentCount; n++) {
+        const char * path      = recent_files_path(n);
+        bool         reachable = (path != NULL) && (access(path, R_OK) == 0);
+
+        recentItems[r++] = (tMenuItem){
+            recent_files_display_name(n),
+            reachable ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            reachable ? action_open_recent : NULL,
+            n, NULL, 0, 0.0
+        };
+    }
+
+    if (recentCount > 0) {
+        // No separator above it: the menu engine has no separator item and nothing else in the app
+        // fakes one with a dead row, so Clear Menu simply sits last.
+        recentItems[r++] = (tMenuItem){
+            "Clear Menu", (tRgb)RGB_GREY_3, action_clear_recent, 0, NULL, 0, 0.0
+        };
+    }
+    recentItems[r] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+    return (recentCount > 0) ? recentItems : NULL;
+}
+
+// §14 - ONE browser for both kinds, in both menus. The file dialogue does not filter by extension and
+// the loader decides patch or performance by reading the file, so two entries would be two names for
+// the same dialogue - and opening a .prf2 puts the G2 into Performance mode by itself.
+void open_patch_menu(tCoord anchor) {
+    static tMenuItem items[12];
+    bool             online = device_ready();
+    int              i      = 0;
+    tMenuItem *      recent = recent_files_flyout();
+
+    items[i++] = (tMenuItem){
+        "Open Patch or Performance File...", (tRgb)RGB_GREY_3, action_open_patch, 0, NULL, 0, 0.0
+    };
+
+    // Greyed with no flyout when there is nothing in it, rather than opening an empty one.
+    items[i++] = (tMenuItem){
+        "Open Recent",
+        (recent != NULL) ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        NULL, 0, recent, 0, 0.0
+    };
+
+    if (sDeviceCapable) {
+        items[i++] = (tMenuItem){
+            "Load Patch from Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            online ? action_load_patch_location : NULL, 0, NULL, 0, 0.0
+        };
+    }
+    // Save writes back to wherever this patch came from; it only appears live once there IS such a
+    // place, which is why Save As sits below it. Named after the file, as Store Back is after its
+    // location.
+    static char  saveLabel[72];
+    const char * savePath     = file_menu_saved_path(false);
+    bool         haveSavePath = savePath != NULL;
+
+    if (haveSavePath) {
+        const char * slash = strrchr(savePath, '/');
+        char         name[40];
+
+        snprintf(name, sizeof(name), "%s", (slash != NULL) ? (slash + 1) : savePath);
+
+        // The menu font has ASCII glyphs only
+        for (char * c = name; *c != '\0'; c++) {
+            *c = ((unsigned char)*c < 0x80) ? *c : '?';
+        }
+
+        snprintf(saveLabel, sizeof(saveLabel), "Save Patch Back to File \"%s\"", name);
+    } else {
+        snprintf(saveLabel, sizeof(saveLabel), "Save Patch Back to File");
+    }
+    items[i++] = (tMenuItem){
+        saveLabel,
+        haveSavePath ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        haveSavePath ? action_save_patch_current : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Save Patch As...", (tRgb)RGB_GREY_3, action_save_patch, 0, NULL, 0, 0.0
+    };
+
+    if (sDeviceCapable) {
+        static char label[48];
+        uint32_t    bank     = 0;
+        uint32_t    location = 0;
+        bool        known    = file_menu_bank_origin(false, &bank, &location);
+        bool        live     = online && known;
+
+        if (known) {
+            snprintf(label, sizeof(label), "Store Patch Back to Bank %u:%u...", bank + 1, location + 1);
+        } else {
+            snprintf(label, sizeof(label), "Store Patch Back to Bank");
+        }
+        items[i++] = (tMenuItem){
+            label, live ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            live ? action_store_back_to_bank : NULL, 0, NULL, 0, 0.0
+        };
+        items[i++] = (tMenuItem){
+            "Store Patch to Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            online ? action_store_to_bank : NULL, 0, NULL, 0, 0.0
+        };
+        items[i++] = (tMenuItem){
+            "Delete Patch...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            online ? action_delete_patch_location : NULL, 0, NULL, 0, 0.0
+        };
+    }
+    items[i++] = (tMenuItem){
+        "New Patch", (tRgb)RGB_GREY_3, action_new_patch, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+// §14 - THE BANK ITEMS NEED PERFORMANCE MODE, and are greyed rather than hidden when the G2 is not in
+// it. Store and Delete act on the G2's own edit buffer, and in Patch mode that buffer IS one
+// patch - there is no performance there to store. Greyed, they still say the operation exists, which
+// is the whole reason this menu was split out of File: it existed before, but only ever in perf mode.
+// The FILE items carry no such condition: the editor holds four slots whatever mode the G2 is in.
+void open_performance_menu(tCoord anchor) {
+    static tMenuItem items[10];
+    bool             online       = device_ready();
+    bool             perfMode     = gGlobalSettings.perfMode == 1;
+    int              i            = 0;
+    tMenuItem *      recent       = recent_files_flyout();
+
+    items[i++] = (tMenuItem){
+        "Open Patch or Performance File...", (tRgb)RGB_GREY_3, action_open_patch, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Open Recent",
+        (recent != NULL) ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        NULL, 0, recent, 0, 0.0
+    };
+
+    if (sDeviceCapable) {
+        items[i++] = (tMenuItem){
+            "Load Performance from Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            online ? action_load_perf_location : NULL, 0, NULL, 0, 0.0
+        };
+    }
+    static char      saveLabel[72];
+    const char *     savePath     = file_menu_saved_path(true);
+    bool             haveSavePath = savePath != NULL;
+
+    if (haveSavePath) {
+        const char * slash = strrchr(savePath, '/');
+        char         name[40];
+
+        snprintf(name, sizeof(name), "%s", (slash != NULL) ? (slash + 1) : savePath);
+
+        for (char * c = name; *c != '\0'; c++) {
+            *c = ((unsigned char)*c < 0x80) ? *c : '?';
+        }
+
+        snprintf(saveLabel, sizeof(saveLabel), "Save Performance Back to File \"%s\"", name);
+    } else {
+        snprintf(saveLabel, sizeof(saveLabel), "Save Performance Back to File");
+    }
+    items[i++] = (tMenuItem){
+        saveLabel,
+        haveSavePath ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        haveSavePath ? action_save_perf_current : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Save Performance As...", (tRgb)RGB_GREY_3, action_save_perf, 0, NULL, 0, 0.0
+    };
+
+    if (sDeviceCapable) {
+        static char label[52];
+        uint32_t    bank      = 0;
+        uint32_t    location  = 0;
+        bool        known     = file_menu_bank_origin(true, &bank, &location);
+        bool        live      = online && perfMode && known;
+
+        if (known) {
+            snprintf(label, sizeof(label), "Store Performance Back to Bank %u:%u...", bank + 1, location + 1);
+        } else {
+            snprintf(label, sizeof(label), "Store Performance Back to Bank");
+        }
+        items[i++] = (tMenuItem){
+            label, live ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            live ? action_store_perf_back_to_bank : NULL, 0, NULL, 0, 0.0
+        };
+
+        bool        storeLive = online && perfMode;
+
+        items[i++] = (tMenuItem){
+            "Store Performance to Bank...", storeLive ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            storeLive ? action_store_perf_to_bank : NULL, 0, NULL, 0, 0.0
+        };
+        items[i++] = (tMenuItem){
+            "Delete Performance...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+            online ? action_delete_perf_location : NULL, 0, NULL, 0, 0.0
+        };
+    }
+    items[i++] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_open_synth(int index) {
+    (void)index;
+    settings_menu_open_synth();
+}
+
+static void action_open_patch_settings(int index) {
+    (void)index;
+    settings_menu_open_patch();
+}
+
+static void action_open_param_pages(int index) {
+    (void)index;
+    settings_menu_open_param_pages();
+}
+
+static void action_open_midi_cc_list(int index) {
+    (void)index;
+    open_midi_cc_list_panel(gSlot);
+}
+
+static void action_open_param_overview(int index) {
+    (void)index;
+    settings_menu_open_param_overview();
+}
+
+static void action_open_virtual_keyboard(int index) {
+    (void)index;
+    settings_menu_open_virtual_keyboard();
+}
+
+static void action_open_patch_adjuster(int index) {
+    (void)index;
+    settings_menu_open_patch_adjuster();
+}
+
+static void action_send_ctrl_snapshot(int index) {
+    tMessageContent msg = {0};
+
+    (void)index;
+    msg.cmd  = eMsgCmdSendCtrlSnapshot;
+    msg.slot = gSlot;
+    msg_send(&gToUsbThread, &msg);
+}
+
+static void action_open_perf_settings(int index) {
+    (void)index;
+    settings_menu_open_perf();
+}
+
+static void action_open_notes(int index) {
+    (void)index;
+    settings_menu_open_notes();
+}
+
+#ifdef SYNTHLIB_PLUGIN_BUILD
+
+// soundEngine notes §205 - the graph at half the rate; the engine applies it at its next block
+static void action_toggle_plugin_economy(int index) {
+    bool on = (sound_engine_economy() == false);
+
+    (void)index;
+    sound_engine_set_economy(on);
+    prefs_set_int(PREF_KEY_ECONOMY, on ? 1 : 0);    // the default for new instances; a project keeps its own
+}
+
+// soundEngine notes §202 - the engine's extra threads, for this instance; applied at its next block
+static void action_toggle_plugin_threads(int index) {
+    bool on = (sound_engine_split_threaded() == false);
+
+    (void)index;
+    sound_engine_set_split_mode(on ? eSplitThreaded : eSplitSerial);
+    prefs_set_int(PREF_KEY_VOICETHREAD, on ? 1 : 0);    // the default for new instances; a project keeps its own
+}
+
+static void action_toggle_plugin_dac(int index) {
+    bool on = (sound_engine_dac_emulation() == false);
+
+    (void)index;
+    sound_engine_set_dac_emulation(on);
+    prefs_set_int(PREF_KEY_DAC_EMULATION, on ? 1 : 0);    // beside the dial mode, in the plug-in's prefs
+}
+#endif
+
+void open_settings_menu(tCoord anchor) {
+    static tMenuItem items[] = {
+        {"Synth",                (tRgb)RGB_GREY_3, action_open_synth,            0, NULL, 0, 0.0},
+        {"Patch",                (tRgb)RGB_GREY_3, action_open_patch_settings,   0, NULL, 0, 0.0},
+        {"Perf",                 (tRgb)RGB_GREY_3, action_open_perf_settings,    0, NULL, 0, 0.0},
+        {"Notes",                (tRgb)RGB_GREY_3, action_open_notes,            0, NULL, 0, 0.0},
+        {"Parameter Pages",      (tRgb)RGB_GREY_3, action_open_param_pages,      0, NULL, 0, 0.0},
+        {"Parameter Overview",   (tRgb)RGB_GREY_3, action_open_param_overview,   0, NULL, 0, 0.0},
+        // Menu-only, matching the standing decision for this family of panels.
+        {"MIDI Controller List", (tRgb)RGB_GREY_3, action_open_midi_cc_list,     0, NULL, 0, 0.0},
+#ifdef SYNTHLIB_PLUGIN_BUILD
+        {"G2 Output Filter",     (tRgb)RGB_GREY_3, action_toggle_plugin_dac,     0, NULL, 0, 0.0},
+        {"Half Rate (economy)",  (tRgb)RGB_GREY_3, action_toggle_plugin_economy, 0, NULL, 0, 0.0},
+        {"Multi-threading",      (tRgb)RGB_GREY_3, action_toggle_plugin_threads, 0, NULL, 0, 0.0},
+#endif
+        {NULL,                   (tRgb)RGB_BLACK,  NULL,                         0, NULL, 0, 0.0},
+    };
+
+#ifdef SYNTHLIB_PLUGIN_BUILD
+    tMenuItem *      dac     = &items[(sizeof(items) / sizeof(items[0])) - 4];
+    tMenuItem *      economy = &items[(sizeof(items) / sizeof(items[0])) - 3];
+    tMenuItem *      threads = &items[(sizeof(items) / sizeof(items[0])) - 2];
+    bool             dacOn   = sound_engine_dac_emulation();
+    bool             ecoOn   = sound_engine_economy();
+    bool             thrOn   = sound_engine_split_threaded();
+
+    dac->label      = dacOn ? "* G2 Output Filter" : "  G2 Output Filter";
+    dac->colour     = dacOn ? (tRgb)RGB_CONTEXT_MENU_GREEN : (tRgb)RGB_GREY_3;
+    economy->label  = ecoOn ? "* Half Rate (economy)" : "  Half Rate (economy)";
+    economy->colour = ecoOn ? (tRgb)RGB_CONTEXT_MENU_GREEN : (tRgb)RGB_GREY_3;
+    threads->label  = thrOn ? "* Multi-threading" : "  Multi-threading";
+    threads->colour = thrOn ? (tRgb)RGB_CONTEXT_MENU_GREEN : (tRgb)RGB_GREY_3;
+#endif
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_backup_patch_bank(int index) {
+    (void)index;
+    backup_menu_patch_bank();
+}
+
+static void action_backup_perf_bank(int index) {
+    (void)index;
+    backup_menu_perf_bank();
+}
+
+static void action_backup_synth_settings(int index) {
+    (void)index;
+    backup_menu_synth_settings();
+}
+
+static void action_backup_everything(int index) {
+    (void)index;
+    backup_menu_everything();
+}
+
+void open_backup_menu(tCoord anchor) {
+    static tMenuItem items[6];
+    bool             online = device_ready();
+    int              i      = 0;
+
+    items[i++] = (tMenuItem){
+        "Patch Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_backup_patch_bank : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Performance Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_backup_perf_bank : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Backup Synth Settings...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_backup_synth_settings : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Everything...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_backup_everything : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_restore_patch_bank(int index) {
+    (void)index;
+    restore_menu_patch_bank();
+}
+
+static void action_restore_perf_bank(int index) {
+    (void)index;
+    restore_menu_perf_bank();
+}
+
+static void action_restore_synth_settings(int index) {
+    (void)index;
+    restore_menu_synth_settings();
+}
+
+static void action_restore_everything(int index) {
+    (void)index;
+    restore_menu_everything();
+}
+
+void open_restore_menu(tCoord anchor) {
+    static tMenuItem items[6];
+    bool             online = device_ready();
+    int              i      = 0;
+
+    items[i++] = (tMenuItem){
+        "Patch Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_restore_patch_bank : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Performance Bank...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_restore_perf_bank : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Synth Settings...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_restore_synth_settings : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Everything...", online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5, online ? action_restore_everything : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_dial_mode_rotary(int index) {
+    (void)index;
+    synthlib_set_dial_mode(eDialModeRotary);
+    synthlib_save_dial_mode(synthlib_dial_mode());
+}
+
+static void action_dial_mode_vertical(int index) {
+    (void)index;
+    synthlib_set_dial_mode(eDialModeVertical);
+    synthlib_save_dial_mode(synthlib_dial_mode());
+}
+
+static void action_dial_mode_horizontal(int index) {
+    (void)index;
+    synthlib_set_dial_mode(eDialModeHorizontal);
+    synthlib_save_dial_mode(synthlib_dial_mode());
+}
+
+#ifndef SYNTHLIB_PLUGIN_BUILD
+
+// virtualKeyboard notes §12
+static void action_keys_play_notes(int index) {
+    (void)index;
+    note_entry_set_keys_play_notes(true);
+}
+
+static void action_keys_select_slots(int index) {
+    (void)index;
+    note_entry_set_keys_play_notes(false);
+}
+#endif
+
+void open_controls_menu(tCoord anchor) {
+    static tMenuItem items[]      = {
+        {"* Rotary",              (tRgb)RGB_GREY_3, action_dial_mode_rotary,     0, NULL, 0, 0.0},
+        {"* Vertical",            (tRgb)RGB_GREY_3, action_dial_mode_vertical,   0, NULL, 0, 0.0},
+        {"* Horizontal",          (tRgb)RGB_GREY_3, action_dial_mode_horizontal, 0, NULL, 0, 0.0},
+#ifndef SYNTHLIB_PLUGIN_BUILD
+        {"Keys Play Notes",       (tRgb)RGB_GREY_3, action_keys_play_notes,      0, NULL, 0, 0.0},
+        {"Keys A-D Select Slots", (tRgb)RGB_GREY_3, action_keys_select_slots,    0, NULL, 0, 0.0},
+#endif
+        {NULL,                    (tRgb)RGB_BLACK,  NULL,                        0, NULL, 0, 0.0},
+    };
+
+    // notes §4
+    static char *    checked[3]   = {"* Rotary", "* Vertical", "* Horizontal"};
+    static char *    unchecked[3] = {"Rotary", "Vertical", "Horizontal"};
+    int              i;
+
+    for (i = 0; i < 3; i++) {
+        items[i].label = ((int)synthlib_dial_mode() == i) ? checked[i] : unchecked[i];
+    }
+
+#ifndef SYNTHLIB_PLUGIN_BUILD
+    bool             notes        = note_entry_keys_play_notes();
+
+    items[3].label = notes ? "* Keys Play Notes" : "Keys Play Notes";
+    items[4].label = notes ? "Keys A-D Select Slots" : "* Keys A-D Select Slots";
+#endif
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_zoom_in(int index) {
+    (void)index;
+    set_zoom_factor(get_zoom_factor() + ZOOM_DELTA, (tCoord){0.0, 0.0});
+    save_zoom_factor(get_zoom_factor());
+    wake_glfw();
+}
+
+static void action_zoom_out(int index) {
+    (void)index;
+    set_zoom_factor(get_zoom_factor() - ZOOM_DELTA, (tCoord){0.0, 0.0});
+    save_zoom_factor(get_zoom_factor());
+    wake_glfw();
+}
+
+static void action_zoom_reset(int index) {
+    (void)index;
+    set_zoom_factor(NO_ZOOM, (tCoord){0.0, 0.0});
+    save_zoom_factor(get_zoom_factor());
+    wake_glfw();
+}
+
+// Pulls back far enough to see the whole patch — what a large patch needs before anything else is
+// worth doing to it. The scroll is half the job and has to come second: see
+// split_view_scroll_to_content().
+static void action_zoom_to_fit(int index) {
+    (void)index;
+    set_zoom_factor(split_view_zoom_to_fit(), (tCoord){0.0, 0.0});
+    split_view_scroll_to_content();
+    save_zoom_factor(get_zoom_factor());
+    wake_glfw();
+}
+
+// notes §5
+static void action_overlay_mode(int index) {
+    tParamOverlayMode mode = (tParamOverlayMode)gContextMenu.items[index].param;
+
+    param_overlay_set_mode((param_overlay_mode() == mode) ? overlayModeNone : mode);
+}
+
+static void action_open_help(int index) {
+    (void)index;
+    open_help_panel();
+}
+
+// The keyboard and mouse reference. Its own top-level menu rather than an entry buried in Tools:
+// a shortcut list nobody can find is a shortcut list nobody reads.
+static void action_about(int index) {
+    (void)index;
+    show_alert("About", synthlib_about_text("G2Alike"));
+}
+
+void open_help_menu(tCoord anchor) {
+    static tMenuItem items[3] = {0};
+
+    items[0] = (tMenuItem){
+        "Keyboard and Mouse...", (tRgb)RGB_GREY_3, action_open_help, 0, NULL, 0, 0.0
+    };
+    // WHICH BUILD IS THIS. Version, compile time and the render backend in force — the last
+    // because the backend is a preference now, and "it looks wrong" and "it looks wrong on Metal"
+    // are different reports.
+    items[1] = (tMenuItem){
+        "About G2Alike...", (tRgb)RGB_GREY_3, action_about, 0, NULL, 0, 0.0
+    };
+    items[2] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_toggle_palette(int index) {
+    (void)index;
+    palette_toggle();
+}
+
+void open_view_menu(tCoord anchor) {
+    // notes §6
+    static tMenuItem items[11]                        = {0};
+    static char      paletteLabel[40]                 = {0};
+    static char      overlayLabel[overlayModeMax][40] = {0};
+    int              i                                = 0;
+
+    items[i++] = (tMenuItem){
+        "Zoom In (Cmd +)", (tRgb)RGB_GREY_3, action_zoom_in, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Zoom Out (Cmd -)", (tRgb)RGB_GREY_3, action_zoom_out, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Zoom Reset", (tRgb)RGB_GREY_3, action_zoom_reset, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Zoom to Fit", (tRgb)RGB_GREY_3, action_zoom_to_fit, 0, NULL, 0, 0.0
+    };
+
+    snprintf(paletteLabel, sizeof(paletteLabel), "%s Module Palette",
+             palette_is_open() ? "*" : " ");
+    items[i++] = (tMenuItem){
+        paletteLabel, front_panel_active() ? (tRgb)RGB_GREY_5 : (palette_is_open() ? (tRgb)RGB_CONTEXT_MENU_GREEN : (tRgb)RGB_GREY_3),
+        front_panel_active() ? NULL : action_toggle_palette, 0, NULL, 0, 0.0
+    };
+
+    // The five overlay views, the active one ticked. overlayModeNone isn't offered as an entry of
+    // its own - re-picking the active view is how you turn it off.
+    for (tParamOverlayMode mode = overlayModeValues; mode < overlayModeMax; mode++) {
+        bool active = (param_overlay_mode() == mode);
+
+        snprintf(overlayLabel[mode], sizeof(overlayLabel[mode]), "%s View %s",
+                 active ? "*" : " ", param_overlay_mode_name(mode));
+        items[i++] = (tMenuItem){
+            overlayLabel[mode], active ? (tRgb)RGB_CONTEXT_MENU_GREEN : (tRgb)RGB_GREY_3,
+            action_overlay_mode, (uint32_t)mode, NULL, 0, 0.0
+        };
+    }
+
+    // If this ever trips, the count in the array's size and the entries built above have drifted
+    // apart. Clamping keeps the menu short rather than letting it write past the array.
+    if (i >= (int)(sizeof(items) / sizeof(items[0]))) {
+        LOG_ERROR("View menu built %d entries for an array of %d\n",
+                  i + 1, (int)(sizeof(items) / sizeof(items[0])));
+        i = (int)(sizeof(items) / sizeof(items[0])) - 1;
+    }
+    items[i] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+static void action_toggle_mutator(int index) {
+    (void)index;
+
+    if (gMutator.active) {
+        close_mutator_panel();
+    } else {
+        open_mutator_panel(gSlot);
+    }
+}
+
+// The engine follows whatever single oscillator is selected at the time, so it is deliberately not
+// greyed out when the selection is unsuitable — it simply makes no sound until one is selected, and
+// can be left switched on while clicking around the patch.
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+// A 32-output interface is 16 pairs, and a machine can easily have half a dozen devices. At file
+// scope rather than inside open_experimental_menu(), because the UID snapshot below is sized by the
+// first of them and the action that reads it is not inside that function.
+#define MAX_AUDIO_DEVICE_ITEMS      (33)
+#define MAX_OUTPUT_CHANNEL_ITEMS    (65)
+#define MAX_MIDI_SOURCE_ITEMS       (34)
+
+// notes §7
+static char          sDeviceUid[MAX_AUDIO_DEVICE_ITEMS][AUDIO_DEVICE_UID_MAX] = {0};
+
+static void action_select_audio_device(int index) {
+    if ((index < 0) || (index >= (int)MAX_AUDIO_DEVICE_ITEMS)) {
+        return;
+    }
+
+    if (audio_output_select_device_by_uid(sDeviceUid[index]) == false) {
+        // notes §8
+        show_alert("Audio device", "That output could not be opened. It may be in use by another application, or no longer connected.");
+    }
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+// Output level. Attenuation only — see sound_engine_set_output_level_db() for why boosting into the
+// limiter is not offered.
+static const int32_t kOutputLevels[]                                          = {0, -3, -6, -9, -12, -18, -24};
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_toggle_dac_emulation(int index) {
+    (void)index;
+    audio_output_select_dac_emulation(sound_engine_dac_emulation() == false);
+}
+
+static void action_select_output_level(int index) {
+    if ((index >= 0) && (index < (int)(sizeof(kOutputLevels) / sizeof(kOutputLevels[0])))) {
+        audio_output_select_level_db(kOutputLevels[index]);
+    }
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_select_buffer_frames(int index) {
+    // Item 0 is "Device default"; the rest are the powers of two below.
+    static const uint32_t sizes[] = {0, 32, 64, 128, 256, 512, 1024, 2048};
+
+    audio_output_select_buffer_frames(sizes[((size_t)index < (sizeof(sizes) / sizeof(sizes[0]))) ? index : 0]);
+}
+
+// audioOutput.c notes §7
+static const uint32_t kRenderAheadMs[] = {0, 5, 10, 20};
+
+static void action_select_voice_thread(int index) {
+    audio_output_select_voice_thread(index != 0);
+}
+
+static void action_select_economy(int index) {
+    audio_output_select_economy(index != 0);
+    database_read_lock();
+    sound_engine_update_from_patch();   // positions and words built at the old rate
+    database_read_unlock();
+    synthlib_request_redraw();
+}
+
+static void action_select_render_ahead(int index) {
+    audio_output_select_render_ahead_ms(kRenderAheadMs[((size_t)index < (sizeof(kRenderAheadMs) / sizeof(kRenderAheadMs[0]))) ? index : 0]);
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_select_left_output(int index) {
+    audio_output_select_left_channel((uint32_t)index);
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_select_right_output(int index) {
+    audio_output_select_right_channel((uint32_t)index);
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_select_midi_source(int index) {
+    // The list is offered with "None" first and "All sources" second, so the real sources start at
+    // row 2 and are shifted by that much.
+    if (index == 0) {
+        midi_input_select_source(MIDI_INPUT_NONE);
+    } else if (index == 1) {
+        midi_input_select_source(MIDI_INPUT_ALL);
+    } else {
+        midi_input_select_source(index - 2);
+    }
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_select_midi_channel(int index) {
+    midi_input_select_channel((uint32_t)index);   // 0 is Omni, 1..16 a channel
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+static void action_toggle_midi_to_synth(int index) {
+    (void)index;
+    midi_input_set_sends_to_synth(!midi_input_sends_to_synth());
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+static void action_toggle_sound_engine(int index) {
+    (void)index;
+
+    if (sound_engine_active()) {
+        sound_engine_stop();
+    } else if (sound_engine_start() == false) {
+        // Starting can fail with no output device, or one another app holds exclusively. Say so
+        // rather than leaving a menu that claims the engine is on while it is silent.
+        show_alert("Sound Engine", "Could not open the audio output device.");
+    } else {
+        // Read-locked by the caller, never inside the function - see midiInput.c's note. This one is
+        // on the render thread but OUTSIDE render_frame(), so it holds no lock of its own yet.
+        database_read_lock();
+        sound_engine_update_from_patch();    // don't wait for the next redraw to pick up the selection
+        database_read_unlock();
+    }
+    synthlib_request_redraw();    // the canvas greys out what the engine does not play (moduleGraphics notes §89)
+}
+
+static void action_assign_midi_cc_all(int index) {
+    (void)index;
+    midi_cc_assign_all_knobs(gSlot);
+}
+
+static void action_clear_midi_cc_all(int index) {
+    (void)index;
+    midi_cc_clear_all(gSlot);
+}
+
+static void action_assign_midi_cc_selection(int index) {
+    (void)index;
+    midi_cc_assign_selection();
+}
+
+static void action_deassign_midi_cc_selection(int index) {
+    (void)index;
+    midi_cc_deassign_selection();
+}
+
+void open_tools_menu(tCoord anchor) {
+    static tMenuItem items[11];  // 9 entries + the NULL terminator, with room to grow
+    // The two selection entries have nothing to act on without one, so they are greyed rather
+    // than letting the click be a silent no-op.
+    bool             haveSelection = gSelection.count > 0;
+    bool             online        = device_ready();
+    int              i             = 0;
+
+    // notes §9
+    items[i++] = (tMenuItem){
+        gMutator.active ? "Close Mutator" : "Open Mutator", (tRgb)RGB_GREY_3, action_toggle_mutator, 0, NULL, 0, 0.0
+    };
+    // Tools is where the manual puts the Virtual Keyboard (p.128), alongside
+    // Parameter Pages/Overview — those two sit under Settings here by the owner's earlier call.
+    items[i++] = (tMenuItem){
+        "Virtual Keyboard", (tRgb)RGB_GREY_3, action_open_virtual_keyboard, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Patch Adjuster", (tRgb)RGB_GREY_3, action_open_patch_adjuster, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Assign MIDI CC to Knobs", (tRgb)RGB_GREY_3, action_assign_midi_cc_all, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Assign MIDI CC to Selection",
+        haveSelection ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        haveSelection ? action_assign_midi_cc_selection : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Deassign MIDI CC from Selection",
+        haveSelection ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        haveSelection ? action_deassign_midi_cc_selection : NULL, 0, NULL, 0, 0.0
+    };
+    items[i++] = (tMenuItem){
+        "Clear All MIDI CC", (tRgb)RGB_GREY_3, action_clear_midi_cc_all, 0, NULL, 0, 0.0
+    };
+    // Only means anything with the synth attached — it asks the G2 to transmit, so offline there
+    // is nothing to transmit from.
+    items[i++] = (tMenuItem){
+        "Send Controller Snapshot",
+        online ? (tRgb)RGB_GREY_3 : (tRgb)RGB_GREY_5,
+        online ? action_send_ctrl_snapshot : NULL, 0, NULL, 0, 0.0
+    };
+    items[i]   = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+
+// Work that is being tried out rather than relied on. Kept as its own menu so that what is
+// finished and what is an experiment are not sitting side by side under Tools — anything here may
+// change or disappear, and graduates into one of the other menus once it has settled.
+#ifndef SYNTHLIB_PLUGIN_BUILD    // needs the application's audio-device and MIDI-input layers
+
+void open_experimental_menu(tCoord anchor) {
+    // notes §10
+    static tMenuItem items[20];
+    int              i = 0;
+
+    // The engine follows whichever single oscillator is selected, so this is deliberately never
+    // greyed out — it simply makes no sound until one is. Same state-in-the-label idiom as the
+    // Mutator entry under Tools.
+    items[i++] = (tMenuItem){
+        sound_engine_active() ? "Disable Sound Engine" : "Enable Sound Engine",
+        (tRgb)RGB_GREY_3, action_toggle_sound_engine, 0, NULL, 0, 0.0
+    };
+
+    // A status line while it is on. Greyed and with no action, so it reads as information rather
+    // than something to click. Without it an engine that is on but silent gives no clue why — the
+    // usual reason is simply that no OscB is selected.
+    if (sound_engine_active()) {
+        items[i++] = (tMenuItem){
+            (char *)sound_engine_status_text(), (tRgb)RGB_GREY_5, NULL, 0, NULL, 0, 0.0
+        };
+        // A second information line for modulation. "No vibrato" has three quite different causes —
+        // the keyboard not sending pressure, the morph not moving, or no LFO in the resolved chain —
+        // and they are indistinguishable by ear.
+        items[i++] = (tMenuItem){
+            (char *)sound_engine_modulation_text(), (tRgb)RGB_GREY_5, NULL, 0, NULL, 0, 0.0
+        };
+
+        // A third: what the DEVICE is doing, which the engine cannot report because it is
+        // deliberately platform-free. The overrun count is CoreAudio's own verdict on whether we
+        // missed the deadline (audioOutput.c notes §5) - the one number that separates "the engine
+        // was late" from "something else dropped it", and there was nowhere to read it.
+        {
+            static char audioLine[80];
+
+            snprintf(audioLine, sizeof(audioLine), "%.0f Hz, %u frames, %u overrun%s",
+                     audio_output_sample_rate(), (unsigned)audio_output_buffer_frames(),
+                     (unsigned)audio_output_overload_count(),
+                     (audio_output_overload_count() == 1u) ? "" : "s");
+            items[i++] = (tMenuItem){
+                audioLine, (tRgb)RGB_GREY_5, NULL, 0, NULL, 0, 0.0
+            };
+            items[i++] = (tMenuItem){
+                (char *)audio_output_thread_text(), (tRgb)RGB_GREY_5, NULL, 0, NULL, 0, 0.0
+            };
+        }
+    }
+    // Which device the engine plays through, and which pair of its outputs. Both are flyouts off
+    // this menu, and both remember the choice — see audioOutput.h for why the device is stored by
+    // UID rather than by position in the list.
+    {
+        static tMenuItem devices[MAX_AUDIO_DEVICE_ITEMS];
+        static tMenuItem lefts[MAX_OUTPUT_CHANNEL_ITEMS];
+        static tMenuItem rights[MAX_OUTPUT_CHANNEL_ITEMS];
+        static char      deviceLabel[MAX_AUDIO_DEVICE_ITEMS][80];
+        static char      leftLabel[MAX_OUTPUT_CHANNEL_ITEMS][24];
+        static char      rightLabel[MAX_OUTPUT_CHANNEL_ITEMS][24];
+        uint32_t         count    = audio_output_device_count();
+        uint32_t         channels = audio_output_selected_device_channels();
+        uint32_t         d        = 0;
+        uint32_t         c        = 0;
+
+        for (d = 0; (d < count) && (d < (MAX_AUDIO_DEVICE_ITEMS - 1)); d++) {
+            // A leading marker rather than a checkmark, matching how Controls marks its dial modes.
+            snprintf(deviceLabel[d], sizeof(deviceLabel[d]), "%s%s (%u ch)",
+                     audio_output_device_is_selected(d) ? "* " : "  ",
+                     audio_output_device_name(d), (unsigned)audio_output_device_channels(d));
+            // Pin what this row NAMES, not where it sits — see sDeviceUid.
+            strncpy(sDeviceUid[d], audio_output_device_uid(d), sizeof(sDeviceUid[d]) - 1);
+            sDeviceUid[d][sizeof(sDeviceUid[d]) - 1] = '\0';
+            devices[d]                               = (tMenuItem){
+                deviceLabel[d], (tRgb)RGB_GREY_3, action_select_audio_device, d, NULL, 0, 0.0
+            };
+        }
+
+        devices[d] = (tMenuItem){
+            NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+        };
+
+        // Left and right are separate lists, not pairs: the two legs of a monitor path on a desk are
+        // not necessarily neighbouring outputs, and forcing 29/30 when the wiring wants 29/31 would
+        // mean repatching the desk to suit the software.
+        for (c = 0; (c < channels) && (c < (MAX_OUTPUT_CHANNEL_ITEMS - 1)); c++) {
+            snprintf(leftLabel[c], sizeof(leftLabel[c]), "%sOut %u",
+                     (audio_output_left_channel() == c) ? "* " : "  ", (unsigned)c + 1);
+            snprintf(rightLabel[c], sizeof(rightLabel[c]), "%sOut %u",
+                     (audio_output_right_channel() == c) ? "* " : "  ", (unsigned)c + 1);
+            lefts[c]  = (tMenuItem){
+                leftLabel[c], (tRgb)RGB_GREY_3, action_select_left_output, c, NULL, 0, 0.0
+            };
+            rights[c] = (tMenuItem){
+                rightLabel[c], (tRgb)RGB_GREY_3, action_select_right_output, c, NULL, 0, 0.0
+            };
+        }
+
+        lefts[c]   = (tMenuItem){
+            NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+        };
+        rights[c]  = (tMenuItem){
+            NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+        };
+
+        items[i++] = (tMenuItem){
+            "Audio Device", (tRgb)RGB_GREY_3, NULL, 0, devices, 0, 0.0
+        };
+
+        // Buffer size. Fewer frames means a keypress lands sooner, since the buffer length is the
+        // floor on how late a note can take effect; more means the audio thread is woken less often.
+        {
+            static const uint32_t sizes[] = {0, 32, 64, 128, 256, 512, 1024, 2048};
+            static tMenuItem      buffers[9];
+            static char           bufferLabel[9][28];
+            uint32_t              n       = 0;
+
+            for (n = 0; n < (sizeof(sizes) / sizeof(sizes[0])); n++) {
+                if (sizes[n] == 0) {
+                    snprintf(bufferLabel[n], sizeof(bufferLabel[n]), "%sDevice default",
+                             (audio_output_buffer_frames() == 0) ? "* " : "  ");
+                } else {
+                    snprintf(bufferLabel[n], sizeof(bufferLabel[n]), "%s%u frames",
+                             (audio_output_buffer_frames() == sizes[n]) ? "* " : "  ",
+                             (unsigned)sizes[n]);
+                }
+                buffers[n] = (tMenuItem){
+                    bufferLabel[n], (tRgb)RGB_GREY_3, action_select_buffer_frames, n, NULL, 0, 0.0
+                };
+            }
+
+            buffers[n] = (tMenuItem){
+                NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+            };
+            items[i++] = (tMenuItem){
+                "Buffer Size", (tRgb)RGB_GREY_3, NULL, 0, buffers, 0, 0.0
+            };
+        }
+
+        // Render ahead: room for a slow block, at the cost of everything being that much later
+        {
+            static tMenuItem aheads[(sizeof(kRenderAheadMs) / sizeof(kRenderAheadMs[0])) + 1];
+            static char      aheadLabel[(sizeof(kRenderAheadMs) / sizeof(kRenderAheadMs[0]))][24];
+            uint32_t         n = 0;
+
+            for (n = 0; n < (sizeof(kRenderAheadMs) / sizeof(kRenderAheadMs[0])); n++) {
+                const char * mark = (audio_output_render_ahead_ms() == kRenderAheadMs[n]) ? "* " : "  ";
+
+                if (kRenderAheadMs[n] == 0) {
+                    snprintf(aheadLabel[n], sizeof(aheadLabel[n]), "%sOff", mark);
+                } else {
+                    snprintf(aheadLabel[n], sizeof(aheadLabel[n]), "%s%u ms", mark, (unsigned)kRenderAheadMs[n]);
+                }
+                aheads[n] = (tMenuItem){
+                    aheadLabel[n], (tRgb)RGB_GREY_3, action_select_render_ahead, n, NULL, 0, 0.0
+                };
+            }
+
+            aheads[n]  = (tMenuItem){
+                NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+            };
+            items[i++] = (tMenuItem){
+                "Render Ahead", (tRgb)RGB_GREY_3, NULL, 0, aheads, 0, 0.0
+            };
+        }
+
+        // soundEngine notes §202 - the voices on a thread of their own, the FX area on the audio thread
+        {
+            static tMenuItem threads[3];
+            static char      threadLabel[2][16];
+            bool             on = audio_output_voice_thread();
+
+            snprintf(threadLabel[0], sizeof(threadLabel[0]), "%sOff", on ? "  " : "* ");
+            snprintf(threadLabel[1], sizeof(threadLabel[1]), "%sOn", on ? "* " : "  ");
+            threads[0] = (tMenuItem){
+                threadLabel[0], (tRgb)RGB_GREY_3, action_select_voice_thread, 0, NULL, 0, 0.0
+            };
+            threads[1] = (tMenuItem){
+                threadLabel[1], (tRgb)RGB_GREY_3, action_select_voice_thread, 1, NULL, 0, 0.0
+            };
+            threads[2] = (tMenuItem){
+                NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+            };
+            items[i++] = (tMenuItem){
+                "Multi-threading", (tRgb)RGB_GREY_3, NULL, 0, threads, 0, 0.0
+            };
+        }
+
+        // soundEngine notes §205 - the graph at twice the device rate below 88.2 kHz, or at the device rate
+        // for half the CPU and some accuracy
+        {
+            static tMenuItem rates[3];
+            static char      rateLabel[2][40];
+            bool             economy = audio_output_economy();
+
+            snprintf(rateLabel[0], sizeof(rateLabel[0]), "%sFull, as the G2", economy ? "  " : "* ");
+            snprintf(rateLabel[1], sizeof(rateLabel[1]), "%sHalf (economy)", economy ? "* " : "  ");
+            rates[0]   = (tMenuItem){
+                rateLabel[0], (tRgb)RGB_GREY_3, action_select_economy, 0, NULL, 0, 0.0
+            };
+            rates[1]   = (tMenuItem){
+                rateLabel[1], (tRgb)RGB_GREY_3, action_select_economy, 1, NULL, 0, 0.0
+            };
+            rates[2]   = (tMenuItem){
+                NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+            };
+            items[i++] = (tMenuItem){
+                "Engine Rate", (tRgb)RGB_GREY_3, NULL, 0, rates, 0, 0.0
+            };
+        }
+
+
+        // Output level. A patch can arrive hot — several oscillators through two mixers is well
+        // within the G2's own headroom but not within a DAC's — and a fixed trim is easier to
+        // reason about than leaving the output limiter to decide.
+        {
+            static tMenuItem levels[(sizeof(kOutputLevels) / sizeof(kOutputLevels[0])) + 1];
+            static char      levelLabel[(sizeof(kOutputLevels) / sizeof(kOutputLevels[0]))][24];
+            uint32_t         n = 0;
+
+            for (n = 0; n < (sizeof(kOutputLevels) / sizeof(kOutputLevels[0])); n++) {
+                if (kOutputLevels[n] == 0) {
+                    snprintf(levelLabel[n], sizeof(levelLabel[n]), "%s0 dB (full)",
+                             (audio_output_level_db() == 0) ? "* " : "  ");
+                } else {
+                    snprintf(levelLabel[n], sizeof(levelLabel[n]), "%s%d dB",
+                             (audio_output_level_db() == kOutputLevels[n]) ? "* " : "  ",
+                             (int)kOutputLevels[n]);
+                }
+                levels[n] = (tMenuItem){
+                    levelLabel[n], (tRgb)RGB_GREY_3, action_select_output_level, n, NULL, 0, 0.0
+                };
+            }
+
+            levels[n]  = (tMenuItem){
+                NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+            };
+            items[i++] = (tMenuItem){
+                "Output Level", (tRgb)RGB_GREY_3, NULL, 0, levels, 0, 0.0
+            };
+        }
+        // notes §13 - the G2's output roll-off, on by default
+        items[i++] = (tMenuItem){
+            sound_engine_dac_emulation() ? "* G2 Output Filter" : "  G2 Output Filter",
+            sound_engine_dac_emulation() ? (tRgb)RGB_CONTEXT_MENU_GREEN : (tRgb)RGB_GREY_3,
+            action_toggle_dac_emulation, 0, NULL, 0, 0.0
+        };
+
+        // A stereo device has nothing to choose. Multi-column past eight, or a 32-output interface
+        // runs off the bottom of the screen.
+        if (channels > 2) {
+            items[i++] = (tMenuItem){
+                "Left Output", (tRgb)RGB_GREY_3, NULL, 0, lefts, (channels > 8) ? 2 : 1, 0.0
+            };
+            items[i++] = (tMenuItem){
+                "Right Output", (tRgb)RGB_GREY_3, NULL, 0, rights, (channels > 8) ? 2 : 1, 0.0
+            };
+        }
+    }
+
+    // Where MIDI comes from, on which channel, and whether it also plays the G2. The same input
+    // serves the sound engine and the hardware, which is the point: one keyboard, both instruments,
+    // the same notes — that is how the two get compared.
+    {
+        static tMenuItem sources[MAX_MIDI_SOURCE_ITEMS];
+        static tMenuItem chans[18];
+        static char      sourceLabel[MAX_MIDI_SOURCE_ITEMS][80];
+        static char      chanLabel[18][20];
+        uint32_t         count = midi_input_source_count();
+        uint32_t         m     = 0;
+        uint32_t         ch    = 0;
+
+        snprintf(sourceLabel[0], sizeof(sourceLabel[0]), "%sNone",
+                 midi_input_is_enabled() ? "  " : "* ");
+        sources[0]     = (tMenuItem){
+            sourceLabel[0], (tRgb)RGB_GREY_3, action_select_midi_source, 0, NULL, 0, 0.0
+        };
+
+        // notes §11
+        snprintf(sourceLabel[1], sizeof(sourceLabel[1]), "%sAll sources",
+                 midi_input_all_sources_selected() ? "* " : "  ");
+        sources[1]     = (tMenuItem){
+            sourceLabel[1], (tRgb)RGB_GREY_3, action_select_midi_source, 1, NULL, 0, 0.0
+        };
+
+        for (m = 0; (m < count) && ((m + 2) < (MAX_MIDI_SOURCE_ITEMS - 1)); m++) {
+            snprintf(sourceLabel[m + 2], sizeof(sourceLabel[m + 2]), "%s%s",
+                     midi_input_source_is_selected(m) ? "* " : "  ", midi_input_source_name(m));
+            sources[m + 2] = (tMenuItem){
+                sourceLabel[m + 2], (tRgb)RGB_GREY_3, action_select_midi_source, m + 2, NULL, 0, 0.0
+            };
+        }
+
+        sources[m + 2] = (tMenuItem){
+            NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+        };
+
+        for (ch = 0; ch <= 16; ch++) {
+            if (ch == 0) {
+                snprintf(chanLabel[0], sizeof(chanLabel[0]), "%sAll (Omni)",
+                         (midi_input_channel() == 0) ? "* " : "  ");
+            } else {
+                snprintf(chanLabel[ch], sizeof(chanLabel[ch]), "%sChannel %u",
+                         (midi_input_channel() == ch) ? "* " : "  ", (unsigned)ch);
+            }
+            chans[ch] = (tMenuItem){
+                chanLabel[ch], (tRgb)RGB_GREY_3, action_select_midi_channel, ch, NULL, 0, 0.0
+            };
+        }
+
+        chans[17]      = (tMenuItem){
+            NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+        };
+
+        items[i++]     = (tMenuItem){
+            "MIDI Input", (tRgb)RGB_GREY_3, NULL, 0, sources, 0, 0.0
+        };
+        items[i++]     = (tMenuItem){
+            "MIDI Channel", (tRgb)RGB_GREY_3, NULL, 0, chans, 2, 0.0
+        };
+        items[i++]     = (tMenuItem){
+            midi_input_sends_to_synth() ? "MIDI Plays the G2: On" : "MIDI Plays the G2: Off",
+            (tRgb)RGB_GREY_3, action_toggle_midi_to_synth, 0, NULL, 0, 0.0
+        };
+    }
+    items[i] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+
+    open_context_menu(anchor, items, 0, 0.0);
+}
+#endif // SYNTHLIB_PLUGIN_BUILD
+
+
+tMenuBarItem gAppMenuBar[] = {
+    {"Patch",        open_patch_menu       },
+    {"Performance",  open_performance_menu },
+    {"Settings",     open_settings_menu    },
+    {"Backup",       open_backup_menu      },
+    {"Restore",      open_restore_menu     },
+    {"Controls",     open_controls_menu    },
+    {"Tools",        open_tools_menu       },
+    {"View",         open_view_menu        },
+#ifndef SYNTHLIB_PLUGIN_BUILD
+    {"Experimental", open_experimental_menu},
+    {"Help",         open_help_menu        },
+#endif
+    {NULL,           NULL                  },
+};
+
+tRectangle app_menu_bar_rect(void) {
+    return (tRectangle){
+        {
+            0.0, 0.0
+        }, {
+            (get_render_width() / gGlobalGuiScale), MENU_BAR_HEIGHT
+        }
+    };
+}
+
+#ifdef __cplusplus
+}
+#endif

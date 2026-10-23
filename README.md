@@ -35,9 +35,9 @@ Settings > Privacy & Security, scroll down and click **Open Anyway**.
 
 There is no Windows installer: a release has a `.zip` per architecture - `windows-x64` for an ordinary
 PC, `windows-arm64` for Windows on ARM (Parallels on an Apple silicon Mac) - holding `G2Alike.exe`,
-the G2 Alike plug-in and a `Read Me First.txt`. It is unsigned, so Windows SmartScreen warns on the first
-run: More info > Run anyway. The plug-in (experimental, VST3 only) is the single file `G2 Alike.vst3`:
-copy it into `C:\Program Files\Common Files\VST3` (deleting any `G2 Alike.vst3` *folder* an older release put
+the G2Alike plug-in and a `Read Me First.txt`. It is unsigned, so Windows SmartScreen warns on the first
+run: More info > Run anyway. The plug-in (experimental, VST3 only) is the single file `G2Alike.vst3`:
+copy it into `C:\Program Files\Common Files\VST3` (deleting any `G2Alike.vst3` *folder* an older release put
 there) and rescan in the host. Use the zip that matches the
 host - x64 for an ordinary PC, arm64 for a native Windows on ARM host. See
 [Docs/windows-port-plan.md](./Docs/windows-port-plan.md) for how it is built.
@@ -59,15 +59,15 @@ can be left open beside the patch while you try them.
 
 ### The VST3 plug-in (optional)
 
-`G2 Alike.vst3` **plays** a patch rather than editing one, which is where the name comes from. It is
+`G2Alike.vst3` **plays** a patch rather than editing one, which is where the name comes from. It is
 experimental and in-progress. Many patches load without complaint. The editor does not need it, and it does not need the editor — skip this if you only want
 the editor.
 
 Copy it into your own VST3 folder and clear its quarantine flag too:
 
 ```
-cp -R "/Volumes/G2Alike <version>/G2 Alike.vst3" /Library/Audio/Plug-Ins/VST3/
-xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/"G2 Alike.vst3"
+cp -R "/Volumes/G2Alike <version>/G2Alike.vst3" /Library/Audio/Plug-Ins/VST3/
+xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/"G2Alike.vst3"
 ```
 
 In Finder instead: choose **Go > Go to Folder**, enter `/Library/Audio/Plug-Ins/VST3`, and drag the
@@ -79,7 +79,7 @@ not there at all, prefix both lines with `sudo`. The per-user `~/Library/Audio/P
 too — use one or the other, since a copy in both means your host may list the plug-in twice and load
 whichever it reaches first.
 
-Rescan plug-ins in your host (most do it at startup). It appears as **G2 Alike** by Chris Purusha,
+Rescan plug-ins in your host (most do it at startup). It appears as **G2Alike** by Chris Purusha,
 as an instrument. It needs a VST3 host; it does not run on its own.
 
 ## Building
@@ -211,13 +211,13 @@ The Audio Unit needs nothing at all — it is written against the system's own C
 ./do-plugin au
 ```
 
-Writes `build/G2 Alike.vst3` and `build/G2 Alike.component` — universal (arm64 + x86_64), ad-hoc
+Writes `build/G2Alike.vst3` and `build/G2Alike.component` — universal (arm64 + x86_64), ad-hoc
 signed — and **installs each one** into the system-wide plug-in folder, over whatever was there
 before, clearing its quarantine flag:
 
 ```
-/Library/Audio/Plug-Ins/VST3/G2 Alike.vst3
-/Library/Audio/Plug-Ins/Components/G2 Alike.component
+/Library/Audio/Plug-Ins/VST3/G2Alike.vst3
+/Library/Audio/Plug-Ins/Components/G2Alike.component
 ```
 
 Those folders are group-writable on an administrator account, so no `sudo` is needed. Pass
@@ -239,7 +239,7 @@ perfectly correct path still produces silence — and silence looks the same wha
 
 ### Controls
 
-The plug-in is called **G2 Alike**, since it plays a patch rather than editing one.
+The plug-in is called **G2Alike**, since it plays a patch rather than editing one.
 
 **Its editor is the application's own canvas.** It draws the patch, with the same File, Settings,
 Controls, Tools, View and Help menus, and it is the same window whichever format your host loaded —

@@ -1,0 +1,351 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/mouseTopbar.c.md - "// notes §k" refers there.
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// System header files
+#include <math.h>
+
+// Disable warnings from external library headers etc.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+
+#define GL_SILENCE_DEPRECATION    1
+#include <GLFW/glfw3.h>
+
+#pragma clang diagnostic pop
+
+#include "defs.h"
+#include "types.h"
+#include "utils.h"
+#include "msgQueue.h"
+#include "dataBase.h"
+#include "moduleResourcesAccess.h"
+#include "topbarResourcesAccess.h"
+#include "utilsGraphics.h"
+#include "mouseHandle.h"
+#include "inputState.h" // shift_modifier_held() — variation buttons link rather than select on shift
+#include "graphics.h"
+#include "splitView.h"
+#include "globalVars.h"
+#include "protocol.h"
+#include "menus.h"
+#include "mouseTopbar.h"
+#include "palette.h"
+#include "frontPanel.h"
+#include "undo.h"
+#include "canvasDrag.h"
+#include "slotSets.h"
+
+static void handle_button(tTopbarControlId controlId) {
+    uint32_t slot = gSlot;
+
+    switch (controlId) {
+        case topbarVariation1Id:
+        case topbarVariation2Id:
+        case topbarVariation3Id:
+        case topbarVariation4Id:
+        case topbarVariation5Id:
+        case topbarVariation6Id:
+        case topbarVariation7Id:
+        case topbarVariation8Id:
+        case topbarVariationInitId:
+        {
+            uint32_t        variation      = (uint32_t)controlId - (uint32_t)topbarVariation1Id;
+
+            // notes §1
+            if (shift_modifier_held() && (variation < VARIATION_INIT)) {
+                variation_toggle_link(slot, variation);
+                synthlib_request_redraw();
+                break;
+            }
+            gPatchDescr[slot].activeVariation      = variation;
+
+            set_exclusive_button_highlight(topbarVariation1Id, topbarVariationInitId, controlId);
+
+            tMessageContent messageContent = {0};
+            messageContent.cmd                     = eMsgCmdSelectVariation;
+            messageContent.slot                    = slot;
+            messageContent.variationData.variation = variation;
+            msg_send(&gToUsbThread, &messageContent);
+
+            break;
+        }
+        case topbarSlotAId:
+        case topbarSlotBId:
+        case topbarSlotCId:
+        case topbarSlotDId:
+        {
+            uint32_t        slot           = (uint32_t)controlId - (uint32_t)topbarSlotAId;
+
+            gSlot                        = slot;
+
+            tMessageContent messageContent = {0};
+            messageContent.cmd           = eMsgCmdSelectSlot;
+            messageContent.slot          = slot;
+            messageContent.slotData.slot = slot;
+            msg_send(&gToUsbThread, &messageContent);
+
+            set_exclusive_button_highlight(topbarSlotAId, topbarSlotDId, controlId);
+            set_exclusive_button_highlight(topbarVariation1Id, topbarVariationInitId,
+                                           (tTopbarControlId)((uint32_t)topbarVariation1Id + gPatchDescr[slot].activeVariation));
+            break;
+        }
+        case topbarPaletteId:
+        {
+            palette_toggle();
+            break;
+        }
+        case topbarFrontPanelId:
+        {
+            front_panel_toggle();
+            synthlib_request_redraw();
+            break;
+        }
+        case topbarUndoId:
+        {
+            undo_undo();
+            synthlib_request_redraw();
+            break;
+        }
+        case topbarRedoId:
+        {
+            undo_redo();
+            synthlib_request_redraw();
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+bool handle_topbar_left_down(tCoord coord, uint32_t slot) {
+    bool       found  = false;
+    int        i      = 0;
+    tModuleKey volKey = {0, 0, 0};
+
+    for (i = 0; i < TOPBAR_STANDARD_BUTTON_COUNT; i++) {
+        if (within_rectangle(coord, gTopbarControls[i].rectangle)) {
+            found                        = true;
+            gTopbarControls[i].isPressed = true;
+            break;
+        }
+    }
+
+    if (found == false) {
+        static const tTopbarControlId pressableButtonIds[] = {
+            topbarPatchNameId,     topbarPatchTypeId, topbarMonoPolyId,
+            topbarClockRunStopId,  topbarPerfModeId,  topbarPerfNameId,
+            topbarHideAllCablesId, topbarTransparentCablesId
+        };
+
+        for (i = 0; i < (int)ARRAY_SIZE(pressableButtonIds); i++) {
+            if (within_rectangle(coord, gTopbarControls[pressableButtonIds[i]].rectangle)) {
+                found                                            = true;
+                gTopbarControls[pressableButtonIds[i]].isPressed = true;
+                break;
+            }
+        }
+    }
+
+    if (found == false) {
+        for (i = 0; i < cableColourMax; i++) {
+            tTopbarControlId toggleId = (tTopbarControlId)((int)topbarCableColourToggle0Id + i);
+
+            if (within_rectangle(coord, gTopbarControls[toggleId].rectangle)) {
+                found                               = true;
+                gTopbarControls[toggleId].isPressed = true;
+                break;
+            }
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarPatchVolumeId].rectangle)) {
+            volKey.slot               = slot;
+            volKey.location           = (uint32_t)locationMorph;
+            volKey.index              = patchModuleVolume;
+
+            tModule * volMod = get_module(volKey);
+            gParamDragging.moduleKey  = volKey;
+            gParamDragging.type3      = paramType3Param;
+            gParamDragging.param      = VOLUME_LEVEL;
+            gParamDragging.startValue = volMod ? volMod->param[patch_settings_variation(slot)][VOLUME_LEVEL].value : 0;
+            gParamDragging.active     = true;
+
+            if (synthlib_dial_mode() != eDialModeRotary) {
+                canvas_drag_begin();
+            }
+            found                     = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarTempoDialId].rectangle)) {
+            gTempoDragging = true;
+
+            if (synthlib_dial_mode() != eDialModeRotary) {
+                canvas_drag_begin();
+            }
+            found          = true;
+        }
+    }
+    return found;
+}
+
+void topbar_select_slot(uint32_t slot) {
+    if (slot < 4) {
+        handle_button((tTopbarControlId)((uint32_t)topbarSlotAId + slot));
+        synthlib_request_redraw();
+    }
+}
+
+void topbar_toggle_clock_run(void) {
+    bool running = !gGlobalSettings.masterClockRunning;
+
+    gGlobalSettings.masterClockRunning = (uint8_t)running;
+    send_master_clock_run((uint32_t)running);
+    synthlib_request_redraw();
+}
+
+bool handle_topbar_left_up(tCoord coord, uint32_t slot) {
+    bool            found          = false;
+    int             i              = 0;
+    int             colour         = 0;
+    tMessageContent messageContent = {0};
+
+    for (i = 0; i < TOPBAR_STANDARD_BUTTON_COUNT; i++) {
+        if (within_rectangle(coord, gTopbarControls[i].rectangle)) {
+            handle_button((tTopbarControlId)i);
+            found = true;
+            break;
+        }
+    }
+
+    if (found == false) {
+        for (i = 0; i < cableColourMax; i++) {
+            if (within_rectangle(coord, gTopbarControls[(int)topbarCableColourToggle0Id + i].rectangle)) {
+                for (colour = 0; colour < cableColourMax; colour++) {
+                    gPatchDescr[slot].visible[i] = !gPatchDescr[slot].visible[i];
+                }
+
+                synthlib_request_redraw();
+                messageContent.cmd  = eMsgCmdWritePatchDescr;
+                messageContent.slot = slot;
+                msg_send(&gToUsbThread, &messageContent);
+                found               = true;
+                break;
+            }
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarHideAllCablesId].rectangle)) {
+            gCablesHideAll = !gCablesHideAll;
+            synthlib_request_redraw();
+            found          = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarTransparentCablesId].rectangle)) {
+            gCablesTransparent = !gCablesTransparent;
+            synthlib_request_redraw();
+            found              = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarClockRunStopId].rectangle)) {
+            topbar_toggle_clock_run();
+            found = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarPerfModeId].rectangle)) {
+            perf_mode_set(gGlobalSettings.perfMode == 0);   // slotSets.c notes §1
+            found = true;
+        }
+    }
+
+    if (found == false) {
+        if (gGlobalSettings.perfMode == 1 && within_rectangle(coord, gTopbarControls[topbarPerfNameId].rectangle)) {
+            gPerfNameEdit.active    = true;
+            COPY_STRING(gPerfNameEdit.buffer, gGlobalSettings.perfName);
+            gPerfNameEdit.cursorPos = (uint32_t)strlen(gPerfNameEdit.buffer);
+            found                   = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarPatchNameId].rectangle)) {
+            gPatchNameEdit.active    = true;
+            gPatchNameEdit.slot      = slot;
+            COPY_STRING(gPatchNameEdit.buffer, gGlobalSettings.slot[slot].patchName);
+            gPatchNameEdit.cursorPos = (uint32_t)strlen(gPatchNameEdit.buffer);
+            found                    = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarPatchTypeId].rectangle)) {
+            open_patch_type_context_menu(gTopbarControls[topbarPatchTypeId].rectangle.coord);
+            found = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarMonoPolyId].rectangle)) {
+            open_mono_poly_context_menu(coord);
+            found = true;
+        }
+    }
+
+    if (found == false) {
+        if (within_rectangle(coord, gTopbarControls[topbarVoiceCountId].rectangle)) {
+            open_voice_count_context_menu(coord);
+            found = true;
+        }
+    }
+    return found;
+}
+
+bool handle_topbar_right_up(tCoord coord) {
+    bool found = false;
+    int  i     = 0;
+
+    for (i = (int)topbarVariation1Id; i <= (int)topbarVariationInitId; i++) {
+        if (within_rectangle(coord, gTopbarControls[i].rectangle)) {
+            uint32_t sourceVariation = (uint32_t)i - (uint32_t)topbarVariation1Id;
+            open_variation_copy_menu(coord, sourceVariation);
+            found = true;
+            break;
+        }
+    }
+
+    return found;
+}
+
+#ifdef __cplusplus
+}
+#endif

@@ -1,0 +1,531 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/dataBase.c.md - "// notes §k" refers there.
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "defs.h"
+#include "synthlibDefs.h"
+#include "globalVars.h"
+#include "splitView.h"
+#include <pthread.h>
+
+#include "dataBase.h"
+#include "moduleResourcesAccess.h"
+
+// notes §1
+
+void database_read_lock(void) {
+    pthread_rwlock_rdlock(&gDatabaseLock);
+}
+
+void database_read_unlock(void) {
+    pthread_rwlock_unlock(&gDatabaseLock);
+}
+
+void database_write_lock(void) {
+    pthread_rwlock_wrlock(&gDatabaseLock);
+}
+
+void database_write_unlock(void) {
+    pthread_rwlock_unlock(&gDatabaseLock);
+}
+
+// Called from both threads — no internal locking.
+uint32_t patch_settings_variation(uint32_t slot) {
+    uint32_t variation = (slot < MAX_SLOTS) ? gPatchDescr[slot].activeVariation : 0u;
+
+    return (variation < NUM_VARIATIONS) ? variation : 0u;
+}
+
+tModule * get_module_slot(uint32_t slot, uint32_t location, uint32_t index) {
+    if ((slot < MAX_SLOTS) && (location < (uint32_t)locationMax) && (index < MAX_NUM_MODULES)) {
+        return &gModule[slot][location][index];
+    }
+    return NULL;
+}
+
+// Called from both threads — no internal locking.
+tModule * get_module(tModuleKey key) {
+    tModule * module = get_module_slot(key.slot, key.location, key.index);
+
+    if ((module != NULL) && module->active) {
+        return module;
+    }
+    return NULL;
+}
+
+// notes §9 - a location or index of -1 matches every one
+static void sampler_files_forget(uint32_t slot, int32_t location, int32_t index) {
+    for (uint32_t i = 0; i < MAX_SAMPLER_FILES; i++) {
+        tSamplerFile * file = &gSamplerFile[i];
+
+        if (  file->used && (file->key.slot == slot)
+           && ((location < 0) || (file->key.location == (uint32_t)location))
+           && ((index < 0) || (file->key.index == (uint32_t)index))) {
+            file->used = false;
+        }
+    }
+}
+
+const char * sampler_file(tModuleKey key) {
+    for (uint32_t i = 0; i < MAX_SAMPLER_FILES; i++) {
+        const tSamplerFile * file = &gSamplerFile[i];
+
+        if (  file->used && (file->key.slot == key.slot) && (file->key.location == key.location)
+           && (file->key.index == key.index)) {
+            return file->path;
+        }
+    }
+
+    return NULL;
+}
+
+static tSamplerFile * sampler_file_entry(tModuleKey key) {
+    for (uint32_t i = 0; i < MAX_SAMPLER_FILES; i++) {
+        tSamplerFile * file = &gSamplerFile[i];
+
+        if (  file->used && (file->key.slot == key.slot) && (file->key.location == key.location)
+           && (file->key.index == key.index)) {
+            return file;
+        }
+    }
+
+    return NULL;
+}
+
+uint32_t sampler_preset(tModuleKey key) {
+    const tSamplerFile * file = sampler_file_entry(key);
+
+    return (file != NULL) ? file->preset : 0u;
+}
+
+// notes §9 - set after the file: choosing a file starts it on the bank's first preset
+void sampler_preset_set(tModuleKey key, uint32_t preset) {
+    tSamplerFile * file = sampler_file_entry(key);
+
+    if (file != NULL) {
+        file->preset = preset;
+    }
+}
+
+bool sampler_file_set(tModuleKey key, const char * path) {
+    sampler_files_forget(key.slot, (int32_t)key.location, (int32_t)key.index);
+
+    if ((path == NULL) || (path[0] == '\0')) {
+        return true;
+    }
+
+    for (uint32_t i = 0; i < MAX_SAMPLER_FILES; i++) {
+        tSamplerFile * file = &gSamplerFile[i];
+
+        if (!file->used) {
+            file->used   = true;
+            file->key    = key;
+            file->preset = 0;
+            snprintf(file->path, sizeof(file->path), "%s", path);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void write_module(tModuleKey key, tModule * module) {
+    module->key    = key;
+    module->active = true;
+
+    // Same reason as the patch-parse path: .dir/.type drive every cable lookup and must not
+    // depend on the module having been drawn. Cheap, and idempotent if already populated.
+    populate_module_connectors(module);
+
+    if ((key.slot < MAX_SLOTS) && (key.location < (uint32_t)locationMax) && (key.index < MAX_NUM_MODULES)) {
+        gModule[key.slot][key.location][key.index]          = *module;
+        gEngineOnlyIndex[key.slot][key.location][key.index] = module_is_engine_only(module->type);   // notes §8
+        gModuleLayoutGen[key.slot]++;                                                                // notes §10
+
+        if (!module_is_engine_only(module->type)) {
+            sampler_files_forget(key.slot, (int32_t)key.location, (int32_t)key.index);   // notes §9 - the index was reused
+        }
+    } else {
+        LOG_ERROR("Module key out of bounds slot=%u location=%u index=%u\n", key.slot, key.location, key.index);
+    }
+}
+
+void delete_module(tModuleKey key) {
+    if ((key.slot < MAX_SLOTS) && (key.location < (uint32_t)locationMax) && (key.index < MAX_NUM_MODULES)) {
+        memset(&gModule[key.slot][key.location][key.index], 0, sizeof(tModule));
+        sampler_files_forget(key.slot, (int32_t)key.location, (int32_t)key.index);
+        gModuleLayoutGen[key.slot]++;   // notes §10
+    }
+}
+
+// notes §2
+void database_delete_modules_by_slot(uint32_t slot) {
+    if (slot < MAX_SLOTS) {
+        for (uint32_t location = 0; location < (uint32_t)locationMax; location++) {
+            for (uint32_t index = 0; index < MAX_NUM_MODULES; index++) {
+                memset(&gModule[slot][location][index], 0, sizeof(tModule));
+                gEngineOnlyIndex[slot][location][index] = false;
+            }
+        }
+
+        sampler_files_forget(slot, -1, -1);
+
+        gPatchGeneration[slot]++;
+        gModuleLayoutGen[slot]++;   // notes §10
+    }
+}
+
+// notes §11 - every write of a parameter's value comes through here
+void set_param_value(tModule * module, uint32_t variation, uint32_t param, uint32_t value) {
+    if ((module == NULL) || (variation >= NUM_VARIATIONS_USB) || (param >= MAX_NUM_PARAMETERS)) {
+        return;
+    }
+    uint8_t now = (uint8_t)value;
+
+    if (module->param[variation][param].value == now) {
+        return;
+    }
+    module->param[variation][param].value = now;
+
+    if ((module->type == moduleType2toOut) && (param == OUT_TO_PARAM) && (module->key.slot < MAX_SLOTS)) {
+        gModuleLayoutGen[module->key.slot]++;   // notes §10 - the Not G2 mark depends on it
+    }
+}
+
+// notes §8 - the mark outlives a delete, so the delete's own message is still recognised
+bool database_index_is_engine_only(uint32_t slot, uint32_t location, uint32_t index) {
+    return (slot < MAX_SLOTS) && (location < (uint32_t)locationMax) && (index < MAX_NUM_MODULES)
+           && gEngineOnlyIndex[slot][location][index];
+}
+
+uint32_t count_active_modules(uint32_t slot) {
+    uint32_t count = 0;
+
+    if (slot >= MAX_SLOTS) {
+        return 0;
+    }
+
+    // Only count VA and FX — morph-location modules exist on all slots (sent by G2 via USB)
+    // but are not written to patch/perf files and don't indicate real patch content.
+    for (uint32_t index = 0; index < MAX_NUM_MODULES; index++) {
+        if (gModule[slot][locationVa][index].active) {
+            count++;
+        }
+
+        if (gModule[slot][locationFx][index].active) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
+bool slot_has_modules(uint32_t slot) {
+    return count_active_modules(slot) > 0;
+}
+
+void database_clear_modules(void) {
+    memset(gModule, 0, sizeof(gModule));
+}
+
+void dump_modules(void) {
+    uint32_t count = 0;
+
+    LOG_DEBUG("\n\nDump modules\n");
+
+    for (uint32_t slot = 0; slot < MAX_SLOTS; slot++) {
+        for (uint32_t location = 0; location < (uint32_t)locationMax; location++) {
+            for (uint32_t index = 0; index < MAX_NUM_MODULES; index++) {
+                if (gModule[slot][location][index].active) {
+                    tModule * module = &gModule[slot][location][index];
+                    LOG_DEBUG("Slot %u Location %u Index %u Type %u Name %s Row %u Column %u\n",
+                              module->key.slot, module->key.location, module->key.index,
+                              module->type, module->name, module->row, module->column);
+                    count++;
+                }
+            }
+        }
+    }
+
+    LOG_DEBUG("\nModule Count=%u\n\n", count);
+}
+
+// Called from both threads — no internal locking.
+tCable * get_cable_slot(uint32_t slot, uint32_t location, uint32_t index) {
+    if ((slot < MAX_SLOTS) && (location < (uint32_t)locationMax) && (index < MAX_NUM_CABLES)) {
+        return &gCable[slot][location][index];
+    }
+    return NULL;
+}
+
+tCable * get_cable(tCableKey key) {
+    if ((key.slot < MAX_SLOTS) && (key.location < (uint32_t)locationMax)) {
+        for (uint32_t i = 0; i < MAX_NUM_CABLES; i++) {
+            tCable * cable = &gCable[key.slot][key.location][i];
+
+            if (cable->active && (memcmp(&cable->key, &key, sizeof(tCableKey)) == 0)) {
+                return cable;
+            }
+        }
+    }
+    return NULL;
+}
+
+// Called from both threads — no internal locking.
+void write_cable(tCableKey key, tCable * cable) {
+    tCable * existing = get_cable(key);
+
+    if (existing != NULL) {
+        existing->colour = cable->colour;
+        return;
+    }
+
+    if ((key.slot < MAX_SLOTS) && (key.location < (uint32_t)locationMax)) {
+        for (uint32_t i = 0; i < MAX_NUM_CABLES; i++) {
+            if (!gCable[key.slot][key.location][i].active) {
+                gCable[key.slot][key.location][i]        = *cable;
+                gCable[key.slot][key.location][i].key    = key;
+                gCable[key.slot][key.location][i].active = true;
+                return;
+            }
+        }
+
+        LOG_ERROR("write_cable: no free slot slot=%u location=%u\n", key.slot, key.location);
+    }
+}
+
+void delete_cable(tCableKey key) {
+    tCable * cable = get_cable(key);
+
+    if (cable != NULL) {
+        memset(cable, 0, sizeof(tCable));
+    }
+}
+
+void dump_cables(void) {
+    LOG_DEBUG("\n\nDump cables\n");
+
+    for (uint32_t slot = 0; slot < MAX_SLOTS; slot++) {
+        for (uint32_t loc = 0; loc < (uint32_t)locationMax; loc++) {
+            for (uint32_t i = 0; i < MAX_NUM_CABLES; i++) {
+                tCable * cable = &gCable[slot][loc][i];
+
+                if (cable->active) {
+                    LOG_DEBUG("Slot %u Location %u Colour %u From %u/%u LinkType %u To %u/%u\n",
+                              cable->key.slot, cable->key.location, cable->colour,
+                              cable->key.moduleFromIndex, cable->key.connectorFromIoCount,
+                              cable->key.linkType, cable->key.moduleToIndex,
+                              cable->key.connectorToIoCount);
+                }
+            }
+        }
+    }
+
+    LOG_DEBUG("\n\n");
+}
+
+void database_delete_cables_by_slot(uint32_t slot) {
+    if (slot < MAX_SLOTS) {
+        for (uint32_t loc = 0; loc < (uint32_t)locationMax; loc++) {
+            memset(gCable[slot][loc], 0, sizeof(gCable[slot][loc]));
+        }
+    }
+}
+
+void database_clear_cables(void) {
+    memset(gCable, 0, sizeof(gCable));
+}
+
+int find_io_count_from_index(tModule * module, tConnectorDir dir, int index) {
+    int ioCount = -1;
+
+    for (int i = 0; i <= index; i++) {
+        //LOG_DEBUG("%d is type %d\n", i, module->connector[i].dir);
+        if (module->connector[i].dir == dir) {
+            ioCount++;
+        }
+    }
+
+    return ioCount;  // Index does not match the direction
+}
+
+int find_index_from_io_count(tModule * module, tConnectorDir dir, int targetCount) {
+    int count = 0;
+
+    //LOG_DEBUG("%s find index num connectors %u\n", gModuleProperties[module->type].name, gModuleProperties[module->type].numConnectors);
+    for (uint32_t index = 0; index < module_connector_count(module->type); index++) {
+        if (module->connector[index].dir == dir) {
+            if (count == targetCount) {
+                return index;
+            }
+            count++;
+        }
+    }
+
+    return -1;  // Not found
+}
+
+void init_database(void) {
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+// Clearing everything a slot holds - modules, cables and the per-slot arrays that live in
+// globalVars rather than in the database proper. Was in graphics.c, which made it unreachable
+// from anything without a GUI; nothing in it ever touched the screen.
+
+// The patch name a file implies: its basename with the extension dropped. Moved from graphics.c —
+// it is string handling, and the plug-in sets the name the same way when it opens a file.
+void set_patch_name_from_filename(uint32_t slot, const char * filepath) {
+    const char * base                            = filepath;
+    const char * p                               = filepath;
+    char         patchName[CLAVIA_NAME_SIZE + 1] = {0};
+    int          i                               = 0;
+
+    // Find last path separator
+    while (*p != '\0') {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+        p++;
+    }
+    // Copy up to PATCH_NAME_SIZE chars, stop at '.' (extension)
+    memset(patchName, 0, sizeof(patchName));
+
+    while (i < CLAVIA_NAME_SIZE && base[i] != '\0' && base[i] != '.') {
+        patchName[i] = base[i];
+        i++;
+    }
+    COPY_STRING(gGlobalSettings.slot[slot].patchName, patchName);
+
+    LOG_DEBUG("Patch name from file: '%s'\n", patchName);
+}
+
+// notes §6 - a patch setting's parameter count, by tPatchModuleIndex, as the G2 writes them
+uint32_t patch_setting_param_count(uint32_t index) {
+    static const uint32_t kCount[] = {0, 16, 2, 2, 2, 3, 4, 2};
+
+    return (index < (sizeof(kCount) / sizeof(kCount[0]))) ? kCount[index] : 0u;
+}
+
+// notes §6 - what the G2's own new patch holds: Morph (8 dials at 0, each group on its fixed
+// source), Volume, Glide, Bend, Vibrato, Arpeggiator and Sustain
+static const uint8_t kNewPatchSetting[patchModuleSustain + 1][16] = {
+    [patchModuleMorph]       = {                0,  0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1},
+    [patchModuleVolume]      = {NEW_PATCH_VOLUME,  1},
+    [patchModuleGlide]       = {                0,28},
+    [patchModuleBend]        = {                1, 1},
+    [patchModuleVibrato]     = {                0, 50,64},
+    [patchModuleArpeggiator] = {                0,  3, 0,0},
+    [patchModuleSustain]     = {OCTAVE_SHIFT_ZERO, 1},
+};
+
+// notes §7 - the patch Volume the top bar shows and the engine plays (reference §63)
+void ensure_patch_volume(uint32_t slot, uint32_t level) {
+    if (slot >= MAX_SLOTS) {
+        return;
+    }
+    tModule * volumeModule = get_module_slot(slot, (uint32_t)locationMorph, patchModuleVolume);
+
+    if (volumeModule->active == true) {
+        return;
+    }
+    volumeModule->active = true;
+    volumeModule->key    = (tModuleKey){
+        slot, (uint32_t)locationMorph, patchModuleVolume
+    };
+
+    for (uint32_t variation = 0; variation < NUM_VARIATIONS_USB; variation++) {
+        set_param_value(volumeModule, variation, VOLUME_LEVEL, level);
+        set_param_value(volumeModule, variation, VOLUME_MUTE, 1);
+    }
+}
+
+// notes §3
+void init_patch(uint32_t slot) {
+    memset(&gPatchDescr[slot], 0, sizeof(gPatchDescr[0]));
+    gPatchDescr[slot].voiceCount      = 1;
+    // notes §4
+    gPatchDescr[slot].barPosition     = SPLIT_POS_MAX;
+    gPatchDescr[slot].unknown3        = 2;    // unknown9 in Delphi
+    gPatchDescr[slot].visible[0]      = 1;
+    gPatchDescr[slot].visible[1]      = 1;
+    gPatchDescr[slot].visible[2]      = 1;
+    gPatchDescr[slot].visible[3]      = 1;
+    gPatchDescr[slot].visible[4]      = 1;
+    gPatchDescr[slot].visible[5]      = 1;
+    gPatchDescr[slot].visible[6]      = 1;
+    gPatchDescr[slot].monoPoly        = 1;
+    gPatchDescr[slot].activeVariation = 0;
+    gPatchDescr[slot].category        = 0;
+
+    database_delete_cables_by_slot(slot);
+    database_delete_modules_by_slot(slot);
+    gMorphCount[slot]                 = 8; // Check default!?
+
+    // notes §5 - all seven patch settings, at the G2's own new-patch values
+    for (uint32_t index = (uint32_t)patchModuleMorph; index <= (uint32_t)patchModuleSustain; index++) {
+        tModule * setting = get_module_slot(slot, (uint32_t)locationMorph, index);
+
+        setting->active           = true;
+        setting->key              = (tModuleKey){
+            slot, (uint32_t)locationMorph, index
+        };
+        setting->actualParamCount = patch_setting_param_count(index);
+
+        for (uint32_t variation = 0; variation < NUM_VARIATIONS_USB; variation++) {
+            for (uint32_t param = 0; param < setting->actualParamCount; param++) {
+                set_param_value(setting, variation, param, kNewPatchSetting[index][param]);
+            }
+        }
+    }
+
+    gNote2Size[slot]                  = 0;
+    gControllerCount[slot]            = 0; // Seems to default to 2, so might need to set up defaults
+    gPatchNotesSize[slot]             = 0;
+    memset(&(gKnobArray[slot]), 0, sizeof(gKnobArray[0]));
+    memset(gNote2[slot], 0, sizeof(gNote2[0]));
+    memset(&(gControllerArray[slot]), 0, sizeof(gControllerArray[0]));
+    memset(gPatchNotes[slot], 0, sizeof(gPatchNotes[0]));
+
+    COPY_STRING(gGlobalSettings.slot[slot].patchName, "Init");
+}
+
+void clear_slot_data(uint32_t slot) {
+    if (slot < MAX_SLOTS) {
+        gPatchGeneration[slot]++;   // everything keyed to this slot's modules is now stale
+        database_delete_cables_by_slot(slot);
+        database_delete_modules_by_slot(slot);
+        gMorphCount[slot]      = 0;
+        gNote2Size[slot]       = 0;
+        gControllerCount[slot] = 0;
+        gPatchNotesSize[slot]  = 0;
+        memset(&(gPatchDescr[slot]), 0, sizeof(gPatchDescr[0]));
+        memset(&(gKnobArray[slot]), 0, sizeof(gKnobArray[0]));
+        memset(gNote2[slot], 0, sizeof(gNote2[0]));
+        memset(&(gControllerArray[slot]), 0, sizeof(gControllerArray[0]));
+        memset(gPatchNotes[slot], 0, sizeof(gPatchNotes[0]));
+    }
+}

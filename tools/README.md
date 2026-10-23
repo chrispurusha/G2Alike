@@ -1,0 +1,128 @@
+# tools — measuring the real G2
+
+Characterising a module by measurement rather than by guesswork. The engine's `KNOWN GAPS`
+(`src/soundEngine.h`) are mostly questions these can answer: reverb delay lengths and room sizes,
+filter responses, envelope times, static transfer curves.
+
+Nothing here is part of the application build. `capture` and `tone` are single C files; the two Python scripts are
+stdlib only, deliberately, so they run wherever the editor builds.
+
+```
+cc -O2 -Wall -o capture capture.c -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
+cc -O2 -Wall -o tone tone.c -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
+./do-vst3host      # the VST3 host; needs the VST3 SDK, same as ../do-plugin
+./do-auhost        # the Audio Unit host; needs no SDK at all
+```
+
+## The three parts
+
+| | |
+|---|---|
+| `capture.c` | Multichannel recorder, through CoreAudio's HAL. `./capture --list`, then `--device Fireface --out f.wav --seconds N`. **`--channels 4,5` keeps only those inputs** (0-indexed, in that order) and records their original numbers in the file's INFO comment - use it: the QU-24 presents 32 inputs, and a whole-desk take of a two-minute sweep is 1.3 GB. |
+| `tone.c` | `capture`'s other half: a sine out of chosen outputs of an interface, every other output silent, for driving the G2's inputs (Fireface outputs 0-3 go to the G2's In 1-4). `./tone --list`, then `--device Fireface --channels 0 --db -12 --hold 4`. **`--db` takes a list** - `--db -48,-40,-30,-24,-18,-12,-6,0 --hold 2.5` steps one continuous sine through them, printing each level as it starts, so a reading taken over the backdoor (LEDDUMP's `vols=` is the G2's own meter) can be matched to it. Refuses anything above 0 dBFS. See `Docs/code-notes/tone.c.md`. |
+| `measure.py` | Steps a parameter or a mode on the hardware while `capture` records, and writes a `.json` sidecar describing the plan. |
+| `analyse_ir.py` | Turns a capture into numbers: pre-delay, arrivals, recirculating delays, decay time, spectra. `--selftest` checks it against a synthetic response with known answers. |
+| `vst3host.mm` + `do-vst3host` | A minimal VST3 host, for looking at our own editor. `./vst3host "../build/G2Alike.vst3" --shot out.png`. Loads the bundle, instantiates component and controller, asks for the editor view and puts it in a window it owns — the one relationship with a plug-in view that cannot be tested any other way. `--seconds N` and `--shot PATH` make it scriptable, so a plug-in rendering change is diffed exactly like an application one. `--instances N` loads N instances into one process with a window each (at most 64; `--no-view` loads them without editors, for the instance limit; `--play` keeps every instance processing with a note held while its editor is open, so meters and lamps move - with `--state-file` carrying a patch), `--patch PATH` (repeatable) hands the next instance its state, and `--offset-test N` reports where a note placed at sample N is actually heard. `--reopen N` closes and re-creates the first editor N times, three a second, as a host does when the user opens and shuts it - the check for leaked surfaces, stray timers and exhausted window slots. `--dump-state` prints the state each instance saves, after any `--patch` has been applied - the project-state round trip, readable because G2Alike's own record is text. `--save-state F` writes the first instance's state to F, and `--state-file F` hands the next instance a state read from F, bytes and all - load, save, load again and `cmp` the two saves to check the round trip. It connects processor and controller through a real `IHostApplication`, as a host does, and pairs them by `getControllerClassId()` - before 2026-09-11 it did neither, so it only ever exercised the wrappers' single-instance fallback. **It proves the plug-in works, not that a host will accept it** — read the header comment before trusting it. |
+| `auhost.m` + `do-auhost` | The same harness for the Audio Unit, and it exists for the one thing `auval` does not do: `auval` instantiates the plug-in, renders it and sends it MIDI, but never opens the Cocoa editor — which leaves the whole `kAudioUnitProperty_CocoaUI` path untested by the tool that says "AU VALIDATION SUCCEEDED". `./auhost --shot out.png` finds the component, renders a few blocks with a note held and reports the peak, then loads the view class out of the plug-in's own bundle by name and puts it in a window it owns. **The component must be installed** — an Audio Unit is found through the system registry, not by path, so `./do-plugin` has to have run first. Run `auval -v aumu G2al CPur` alongside it; the two cover different halves. |
+| `relayout.py` | Lays module faces out by rule, one family at a time: `./relayout.py Level`. Rewrites only the position, anchor and label of the rows a family's spec names, addressed by their order in the table, so it can move a control but never change which parameter it is. The rules are `Docs/module-layout-rules.md`, "The common face". Run `../do-uncrustify` after it. |
+| `face-shots` | One command to see faces after a layout change: `./face-shots "<path>/G2Alike.app" /tmp/lev LevAmp LevAdd MinMax` builds a patch of those modules offline through the backdoor and writes `/tmp/lev-1.0.png` and `/tmp/lev-0.59.png`. `--name-band` tints the area the widest possible name (sixteen Ws) would take on every face, to check the faces against it (layout rule 16). Safe with a G2 attached: the editor runs with `G2ALIKE_OFFLINE=1`, and the script stops before NEWPATCH - which would clear the instrument's slot - unless the editor reports itself offline. |
+| `g2bd` | Sends backdoor commands to a running editor and prints each result: `./g2bd 'DEVSLOT B' NEWPATCH 'ADDMODULE OscB 0 0' DUMP`. What every validation session drives the editor with (`../Docs/validation-sessions.md`). |
+| `filter_response.py` | A filter's response, the G2 against the engine, per third-octave band, from captures with the filtered signal on one channel and the dry on the other, so the rig's gain cancels: `./filter_response.py --pairs DIR`. Keeps a 16384-point FFT - shorter ones invent low-band differences. |
+| `band_balance.py` | A percussive module's spectral balance (bands relative to its body) and level, hit by hit, G2 against engine: `./band_balance.py --g2 g2.wav --engine 'eng*.wav' --rig -0.5`. |
+| `stage_usage.py` | Reads the User1 stage patches off the G2 (into one slot's edit buffer, never to flash) and lists every module they use, most used first, with its verdict from `engine-module-status.md` - the queue for validation. |
+| `g2_note.swift` | Sends MIDI note-on/off to a named destination — `./g2_note "Elektron TM-1" 3 60 100`, velocity 0 for the release; lists the destinations when the name does not match. **Use this, not the backdoor's DEVNOTE, whenever the NOTE BEHAVIOUR is what is being measured.** DEVNOTE is the editor's virtual keyboard and will not start a note while one is releasing — identical at one voice mono and eight voices poly, so it is the path and not voice allocation. Measured through MIDI the same instrument retriggers immediately from the current level; measured through DEVNOTE it appears not to retrigger at all, which is a property of the path and cost most of a session. |
+| `render.c` + `do-render` | Renders **our own engine's** reverb response into a file shaped like a hardware capture, so one analyser command line measures both and the difference is a diff. |
+| `morphcheck.c` + `do-morphcheck` | Offline proof that a **Vel or Keyb morph reaches the sound per voice**, for any parameter of any module: `./do-morphcheck && ./morphcheck ../PatchTestFiles/Dx.pch2 --list`, then `--module 4 --param 22`. It plays the morph against the same dial turned down by hand and they must agree. **Read the `separation` column before believing a PASS** - it is how far the dial moves the sound at that point, and where it is small the point proves nothing and says INCONCLUSIVE. Exit status is the verdict, so it belongs in a regression run. `--param2 N` puts the Vel range on one dial and the Keyb range on another, which is the case a per-voice merge has to get right; `--axis both` puts both on the SAME dial, which is the case it cannot. `--write out.pch2` saves the patch a sweep would have played instead of playing it, so the same test can be heard on the G2 - that is where `PatchTestFiles/Morph*.pch2` came from. See `Docs/code-notes/morphcheck.c.md`. |
+| `gen-cmake` | Writes `../CMakeLists.txt` from `G2Alike.xcodeproj`, which stays the master: `./gen-cmake`, or `./gen-cmake --check` to fail if the file is stale. It mirrors the project - the synchronized folders and their files, standards, Debug/Release settings, warnings, paths, frameworks - and includes the hand-written `../cmake/platform.cmake` for what a port does differently. Re-run it after adding or removing a source file. See `Docs/windows-port-plan.md`. |
+| `do-windows` | Cross-builds the editor for Windows on the Mac with llvm-mingw: `./do-windows` (x64) or `./do-windows arm64` (native Windows on ARM, i.e. Parallels on Apple silicon). One self-contained `.exe` in `../build-cross-<arch>/`; GLFW, FreeType and libusb are built for Windows from `SynthLib/ThirdParty` once per architecture. A Release `.exe` has no console window; `G2_WIN_CONFIG=Debug` keeps one for the log. `../do-release-windows` drives it for a release. See `Docs/windows-port-plan.md`, "Cross-building on the Mac". |
+| `do-windows-plugin` | Cross-builds the G2Alike VST3 for Windows: `./do-windows-plugin [arm64]`, after `./do-windows` has built FreeType for that architecture. The source list is read from `../do-plugin`; the window code is `plugin/g2ViewWin.c` and SynthLib's `synthlibPluginVst3ViewWin.cpp`. Needs the VST3 SDK. Result: `../build-cross-<arch>/G2Alike.vst3`, a single file (no bundle folders), to copy into `C:\Program Files\Common Files\VST3`. |
+
+## Measuring the engine against the instrument
+
+```
+./do-render && ./render --out engine.wav --sweep type --settings 0,1,2,3 --time 127
+python3 analyse_ir.py engine.wav        --dry-channel 1 --wet-channel 3 --raw --skip 0 --decay-span 15
+python3 analyse_ir.py hardware.wav      --dry-channel 5 --wet-channel 7 --raw --skip 2 --decay-span 15
+```
+
+`--decay-span` is not optional for a comparison: a recording stops at its noise floor while a render
+decays to denormals, so without a cap one side measures early decay and the other measures all of it.
+
+**Point any new analysis at the render first.** It is the only case where the answer is known, and it has
+already overturned two plausible readings of the hardware data: allpass lengths do not appear in a tail
+autocorrelation at all, and "drop the lags that are sums of other lags" is not a valid way to recover
+delay lengths, because a set closed under sums and differences explains itself in both directions. See
+`generating_sets()`, which searches instead of filtering, and was validated by recovering the engine's
+own comb lengths before being pointed at hardware.
+
+`do-render`'s nine-file source list doubles as a check that the engine is platform-free. If it ever needs
+`graphics.c` or `audioOutput.c` to link, something has been added to the engine that does not belong
+there — and the VST3 plug-in will break for the same reason.
+
+## The patch it expects
+
+```
+EnvADSR "Env" out --> Pulse (Sub range, Time 0) --+--> [module] --> out 3-4   (wet)
+                                                  \-------------> out 1-2   (dry reference)
+```
+
+One note per impulse; the envelope's rising edge fires the Pulse. **The Pulse must be up-rated** — its
+cables turn orange rather than yellow. At control rate it cannot produce a pulse shorter than a control
+period, so the shortest Time setting does not exist and the excitation comes out long and ragged.
+
+**The dry pair earns its cable three times over.** It locates every impulse to the sample instead of
+inferring position from the processed signal; it is the system reference — converters, cabling,
+interface — captured in the *same* take, so deconvolution cannot drift; and comparing dry repeats to one
+another says whether the excitation repeats at all, independently of the module. Measured excitation
+repeatability with this patch is +0.99.
+
+Put any gain the levels need on the module's **output**, never its input: a bigger click into the
+algorithm risks saturating its fixed-point maths, which makes the response nonlinear and the
+measurement meaningless.
+
+The editor must be running with `G2ALIKE_BACKDOOR=1` — that is the channel `measure.py` drives, and
+`CABLE`/`DELCABLE`/`PUSH` let a measurement patch be built by script rather than by hand.
+
+## Example: the reverb's room sizes
+
+```
+./capture --list
+python3 measure.py --out rooms.wav --device Fireface --loc VA --index 2 \
+    --sweep-mode 0 --values 0,1,2,3 \
+    --pre "VA 2 0 127" --pre "VA 2 2 127" --pre "VA 2 1 64" \
+    --period 8.0 --repeats 5 --gate 60
+python3 analyse_ir.py rooms.wav --dry-channel 5 --wet-channel 7 --raw --skip 2
+```
+
+`--sweep-mode` matters: a **drop-down selector is a MODE, not a parameter**. Driving one as a
+high-numbered parameter is accepted locally, dropped by the G2, and reported OK — that produced three
+captures of the same room before `DEVSET` learned to check. Results in the `REVERB` entry of
+`Docs/todo.md`.
+
+## Traps worth knowing before trusting a result
+
+- **ffmpeg cannot do this job.** Its avfoundation input reports the interface's real rate and then
+  delivers 48 kHz anyway, because an AVCaptureSession resamples: a 192 kHz capture becomes a file
+  *labelled* 192000 with a quarter of the samples in it, and nothing in the file says so. Every length
+  measured from one is out by four. The tell is that a 5 s capture claims to be 1.14 s long.
+- **Group impulses by time, not by count.** `analyse_ir.py` reads the sidecar's plan for this. Counting
+  assumes none were missed; 18 detected out of 20 put one room's impulse inside another room's average
+  and reported the two rooms as one.
+- **A reverb's wet consistency is low and that is not a fault.** Repeats correlated at +0.75 with an
+  excitation repeatable to +0.99, because a tail longer than the spacing leaves residue under the next
+  impulse. That residue is uncorrelated with the impulse, so averaging removes it — which is the point.
+  Averaging is gated on the *excitation's* repeatability, never the module's.
+- **Peak-picking does not give delay lengths.** A tank is sparse for a few arrivals and dense after
+  that; the peak list changes with the threshold, which is how you know it is fiction. Use the tail
+  autocorrelation, and treat a lag as a candidate rather than a length — a recirculating network shows
+  its lengths *and* their sums, so the sums are the corroboration.
+- **Schroeder integration measures the window** if the segment ends on a noise floor rather than in
+  silence. An 8 s window reported ~15 s for every room; 20 s reported ~39 s for every setting. Both are
+  twice the window. `decay_time()` fits the log envelope instead and reports its span, r² and
+  extrapolation factor so a bad fit is visible rather than merely plausible.
+- **Deconvolution outside the excitation's band is undefined, not ill-conditioned.** Recording a 96 kHz
+  device at 192 kHz leaves half the spectrum as converter noise, and a floored denominator divides it by
+  epsilon. Zero those bins (`--band-db`) — but note zeroing band-limits the answer, turning each delta
+  into a sinc whose side lobes read as extra reflections.
+- Ask for only the channels you need (`read_wav(path, wanted)`): eight channels of a two-minute 192 kHz
+  take is 189 million samples, about 6 GB as Python floats.

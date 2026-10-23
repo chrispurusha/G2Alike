@@ -1,0 +1,103 @@
+G2Alike for Windows (experimental)
+====================================
+
+WHAT IS IN HERE
+
+  G2Alike.exe    the editor - one file, nothing to install
+  G2Alike.vst3    the sound engine as a VST3 instrument, editor included (experimental)
+  LICENSE          the GNU General Public License, version 3
+
+Put the editor anywhere and double-click it. Windows 10 or 11: the "x64" download for
+an ordinary PC, "arm64" for Windows on ARM (including Parallels on an Apple
+silicon Mac).
+
+THE FIRST RUN - "WINDOWS PROTECTED YOUR PC"
+
+The editor is not signed with a paid certificate, so on the first run Windows
+SmartScreen shows "Windows protected your PC". Click "More info", then "Run
+anyway". It asks once. If Windows blocked the .zip itself, right-click the .zip
+> Properties > tick "Unblock" > OK, before extracting it.
+
+CONNECTING THE G2 - THE USB DRIVER (ONCE)
+
+The editor talks to the G2 through Windows' own generic USB driver, WinUSB. The
+G2 has to be given that driver once; Clavia's driver will NOT work with this
+editor.
+
+  1. Connect the G2 by USB and switch it on. (Parallels: Devices > USB &
+     Bluetooth, and choose the Clavia / Nord G2 so it connects to Windows.)
+  2. Open Device Manager (right-click Start > Device Manager). Find the G2 -
+     usually under "Other devices" with a yellow warning sign. To be sure it is
+     the G2: Properties > Details > Hardware Ids reads USB\VID_0FFC&PID_0002.
+  3. Right-click it > Update driver > Browse my computer for drivers > Let me
+     pick from a list of available drivers on my computer.
+  4. If it shows a list of device types, choose "Universal Serial Bus devices",
+     then Next.
+  5. Manufacturer "WinUsb Device", model "WinUsb Device", Next, and Yes to the
+     warning.
+
+It now appears as "WinUsb Device" under Universal Serial Bus devices. Start the
+editor and the top bar shows Online.
+
+The alternative is Zadig (https://zadig.akeo.ie): Options > List All Devices,
+choose the G2 (USB ID 0FFC 0002), target driver WinUSB, Install Driver. It does
+the same, but it fails on some machines - Windows on ARM among them - where the
+Device Manager route above works.
+
+PARALLELS: switching the G2 off and on can hand it back to the Mac, and the
+editor then never goes Online. Devices > USB & Bluetooth > the G2 gives it back
+(disconnect and reconnect it there if it is ticked already).
+
+NOTE: while the G2 has WinUSB, software using Clavia's driver cannot see it. To go back,
+Device Manager > the G2 > Update driver, and choose Clavia's driver.
+
+THE G2 ALIKE PLUG-IN (VST3, EXPERIMENTAL)
+
+G2Alike plays G2 patches in a music program, with the editor's own canvas as
+its window. It needs no G2. Copy the file "G2Alike.vst3" into
+
+  C:\Program Files\Common Files\VST3
+
+and rescan plug-ins in the host. It loads with an empty patch: open one from its
+own File menu. Use the download that matches the host - x64 for an ordinary PC,
+arm64 for a native Windows on ARM host. Releases before October 2026 installed a
+FOLDER called "G2Alike.vst3" there; delete that folder before copying the file.
+
+PLAYING PATCHES WITHOUT A G2
+
+Experimental > Enable Sound Engine plays the patch on screen through Windows'
+audio; choose the output in Experimental > Audio Device. If it breaks up:
+Experimental > Engine Rate > Half (economy), or a larger Buffer Size.
+
+THE SAMPLER (ENGINE ONLY, EXPERIMENTAL)
+
+The Sampler is a module the G2 itself does not have: it plays sample files, and
+only the sound engine and the G2Alike plug-in can play it. Add one from the module
+palette's "Special" group, then right-click it > Choose Sample... The file's name
+shows on the module, in red if it cannot be read.
+
+  Files it plays
+    .nsmp, .nsmp4   Nord sample files (Nord Sample Library), mono or stereo,
+                    with their own key maps and loops
+    .exb            E-mu Emulator X banks - keep the bank's sample files in its
+                    folder beside it. Right-click > Preset chooses which of
+                    the bank's presets plays.
+  Not yet           Nord piano files (.npno), WAV and other formats
+
+Its controls: Pitch (with KB to turn keyboard tracking off), Start, Delay,
+Atk/Dcy/Sus/Rel, Vel, Level, and Speed and Grain - Speed stretches time without
+changing the pitch: 96 is normal speed, 64 stops, below that it plays in reverse.
+Spray scatters the grains for a smeared, cloudy sound, at any speed.
+Start, Delay, Speed, Grain and Spray each have a modulation input.
+
+A patch with a Sampler saves as .pchx, and a performance as .prfx. The G2 never
+receives a Sampler: while a patch holds one, the top bar shows "Not G2" in red.
+
+The plug-in also has eight stereo outputs: Out 1/2 and 3/4 as on the G2, and Out
+5/6 to 15/16, chosen in a 2-Out's "Out to", for separate tracks in the host.
+
+LICENCES
+
+G2Alike is free software under the GNU General Public License version 3:
+https://github.com/chrispurusha/G2Alike . It uses GLFW (zlib), FreeType (FTL),
+libusb (LGPL 2.1) and miniaudio (public domain / MIT No Attribution).

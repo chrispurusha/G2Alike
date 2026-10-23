@@ -1,0 +1,120 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/misc.h.md - "// notes §k" refers there.
+
+#ifndef __MISC_H__
+#define __MISC_H__
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <stdbool.h>
+#include "types.h"
+
+// notes §1
+bool platform_any_mouse_button_down(void);
+
+// notes §2a - tell macOS this process is doing latency-critical work, so it is not napped and its
+// threads are not pushed onto the efficiency cores. Held while the audio output is open.
+void platform_begin_audio_activity(void);
+void platform_end_audio_activity(void);
+
+void register_sleep_wake_notifications(void);
+void setup_main_menu(void);
+
+// Applies saved window size/position, zoom, dial mode, and last-browsed folder — called once by
+// setup_main_menu() right after prefs_init(). Implemented in persistence.c.
+void load_saved_settings(void);
+
+void save_zoom_factor(double zoom);
+
+// File > Open Recent. Implemented in persistence.c beside the other prefs-backed state.
+// recent_files_load() is called by load_saved_settings(); recent_files_add() by on_file_opened().
+#define RECENT_FILES_MAX    (10)
+void recent_files_load(void);
+void recent_files_add(const char * path);
+uint32_t recent_files_count(void);
+const char * recent_files_path(uint32_t index);
+const char * recent_files_display_name(uint32_t index);
+void recent_files_clear(void);
+
+// notes §2
+void file_menu_open_patch(void);
+void file_menu_open_path(const char * path);
+// menuActions.c notes §15 - the Sampler's file: the menu names the module, the render loop opens the browser
+void sampler_choose_begin(tModuleKey key);
+void sampler_preset_choose(tModuleKey key, uint32_t preset);
+void sampler_choose_open(void);
+// persistence.c - the sample browser remembers its own folder, apart from the patch browser's
+void file_browser_for_samples(bool samples);
+// THE KIND IS PASSED IN, NOT INFERRED. These used to read gGlobalSettings.perfMode, which made the
+// operation follow the G2's mode rather than the menu item the user picked - and meant that in
+// Performance mode a slot's own patch could not be saved to a file at all. See code-notes §14.
+void file_menu_save_patch(bool asPerf);
+void file_menu_save_patch_to_current_path(bool asPerf);
+bool file_menu_have_saved_path(bool isPerf);
+const char * file_menu_saved_path(bool isPerf);
+// What the save now in flight is writing - graphics.c reads this where it used to read perfMode.
+bool file_menu_save_is_perf(void);
+void file_menu_new_patch(void);
+void file_menu_load_patch_location(void);
+void file_menu_load_perf_location(void);
+void file_menu_delete_patch_location(void);
+void file_menu_delete_perf_location(void);
+void file_menu_store_to_bank(bool isPerf);
+// The bank location the current patch (performance, in performance mode) was loaded from, if any,
+// and Store back to it.
+bool file_menu_bank_origin(bool isPerf, uint32_t * bank, uint32_t * location);
+void file_menu_store_back_to_bank(bool isPerf);
+
+// Settings menu actions
+void settings_menu_open_synth(void);
+void settings_menu_open_patch(void);
+void settings_menu_open_perf(void);
+void settings_menu_open_notes(void);
+void settings_menu_open_param_pages(void);
+void settings_menu_open_param_overview(void);
+void settings_menu_open_virtual_keyboard(void);
+void settings_menu_open_patch_adjuster(void);
+
+// Backup menu actions
+void backup_menu_patch_bank(void);
+void backup_menu_perf_bank(void);
+void backup_menu_synth_settings(void);
+void backup_menu_everything(void);
+
+// Restore menu actions
+void restore_menu_patch_bank(void);
+void restore_menu_perf_bank(void);
+void restore_menu_synth_settings(void);
+void restore_menu_everything(void);
+
+// Registered with the file browser (SynthLib/src/fileBrowser.cpp) via
+// set_file_browser_directory_changed_callback() at startup — see setup_main_menu() — so it can
+// persist the last folder browsed across app launches the same way zoom/window/dial-mode are.
+void save_file_browser_directory(const char * path);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // __MISC_H__

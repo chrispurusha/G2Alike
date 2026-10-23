@@ -1,0 +1,454 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/mousePanels.c.md - "// notes §k" refers there.
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// System header files
+#include <math.h>
+
+// Disable warnings from external library headers etc.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Weverything"
+
+#define GL_SILENCE_DEPRECATION    1
+#include <GLFW/glfw3.h>
+
+#pragma clang diagnostic pop
+
+#include "defs.h"
+#include "types.h"
+#include "utils.h"
+#include "msgQueue.h"
+#include "dataBase.h"
+#include "moduleResourcesAccess.h"
+#include "topbarResourcesAccess.h"
+#include "utilsGraphics.h"
+#include "mouseHandle.h"
+#include "graphics.h"
+#include "settingsPanels.h"    // note_editor_cursor_from_click(), moved out of graphics.c 2026-09-16
+#include "globalVars.h"
+#include "protocol.h"
+#include "menus.h"
+#include "synthSettingsResources.h"
+#include "perfSettingsResources.h"
+#include "undo.h"
+#include "mousePanels.h"
+#include "canvasDrag.h"
+
+// Suppresses a spurious leftUp event after dismissing the notes editor by
+// clicking outside it — prevents immediately re-triggering topbar controls.
+
+static bool check_ss_section(tCoord coord, const tSynthSettingItem * items, int count) {
+    int i = 0;
+
+    for (i = 0; i < count; i++) {
+        if (within_rectangle(coord, *items[i].rect)) {
+            items[i].act(below_rect(*items[i].rect));
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool handle_panel_context_menu(tCoord coord) {
+    if (!gContextMenu.active) {
+        return false;
+    }
+
+    if (!handle_context_menu_click(coord)) {
+        gContextMenu.active = false;
+    }
+    synthlib_request_redraw();
+    return true;
+}
+
+bool handle_patch_notes_mouse(tCoord coord, tMouseButton mouseButton) {
+    size_t          len     = 0;
+    uint32_t        newSize = 0;
+    size_t          origLen = 0;
+    int             newPos  = 0;
+    tMessageContent msg     = {0};
+
+    if (!gPatchNotesEdit.active) {
+        return false;
+    }
+
+    // notes §1
+    switch (floating_panel_mouse(&gPatchNotesEdit.panel, coord, mouseButton, gPatchNotesClosePressed)) {
+        case eFloatingPanelPassThrough:
+            return false;
+
+        case eFloatingPanelConsumed:
+            return true;
+
+        case eFloatingPanelContent:
+        default:
+            break;
+    }
+
+    if (mouseButton == mouseButtonLeftDown) {
+        if (within_rectangle(coord, gPatchNotesCloseRect)) {
+            gPatchNotesClosePressed = true;
+        } else if (within_rectangle(coord, gPatchNotesDiscardRect)) {
+            gPatchNotesDiscardPressed = true;
+        } else {
+            newPos = note_editor_cursor_from_click(coord.x, coord.y);
+
+            if (newPos >= 0) {
+                gPatchNotesEdit.cursorPos = (uint32_t)newPos;
+            }
+            // notes §2
+        }
+    }
+
+    if (mouseButton == mouseButtonLeftUp) {
+        bool wasClosePressed   = gPatchNotesClosePressed;
+        bool wasDiscardPressed = gPatchNotesDiscardPressed;
+
+        gPatchNotesClosePressed   = false;
+        gPatchNotesDiscardPressed = false;
+
+        if (wasClosePressed && within_rectangle(coord, gPatchNotesCloseRect)) {
+            len                                        = strlen(gPatchNotesEdit.buffer);
+            newSize                                    = (uint32_t)len;
+
+            if (newSize > PATCH_NOTES_SIZE) {
+                newSize = PATCH_NOTES_SIZE;
+            }
+            memcpy(gPatchNotes[gPatchNotesEdit.slot], gPatchNotesEdit.buffer, newSize);
+            gPatchNotes[gPatchNotesEdit.slot][newSize] = '\0';
+            gPatchNotesSize[gPatchNotesEdit.slot]      = newSize;
+            gPatchNotesEdit.active                     = false;
+
+            msg.cmd                                    = eMsgCmdWritePatch;
+            msg.slot                                   = gPatchNotesEdit.slot;
+            msg_send(&gToUsbThread, &msg);
+        } else if (wasDiscardPressed && within_rectangle(coord, gPatchNotesDiscardRect)) {
+            origLen                   = strlen(gPatchNotesEdit.original);
+            memset(gPatchNotesEdit.buffer, 0, sizeof(gPatchNotesEdit.buffer));
+            memcpy(gPatchNotesEdit.buffer, gPatchNotesEdit.original, origLen);
+            gPatchNotesEdit.cursorPos = (uint32_t)origLen;
+        }
+    }
+    synthlib_request_redraw();
+    return true;
+}
+
+bool handle_perf_settings_mouse(tCoord coord, tMouseButton mouseButton) {
+    int s   = 0;
+    int col = 0;
+
+    if (!gPerfSettingsEdit.active) {
+        return false;
+    }
+
+    switch (floating_panel_mouse(&gPerfSettingsEdit.panel, coord, mouseButton, gPerfSettingsPanelRects.closePressed)) {
+        case eFloatingPanelPassThrough:
+            return false;
+
+        case eFloatingPanelConsumed:
+            return true;
+
+        case eFloatingPanelContent:
+        default:
+            break;
+    }
+
+    if (mouseButton == mouseButtonLeftDown) {
+        if (within_rectangle(coord, gPerfSettingsPanelRects.close)) {
+            gPerfSettingsPanelRects.closePressed = true;
+        } else if (within_rectangle(coord, gPerfSettingsPanelRects.masterClock)) {
+            gPerfTempoDragging = true;
+
+            if (synthlib_dial_mode() != eDialModeRotary) {
+                canvas_drag_begin();
+            }
+        }
+    }
+
+    if (mouseButton == mouseButtonLeftUp) {
+        bool wasClosePressed = gPerfSettingsPanelRects.closePressed;
+
+        gPerfSettingsPanelRects.closePressed = false;
+        stop_dragging();
+
+        if (handle_panel_context_menu(coord)) {
+            return true;
+        }
+
+        if (wasClosePressed && within_rectangle(coord, gPerfSettingsPanelRects.close)) {
+            gPerfSettingsEdit.active = false;
+        } else {
+            if (within_rectangle(coord, gPerfSettingsPanelRects.masterClockRunning)) {
+                gGlobalSettings.masterClockRunning = !gGlobalSettings.masterClockRunning;
+                send_master_clock_run((uint32_t)gGlobalSettings.masterClockRunning);
+            } else if (within_rectangle(coord, gPerfSettingsPanelRects.keyboardRange)) {
+                uint8_t oldKbRange = gPerfSettings.keyboardRange;
+                gPerfSettings.keyboardRange = !oldKbRange;
+                send_perf_settings_msg();
+                undo_push_perf_setting(UNDO_PERF_KEYBOARD_RANGE, 0, oldKbRange, gPerfSettings.keyboardRange);
+            } else {
+                for (s = 0; s < MAX_SLOTS; s++) {
+                    for (col = 0; col < kPSSlotToggleCount; col++) {
+                        if (within_rectangle(coord, kPSSlotToggles[col].rects[s])) {
+                            kPSSlotToggles[col].act(s);
+                        }
+                    }
+
+                    if (within_rectangle(coord, gPerfSettingsPanelRects.rangeLower[s])) {
+                        open_midi_note_dropdown(below_rect(gPerfSettingsPanelRects.rangeLower[s]), &gPerfSettings.slot[s].rangeLower);
+                    } else if (within_rectangle(coord, gPerfSettingsPanelRects.rangeUpper[s])) {
+                        open_midi_note_dropdown(below_rect(gPerfSettingsPanelRects.rangeUpper[s]), &gPerfSettings.slot[s].rangeUpper);
+                    }
+                }
+            }
+        }
+    }
+    synthlib_request_redraw();
+    return true;
+}
+
+bool handle_patch_params_mouse(tCoord coord, tMouseButton mouseButton) {
+    bool              switched           = false;
+    uint32_t          s                  = 0;
+    int               i                  = 0;
+    int               j                  = 0;
+    tPatchParamRectId rid                = (tPatchParamRectId)0;
+
+    static const struct {
+        tPatchParamRectId id;
+        void              (*open_fn)(tCoord);
+    }                 kPatchParamTable[] = {
+        {pPSustainPedal,  NULL                            },
+        {pPOctaveShift,   open_patch_octave_shift_dropdown},
+        {pPArpEnabled,    NULL                            },
+        {pPArpRate,       open_arp_rate_dropdown          },
+        {pPArpDirection,  open_arp_direction_dropdown     },
+        {pPArpOctaves,    open_arp_octave_dropdown        },
+        {pPVibratoSource, open_vibrato_source_dropdown    },
+        {pPVibratoRate,   NULL                            },
+        {pPGlideMode,     open_glide_mode_dropdown        },
+        {pPBendRange,     open_bend_range_dropdown        },
+        {pPBendEnabled,   NULL                            },
+    };
+    static const struct {
+        tPatchParamRectId id;
+        uint32_t          moduleIndex;
+        uint32_t          paramIndex;
+    }                 kPatchOnOffTable[] = {
+        {pPSustainPedal, patchModuleSustain,     SUSTAIN_PEDAL},
+        {pPArpEnabled,   patchModuleArpeggiator, ARP_ON_OFF   },
+        {pPBendEnabled,  patchModuleBend,        BEND_ON_OFF  },
+    };
+
+    if (!gPatchParamsEdit.active) {
+        return false;
+    }
+
+    switch (floating_panel_mouse(&gPatchParamsEdit.panel, coord, mouseButton, gPatchParamClosePressed)) {
+        case eFloatingPanelPassThrough:
+            return false;
+
+        case eFloatingPanelConsumed:
+            return true;
+
+        case eFloatingPanelContent:
+        default:
+            break;
+    }
+
+    if (mouseButton == mouseButtonLeftDown) {
+        if (within_rectangle(coord, gPatchParamClose)) {
+            gPatchParamClosePressed = true;
+        } else if (within_rectangle(coord, gPatchParamRects[pPVibratoAmount])) {
+            gVibAmountDragging = true;
+
+            if (synthlib_dial_mode() != eDialModeRotary) {
+                canvas_drag_begin();
+            }
+        } else if (within_rectangle(coord, gPatchParamRects[pPVibratoRate])) {
+            gVibRateDragging = true;
+
+            if (synthlib_dial_mode() != eDialModeRotary) {
+                canvas_drag_begin();
+            }
+        } else if (within_rectangle(coord, gPatchParamRects[pPGlideTime])) {
+            gGlideTimeDragging = true;
+
+            if (synthlib_dial_mode() != eDialModeRotary) {
+                canvas_drag_begin();
+            }
+        }
+    }
+
+    if (mouseButton == mouseButtonLeftUp) {
+        bool wasClosePressed = gPatchParamClosePressed;
+
+        gPatchParamClosePressed = false;
+        stop_dragging();
+
+        if (handle_panel_context_menu(coord)) {
+            return true;
+        }
+
+        if (wasClosePressed && within_rectangle(coord, gPatchParamClose)) {
+            gPatchParamsEdit.active = false;
+        } else {
+            switched = false;
+
+            for (s = 0; s < MAX_SLOTS; s++) {
+                if (within_rectangle(coord, gPatchParamSlots[s])) {
+                    gPatchParamsEdit.slot = s;
+                    switched              = true;
+                    break;
+                }
+            }
+
+            if (!switched) {
+                for (i = 0; i < (int)(sizeof(kPatchParamTable) / sizeof(*kPatchParamTable)); i++) {
+                    rid = kPatchParamTable[i].id;
+
+                    if (within_rectangle(coord, gPatchParamRects[rid])) {
+                        if (kPatchParamTable[i].open_fn != NULL) {
+                            kPatchParamTable[i].open_fn(below_rect(gPatchParamRects[rid]));
+                        } else {
+                            for (j = 0; j < (int)(sizeof(kPatchOnOffTable) / sizeof(*kPatchOnOffTable)); j++) {
+                                if (kPatchOnOffTable[j].id == rid) {
+                                    toggle_patch_on_off(kPatchOnOffTable[j].moduleIndex,
+                                                        kPatchOnOffTable[j].paramIndex);
+                                    break;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    synthlib_request_redraw();
+    return true;
+}
+
+bool handle_patch_settings_mouse(tCoord coord, tMouseButton mouseButton) {
+    int s = 0;
+
+    if (!gPatchSettingsEdit.active) {
+        return false;
+    }
+    // notes §3
+
+    switch (floating_panel_mouse(&gPatchSettingsEdit.panel, coord, mouseButton, gSettingsPanelRects.closePressed)) {
+        case eFloatingPanelPassThrough:
+            return false;
+
+        case eFloatingPanelConsumed:
+            return true;
+
+        case eFloatingPanelContent:
+        default:
+            break;
+    }
+
+    if (mouseButton == mouseButtonLeftDown) {
+        if (within_rectangle(coord, gSettingsPanelRects.close)) {
+            gSettingsPanelRects.closePressed = true;
+        }
+    }
+
+    if (mouseButton == mouseButtonLeftUp) {
+        bool wasClosePressed = gSettingsPanelRects.closePressed;
+
+        gSettingsPanelRects.closePressed = false;
+
+        if (handle_panel_context_menu(coord)) {
+            return true;
+        }
+        stop_synth_name_editing();
+
+        if (wasClosePressed && within_rectangle(coord, gSettingsPanelRects.close)) {
+            gPatchSettingsEdit.active = false;
+        } else {
+            for (s = 0; s < 4; s++) {
+                if (within_rectangle(coord, gSettingsPanelRects.midiChan[s])) {
+                    open_midi_chan_dropdown(below_rect(gSettingsPanelRects.midiChan[s]), &gSynthSettings.midiChanSlot[s]);
+                }
+            }
+
+            if (within_rectangle(coord, gSettingsPanelRects.synthName)) {
+                gSynthNameEdit.active    = true;
+                COPY_STRING(gSynthNameEdit.buffer, gSynthSettings.name);
+                gSynthNameEdit.cursorPos = (uint32_t)strlen(gSynthNameEdit.buffer);
+            } else if (!check_ss_section(coord, kSSGlobal, kSSGlobalCount)) {
+                if (!check_ss_section(coord, kSSOptions, kSSOptionsCount)) {
+                    if (!check_ss_section(coord, kSSTuning, kSSTuningCount)) {
+                        if (!check_ss_section(coord, kSSPedal, kSSPedalCount)) {
+                            check_ss_section(coord, kSSSort, kSSSortCount);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    synthlib_request_redraw();
+    return true;
+}
+
+// notes §4
+bool handle_patch_settings_key(int key, int mods, int action) {
+    (void)mods;
+
+    if (!gPatchSettingsEdit.active || (action != GLFW_PRESS) || (key != GLFW_KEY_ESCAPE)) {
+        return false;
+    }
+    // The pair the close button performs (below): a name edit left open would outlive the panel it
+    // belongs to. Escape while actually editing that name never reaches here — gSynthNameEdit is
+    // handled earlier in key_callback, and discards the edit rather than closing anything.
+    stop_synth_name_editing();
+    gPatchSettingsEdit.active = false;
+    return true;
+}
+
+bool handle_perf_settings_key(int key, int mods, int action) {
+    (void)mods;
+
+    if (!gPerfSettingsEdit.active || (action != GLFW_PRESS) || (key != GLFW_KEY_ESCAPE)) {
+        return false;
+    }
+    gPerfSettingsEdit.active = false;
+    return true;
+}
+
+bool handle_patch_params_key(int key, int mods, int action) {
+    (void)mods;
+
+    if (!gPatchParamsEdit.active || (action != GLFW_PRESS) || (key != GLFW_KEY_ESCAPE)) {
+        return false;
+    }
+    gPatchParamsEdit.active = false;
+    return true;
+}
+
+#ifdef __cplusplus
+}
+#endif

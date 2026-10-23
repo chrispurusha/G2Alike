@@ -1,0 +1,4873 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/usbComms.c.md - "// notes §k" refers there.
+
+// notes §1
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <math.h>
+#include <time.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
+#include "defs.h"
+#include "synthlibDefs.h"
+#include "usbLog.h"
+#include "types.h"
+#include <libusb.h>
+#include "utils.h"
+#include "msgQueue.h"
+#include "protocol.h"
+#include "deviceSync.h"
+#include "usbComms.h"
+#include "dataBase.h"
+#include "moduleResourcesAccess.h"
+#include "globalVars.h"
+#include "paramPages.h"
+#include "nameCache.h"
+#include "graphics.h"      // set_patch_name_from_filename / write_database_to_file (extern "C")
+#include "patchWrite.h"
+#include "soundEngine.h"
+#include "mouseHandle.h"   // init_patch (extern "C")
+#include <stdatomic.h>
+#include <pthread.h>
+
+#define VENDOR_ID     (0xffc)
+#define PRODUCT_ID    (2)
+
+// USB transfer timeouts (milliseconds)
+#if defined (_WIN32)
+// notes §76 - USB through a VM (Parallels) adds latency each way, and WinUSB is slow to cancel: the Mac's 50 ms cut
+// every send off before it completed
+#define USB_SEND_TIMEOUT_MS         (1000)
+#define USB_RECV_POLL_MS            (250)  // ePollYes idle poll — timeout is expected and normal
+#define USB_RECV_ACK_MS             (1500) // simple command acknowledgment (SUB_RESPONSE_OK)
+#define USB_RECV_DATA_MS            (5000) // data response — may be large or slow to prepare
+#define USB_CANCEL_DRAIN_MS         (3000L)
+#else
+#define USB_SEND_TIMEOUT_MS         (50)
+#define USB_RECV_POLL_MS            (50)   // ePollYes idle poll — timeout is expected and normal
+#define USB_RECV_ACK_MS             (500)  // simple command acknowledgment (SUB_RESPONSE_OK)
+#define USB_RECV_DATA_MS            (3000) // data response — may be large or slow to prepare
+#define USB_CANCEL_DRAIN_MS         (500L)
+#endif
+#define USB_KEEPALIVE_INTERVAL_S    (2)    // macOS suspends USB after ~3s idle; keep well inside that
+
+// Atomic flags for cross-thread signalling
+static _Atomic bool gotBadConnectionIndication          = false;
+static _Atomic bool gotPatchChangeIndication[MAX_SLOTS] = {0};
+// The bank location a Load from Bank asked for, per slot, until that slot's patch arrives. USB thread only.
+static int32_t      sPendingBankOrigin[MAX_SLOTS]       = {0};
+// soundEngine notes §216 - a performance asked for from a bank: the slots it has brought back, and until when
+#define PERF_START_WAIT_MS    (5000u)
+static uint32_t     sPerfStartSlots                     = 0;
+static uint64_t     sPerfStartUntilMs                   = 0;
+
+// The G2 has put something else in this slot (BANK_ORIGIN_PERF: the performance and every slot), so a
+// remembered file is no longer where this came from.
+static void g2_replaced_patch(uint32_t slot) {
+    uint32_t first = (slot == BANK_ORIGIN_PERF) ? 0 : slot;
+    uint32_t last  = (slot == BANK_ORIGIN_PERF) ? BANK_ORIGIN_PERF : slot;
+
+    for (uint32_t i = first; (i <= last) && (i <= BANK_ORIGIN_PERF); i++) {
+        gPatchSourceSerial[i]++;
+    }
+}
+
+// A patch in this slot that did not come from a bank location, or (slot == BANK_ORIGIN_PERF) the
+// whole performance and every slot in it.
+static void forget_bank_origin(uint32_t slot) {
+    uint32_t first = (slot == BANK_ORIGIN_PERF) ? 0 : slot;
+    uint32_t last  = (slot == BANK_ORIGIN_PERF) ? BANK_ORIGIN_PERF : slot;
+
+    for (uint32_t i = first; (i <= last) && (i <= BANK_ORIGIN_PERF); i++) {
+        gBankOrigin[i] = BANK_ORIGIN_NONE;
+
+        if (i < MAX_SLOTS) {
+            sPendingBankOrigin[i] = BANK_ORIGIN_NONE;
+        }
+    }
+}
+
+static _Atomic bool           gotPerfSettingsChangeIndication       = false;
+static int32_t                stopCount                             = 0;
+
+// notes §2
+static uint8_t *              sBankUploadContent                    = NULL;
+static uint32_t               sBankUploadContentLen                 = 0;
+static char                   sBankUploadName[CLAVIA_NAME_SIZE + 1] = {0};
+static bool                   sBankUploadGotData                    = false;
+
+// Bank Restore file-read scratch buffer — read_bank_upload_file() fills this from disk immediately
+// before each send_bank_download_push() call in restore_bank() below (single-threaded, no locking
+// needed, same reasoning as the upload scratch state above).
+static uint8_t *              sBankRestoreContent                   = NULL;
+static uint32_t               sBankRestoreContentLen                = 0;
+
+// notes §3
+static uint8_t * ensure_bank_scratch_buffer(uint8_t ** buffer) {
+    if (*buffer == NULL) {
+        *buffer = (uint8_t *)malloc(PATCH_FILE_SIZE);
+
+        if (*buffer == NULL) {
+            LOG_ERROR("Failed to allocate %d-byte bank scratch buffer\n", PATCH_FILE_SIZE);
+        }
+    }
+    return *buffer;
+}
+
+// notes §4
+static tSynthSettings         sSynthSettingsRestoreStaged           = {0};
+
+// List Names sweep scratch state — parse_list_names_response() fills these in on each response;
+// send_list_names_sweep() reads them immediately after each send_and_receive() call returns
+// (single-threaded round trip, no locking needed, same reasoning as the scratch state above).
+static uint8_t                sListNamesMode                        = 0;
+static uint8_t                sListNamesNextBank                    = 0;
+static uint8_t                sListNamesNextLoc                     = 0;
+static bool                   sListNamesFinished                    = false;
+
+// notes §5
+static tNameTableEntry(*sPatchNameTarget)[NUM_LOCATIONS_PER_BANK] = gPatchNameTable;
+static tNameTableEntry(*sPerfNameTarget)[NUM_LOCATIONS_PER_BANK]  = gPerfNameTable;
+
+// Defined with the sweep, below; Store, Delete and Bank Restore all sit above it.
+static void name_tables_edited(void);
+
+// notes §6
+static bool                   sSuppressNameTableUpdate              = false;
+
+// Protected by usbStaticMutex
+static pthread_t              usbThread                             = 0;
+static libusb_context *       libUsbCtx                             = NULL;
+static libusb_device_handle * devHandle                             = NULL;
+
+// Callback pointers protected by callbackMutex
+static void                   (*wake_glfw_func_ptr)(void) = NULL;
+static void                   (*full_patch_change_notify_func_ptr)(void) = NULL;
+
+// Mutexes
+static pthread_mutex_t        usbStaticMutex                        = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t        callbackMutex                         = PTHREAD_MUTEX_INITIALIZER;
+
+// Keepalive: timestamp of the last successful inbound or outbound USB transfer
+static time_t                 gLastActivityTime                     = 0;
+
+// ---------------------------------------------------------------------------
+// Callback registration
+// ---------------------------------------------------------------------------
+
+void register_glfw_wake_cb(void ( *func_ptr )(void)) {
+    pthread_mutex_lock(&callbackMutex);
+    wake_glfw_func_ptr = func_ptr;
+    pthread_mutex_unlock(&callbackMutex);
+}
+
+void register_full_patch_change_notify_cb(void ( *func_ptr )(void)) {
+    pthread_mutex_lock(&callbackMutex);
+    full_patch_change_notify_func_ptr = func_ptr;
+    pthread_mutex_unlock(&callbackMutex);
+}
+
+static void call_wake_glfw(void) {
+    void (*func_ptr)(void) = NULL;
+
+    pthread_mutex_lock(&callbackMutex);
+    func_ptr = wake_glfw_func_ptr;
+    pthread_mutex_unlock(&callbackMutex);
+
+    if (func_ptr == NULL) {
+        LOG_ERROR("Wake GLFW callback not registered\n");
+        exit(1);
+    }
+    func_ptr();
+}
+
+// notes §7
+static void note_usb_activity(_Atomic uint64_t * lampTime) {
+    uint64_t now      = (uint64_t)get_time_ms();
+    uint64_t previous = *lampTime;
+
+    *lampTime = now;
+
+    if ((previous == 0) || ((now - previous) >= COMMS_LAMP_MS)) {
+        call_wake_glfw();
+    }
+}
+
+static void call_full_patch_change_notify(void) {
+    void (*func_ptr)(void) = NULL;
+
+    pthread_mutex_lock(&callbackMutex);
+    func_ptr = full_patch_change_notify_func_ptr;
+    pthread_mutex_unlock(&callbackMutex);
+
+    if (func_ptr == NULL) {
+        LOG_ERROR("Full patch change callback not registered\n");
+        exit(1);
+    }
+    func_ptr();
+}
+
+// Reverse-queue (USB->UI) result helpers, defined later; used by the bank/store/delete/load/synth ops
+// above their definitions, so forward-declared here.
+static void post_alert_response(const char * title, const char * message);
+static void post_response(uint32_t responseType); // bare signal (payload-less); peek data stays in globals
+
+// ---------------------------------------------------------------------------
+// libusb helpers
+// ---------------------------------------------------------------------------
+
+// On macOS, LIBUSB_ERROR_OTHER is typically a genuine protocol error rather
+// than a disconnect, so it is excluded here and logged separately.
+static bool is_disconnect_error(int err) {
+    return err == LIBUSB_ERROR_NO_DEVICE
+           || err == LIBUSB_ERROR_IO
+           || err == LIBUSB_ERROR_PIPE;
+}
+
+// Must be called with usbStaticMutex held, or from a context where devHandle
+// is not yet shared (e.g. open_and_claim_device on failure path).
+#if defined (_WIN32)
+static void win_readers_stop(void);
+#endif
+
+static void close_device(void) {
+    if (devHandle != NULL) {
+#if defined (_WIN32)
+        win_readers_stop();   // notes §77
+#endif
+        libusb_release_interface(devHandle, 0);
+        libusb_close(devHandle);
+        devHandle = NULL;
+        LOG_DEBUG("Device closed\n");
+    }
+}
+
+
+#if defined (_WIN32)
+// notes §77 - ON WINDOWS NO INCOMING READ IS EVER CANCELLED: under WinUSB (Parallels at least) a cancel stalls the
+// device about five seconds. A read stays pending on the interrupt pipe always, on the bulk pipe while one is wanted
+// (the G2 answers an idle bulk read at once with an empty packet), and a read with a timeout simply stops waiting.
+#define WIN_READ_QUEUE        (32u)
+#define WIN_READ_SETTLE_MS    (400)   // what arrives this soon after the open is the last session's, discarded
+#define WIN_READ_STOP_MS      (6000)
+
+typedef struct {
+    uint8_t                  endpoint;
+    int                      size;
+    struct libusb_transfer * xfer;
+    uint8_t *                buffer;
+    uint8_t *                chunk[WIN_READ_QUEUE];
+    int                      chunkLength[WIN_READ_QUEUE];
+    uint32_t                 head;
+    uint32_t                 count;
+    bool                     pending;   // a transfer is in flight
+    bool                     wanted;    // bulk only: keep reading - someone is waiting, or the open is draining
+    bool                     stopping;
+    int                      failure;   // a libusb error to hand the next read, once the pipe has failed
+} tWinReader;
+
+static tWinReader      gWinReaders[2] = {{.endpoint = 0x81, .size = 16}, {.endpoint = 0x82, .size = 65536}};
+static pthread_mutex_t gWinReadMutex  = PTHREAD_MUTEX_INITIALIZER;
+
+static long win_elapsed_ms(const struct timespec * start) {
+    struct timespec now = {0};
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (long)(((int64_t)(now.tv_sec - start->tv_sec) * 1000) + ((int64_t)(now.tv_nsec - start->tv_nsec) / 1000000));
+}
+
+static tWinReader * win_reader(uint8_t endpoint) {
+    return (endpoint == 0x81) ? &gWinReaders[0] : ((endpoint == 0x82) ? &gWinReaders[1] : NULL);
+}
+
+static void win_reader_clear(tWinReader * r) {
+    while (r->count > 0u) {
+        free(r->chunk[r->head]);
+        r->head = (r->head + 1u) % WIN_READ_QUEUE;
+        r->count--;
+    }
+}
+
+static void LIBUSB_CALL win_read_cb(struct libusb_transfer * xfer) {
+    tWinReader * r = (tWinReader *)xfer->user_data;
+
+    pthread_mutex_lock(&gWinReadMutex);
+    r->pending = false;
+
+    if ((xfer->status == LIBUSB_TRANSFER_COMPLETED) && (xfer->actual_length == 0) && (r->endpoint == 0x82)) {
+        // the G2's "nothing yet" on the bulk pipe - read again only while wanted
+    } else if (xfer->status == LIBUSB_TRANSFER_COMPLETED) {
+        if (r->count < WIN_READ_QUEUE) {
+            uint32_t  at   = (r->head + r->count) % WIN_READ_QUEUE;
+            uint8_t * copy = (uint8_t *)malloc((size_t)((xfer->actual_length > 0) ? xfer->actual_length : 1));
+
+            if (copy != NULL) {
+                memcpy(copy, xfer->buffer, (size_t)xfer->actual_length);
+                r->chunk[at]       = copy;
+                r->chunkLength[at] = xfer->actual_length;
+                r->count++;
+            }
+        } else {
+            LOG_ERROR("Windows read queue full on 0x%02x - %d bytes dropped\n", r->endpoint, xfer->actual_length);
+        }
+    } else if (xfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
+        r->failure = LIBUSB_ERROR_NO_DEVICE;
+    } else if (xfer->status != LIBUSB_TRANSFER_CANCELLED) {
+        LOG_DEBUG("Windows read on 0x%02x ended with status %d - resubmitting\n", r->endpoint, (int)xfer->status);
+    }
+
+    if (  (r->stopping == false) && (r->failure == 0) && (xfer->status != LIBUSB_TRANSFER_CANCELLED)
+       && ((r->endpoint == 0x81) || (r->wanted == true))) {
+        if (libusb_submit_transfer(xfer) == LIBUSB_SUCCESS) {
+            r->pending = true;
+        } else {
+            r->failure = LIBUSB_ERROR_IO;
+        }
+    }
+    pthread_mutex_unlock(&gWinReadMutex);
+}
+
+static void win_readers_stop(void) {
+    struct timeval  tv    = {0, 50 * 1000};
+    struct timespec start = {0};
+
+    pthread_mutex_lock(&gWinReadMutex);
+
+    for (uint32_t i = 0; i < 2u; i++) {
+        gWinReaders[i].stopping = true;
+
+        if (gWinReaders[i].pending == true) {
+            (void)libusb_cancel_transfer(gWinReaders[i].xfer);   // the one place a read is cancelled: closing
+        }
+    }
+
+    pthread_mutex_unlock(&gWinReadMutex);
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for ( ; ;) {
+        pthread_mutex_lock(&gWinReadMutex);
+        bool busy = gWinReaders[0].pending || gWinReaders[1].pending;
+        pthread_mutex_unlock(&gWinReadMutex);
+
+        if ((busy == false) || (win_elapsed_ms(&start) >= WIN_READ_STOP_MS)) {
+            break;
+        }
+        (void)libusb_handle_events_timeout(libUsbCtx, &tv);
+    }
+
+    pthread_mutex_lock(&gWinReadMutex);
+
+    for (uint32_t i = 0; i < 2u; i++) {
+        tWinReader * r = &gWinReaders[i];
+
+        if ((r->xfer != NULL) && (r->pending == false)) {
+            libusb_free_transfer(r->xfer);   // its buffer goes with it (LIBUSB_TRANSFER_FREE_BUFFER)
+        }
+        r->xfer    = NULL;   // one still pending is left to libusb_close(), which takes in-flight transfers
+        r->buffer  = NULL;
+        r->pending = false;
+        win_reader_clear(r);
+    }
+
+    pthread_mutex_unlock(&gWinReadMutex);
+}
+
+static bool win_readers_start(libusb_device_handle * handle) {
+    struct timeval  tv    = {0, 20 * 1000};
+    struct timespec start = {0};
+    uint32_t        stale = 0;
+
+    for (uint32_t i = 0; i < 2u; i++) {
+        tWinReader * r = &gWinReaders[i];
+
+        r->stopping     = false;
+        r->wanted       = true;   // the bulk pipe drains until the settle ends
+        r->failure      = 0;
+        r->head         = 0;
+        r->count        = 0;
+
+        if (r->endpoint == 0x81) {
+            // notes §77 - exactly one packet: a full one does not end a transfer, a larger request waits forever
+            int maxPacket = libusb_get_max_packet_size(libusb_get_device(handle), r->endpoint);
+
+            r->size = (maxPacket > 0) ? maxPacket : 16;
+        }
+        r->xfer         = libusb_alloc_transfer(0);
+        r->buffer       = (uint8_t *)malloc((size_t)r->size);
+
+        if ((r->xfer == NULL) || (r->buffer == NULL)) {
+            return false;
+        }
+        libusb_fill_bulk_transfer(r->xfer, handle, r->endpoint, r->buffer, r->size, win_read_cb, r, 0);
+        r->xfer->flags |= LIBUSB_TRANSFER_FREE_BUFFER;
+
+        if (libusb_submit_transfer(r->xfer) != LIBUSB_SUCCESS) {
+            return false;
+        }
+        r->pending      = true;
+    }
+
+    // notes §77 - the last session's leftovers come in now; let them, and throw them away
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    do {
+        (void)libusb_handle_events_timeout(libUsbCtx, &tv);
+    } while (win_elapsed_ms(&start) < WIN_READ_SETTLE_MS);
+
+    pthread_mutex_lock(&gWinReadMutex);
+    gWinReaders[1].wanted = false;
+
+    for (uint32_t i = 0; i < 2u; i++) {
+        stale += gWinReaders[i].count;
+        win_reader_clear(&gWinReaders[i]);
+    }
+
+    pthread_mutex_unlock(&gWinReadMutex);
+
+    if (stale > 0u) {
+        LOG_DEBUG("Discarded %u stale message(s) left by the last session\n", (unsigned)stale);
+    }
+    return true;
+}
+
+static int win_read(uint8_t endpoint, uint8_t * buffer, int length, int * actual_length, unsigned int timeout_ms) {
+    tWinReader *    r      = win_reader(endpoint);
+    struct timeval  tv     = {0, 10 * 1000};
+    struct timespec start  = {0};
+
+    *actual_length = 0;
+
+    if (r == NULL) {
+        return LIBUSB_ERROR_INVALID_PARAM;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    pthread_mutex_lock(&gWinReadMutex);
+    r->wanted      = true;
+
+    if ((r->pending == false) && (r->stopping == false) && (r->failure == 0)) {
+        if (libusb_submit_transfer(r->xfer) == LIBUSB_SUCCESS) {
+            r->pending = true;
+        } else {
+            r->failure = LIBUSB_ERROR_IO;
+        }
+    }
+    pthread_mutex_unlock(&gWinReadMutex);
+
+    int             result = LIBUSB_ERROR_TIMEOUT;
+
+    for ( ; ;) {
+        pthread_mutex_lock(&gWinReadMutex);
+
+        if (r->count > 0u) {
+            int got = (r->chunkLength[r->head] < length) ? r->chunkLength[r->head] : length;
+
+            memcpy(buffer, r->chunk[r->head], (size_t)got);
+            free(r->chunk[r->head]);
+            r->head        = (r->head + 1u) % WIN_READ_QUEUE;
+            r->count--;
+            pthread_mutex_unlock(&gWinReadMutex);
+            *actual_length = got;
+            result         = LIBUSB_SUCCESS;
+            break;
+        }
+        int failure = r->failure;
+        pthread_mutex_unlock(&gWinReadMutex);
+
+        if (failure != 0) {
+            result = failure;
+            break;
+        }
+
+        if (win_elapsed_ms(&start) >= (long)timeout_ms) {
+            break;   // nothing came: stop waiting, abort nothing
+        }
+        (void)libusb_handle_events_timeout(libUsbCtx, &tv);
+    }
+
+    pthread_mutex_lock(&gWinReadMutex);
+    r->wanted = false;   // the bulk read in flight ends at the G2's next empty packet
+    pthread_mutex_unlock(&gWinReadMutex);
+    return result;
+}
+#endif
+
+// notes §8
+static bool open_and_claim_device(void) {
+    devHandle = libusb_open_device_with_vid_pid(libUsbCtx, VENDOR_ID, PRODUCT_ID);
+
+    if (devHandle == NULL) {
+        return false;  // Device not found — normal while searching
+    }
+    int result = libusb_claim_interface(devHandle, 0);
+
+    if (result != LIBUSB_SUCCESS) {
+        LOG_ERROR("Failed to claim interface: %s\n", libusb_error_name(result));
+        close_device();
+        return false;
+    }
+#if defined (_WIN32)
+    // notes §75 - none of it on Windows: WinUSB cannot reset a device, and clearing a halt on the G2's interrupt
+    // endpoint takes five seconds and leaves it silent - the claim, then the pending reads (notes §77)
+    result    = win_readers_start(devHandle) ? LIBUSB_SUCCESS : LIBUSB_ERROR_NO_MEM;
+#else
+    result    = libusb_reset_device(devHandle);
+#endif
+
+    if (result != LIBUSB_SUCCESS) {
+        LOG_ERROR("Failed to reset device: %s\n", libusb_error_name(result));
+        close_device();
+        return false;
+    }
+    LOG_DEBUG("Device opened and interface claimed\n");
+    return true;
+}
+
+// notes §9
+
+static void LIBUSB_CALL usb_transfer_cb(struct libusb_transfer * xfer) {
+    int * completed = (int *)xfer->user_data;
+
+    *completed = 1;
+}
+
+static int usb_bulk_transfer_sync(libusb_device_handle * handle, uint8_t endpoint,
+                                  uint8_t * buffer, int length, int * actual_length,
+                                  unsigned int timeout_ms) {
+    struct libusb_transfer * xfer      = NULL;
+    int                      completed = 0;
+    int                      r         = LIBUSB_SUCCESS;
+    struct timeval           tv        = {0, 50 * 1000};
+    struct timespec          start     = {0};
+    struct timespec          now       = {0};
+    int                      status    = LIBUSB_TRANSFER_ERROR;
+
+    *actual_length = 0;
+
+#if defined (_WIN32)
+    if ((endpoint & LIBUSB_ENDPOINT_IN) != 0u) {
+        (void)handle;
+        return win_read(endpoint, buffer, length, actual_length, timeout_ms);   // notes §77 - never a cancel
+    }
+#endif
+    xfer           = libusb_alloc_transfer(0);
+
+    if (xfer == NULL) {
+        return LIBUSB_ERROR_NO_MEM;
+    }
+    libusb_fill_bulk_transfer(xfer, handle, endpoint, buffer, length,
+                              usb_transfer_cb, &completed, 0);
+
+    r              = libusb_submit_transfer(xfer);
+
+    if (r != LIBUSB_SUCCESS) {
+        libusb_free_transfer(xfer);
+        return r;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    while (!completed) {
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long elapsed_ms = (now.tv_sec - start.tv_sec) * 1000L
+                          + (now.tv_nsec - start.tv_nsec) / 1000000L;
+
+        if ((unsigned int)elapsed_ms >= timeout_ms) {
+            break;
+        }
+        r = libusb_handle_events_timeout_completed(libUsbCtx, &tv, &completed);
+
+        if (r != LIBUSB_SUCCESS) {
+            break;
+        }
+    }
+
+    if (!completed) {
+        libusb_cancel_transfer(xfer);
+        clock_gettime(CLOCK_MONOTONIC, &start);
+
+        while (!completed) {
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            long drain_ms = (now.tv_sec - start.tv_sec) * 1000L
+                            + (now.tv_nsec - start.tv_nsec) / 1000000L;
+
+            if (drain_ms >= USB_CANCEL_DRAIN_MS) {
+                LOG_ERROR("Cancel drain timed out — leaking transfer\n");
+                *actual_length = 0;
+                return LIBUSB_ERROR_IO;
+            }
+            r = libusb_handle_events_timeout_completed(libUsbCtx, &tv, &completed);
+
+            if (r != LIBUSB_SUCCESS) {
+                LOG_ERROR("Event loop error during cancel drain: %s\n", libusb_error_name(r));
+                *actual_length = 0;
+                return LIBUSB_ERROR_IO;
+            }
+        }
+    }
+    *actual_length = xfer->actual_length;
+    status         = xfer->status;
+    libusb_free_transfer(xfer);
+
+    switch (status) {
+        case LIBUSB_TRANSFER_COMPLETED: return LIBUSB_SUCCESS;
+
+        case LIBUSB_TRANSFER_CANCELLED: return LIBUSB_ERROR_TIMEOUT;
+
+        case LIBUSB_TRANSFER_TIMED_OUT: return LIBUSB_ERROR_TIMEOUT;
+
+        case LIBUSB_TRANSFER_STALL:     return LIBUSB_ERROR_PIPE;
+
+        case LIBUSB_TRANSFER_NO_DEVICE: return LIBUSB_ERROR_NO_DEVICE;
+
+        case LIBUSB_TRANSFER_OVERFLOW:  return LIBUSB_ERROR_OVERFLOW;
+
+        default:                         return LIBUSB_ERROR_IO;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Parsers
+// ---------------------------------------------------------------------------
+
+static void parse_param_change(uint32_t slot, uint8_t * buff, int length) {
+    uint32_t   bitPos    = 0;
+    tModuleKey key       = {0};
+    uint32_t   param     = 0;
+    uint32_t   variation = 0;
+    uint32_t   value     = 0;
+
+    key.slot     = slot;
+    key.location = read_bit_stream(buff, &bitPos, 8);
+    key.index    = read_bit_stream(buff, &bitPos, 8);
+    param        = read_bit_stream(buff, &bitPos, 8);
+    value        = read_bit_stream(buff, &bitPos, 8);
+    variation    = read_bit_stream(buff, &bitPos, 8);
+
+    tModule *  module    = get_module(key);
+
+    if (module != NULL) {
+        if (variation < NUM_VARIATIONS_USB && param < MAX_NUM_PARAMETERS) {
+            set_param_value(module, variation, param, value);
+        } else {
+            LOG_ERROR("parse_param_change: out-of-range variation=%u param=%u from G2\n", variation, param);
+        }
+    }
+    LOG_DEBUG("Param change - module %u:%u param=%u value=%u\n",
+              key.location, key.index, param, value);
+
+    // notes §10
+    if ((key.location == (uint32_t)locationMorph) || gParamPages.active) {
+        call_wake_glfw();
+    }
+}
+
+// Returns true if any value it stored DIFFERS from the one already there. The G2 pushes this
+// stream continuously whether or not a meter has moved, so "a message arrived" is not a reason to
+// draw a frame — see parse_incoming().
+static bool parse_volume_indicator(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
+    int  volumesToRead = 0;
+    bool changed       = false;
+
+    read_bit_stream(buff, bitPos, 8);  // start_idx (always 0 in practice)
+
+    for (int32_t location = 1; location >= 0; location--) {
+        for (int k = 0; k < MAX_NUM_MODULES; k++) {
+            tModuleKey key    = {slot, (uint32_t)location, (uint32_t)k};
+            tModule *  module = get_module(key);
+
+            if (module != NULL) {
+                switch (gModuleProperties[module->type].volumeType) {
+                    case volumeTypeMono:
+                    case volumeTypeCompress:
+                    case volumeTypeSequencer:
+                        volumesToRead = 1;
+                        break;
+                    case volumeTypeStereo:
+                        volumesToRead = 2;
+                        break;
+                    case volumeTypeQuad:
+                        volumesToRead = 4;
+                        break;
+                    case volumeTypeNone:
+                        volumesToRead = 0;
+                        break;
+                }
+
+                for (int i = 0; i < volumesToRead; i++) {
+                    uint32_t value = read_bit_stream(buff, bitPos, 8);
+
+                    read_bit_stream(buff, bitPos, 8);  // hi byte: unused
+
+                    if (module->volume.value[i] != value) {
+                        module->volume.value[i] = value;
+                        changed                 = true;
+                    }
+                }
+
+                // notes §11
+                uint32_t multiBitLeds = module_multibit_led_count(module->type);
+
+                if (multiBitLeds > 0) {
+                    uint32_t value = read_bit_stream(buff, bitPos, 8);
+
+                    value |= read_bit_stream(buff, bitPos, 8) << 8;
+
+                    // notes §12
+                    for (uint32_t l = 0; (l < multiBitLeds) && (l < MAX_LEDS_PER_MODULE); l++) {
+                        uint32_t ledValue = ((value & 0x3000) == 0x3000) ? ((value >> l) & 1) : ((value == l) ? 1u : 0u);
+
+                        if (module->led.value[l] != ledValue) {
+                            module->led.value[l] = ledValue;
+                            changed              = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return changed;
+}
+
+// notes §13
+static bool parse_led_data(uint32_t slot, uint8_t * buff, uint32_t * bitPos, int length) {
+    uint32_t startIndex         = read_bit_stream(buff, bitPos, 8);
+    uint32_t ledCount           = 0;
+    uint32_t ledCountFromModule = 0;
+    bool     changed            = false;
+    uint32_t dataStart          = BIT_TO_BYTE(*bitPos);
+    uint32_t dataBytes          = 0;
+
+    if (length > (int)(dataStart + CRC_BYTES)) {
+        dataBytes = (uint32_t)length - dataStart - CRC_BYTES;
+    }
+
+    for (int32_t location = 1; location >= 0; location--) {
+        for (int k = 0; k < MAX_NUM_MODULES; k++) {
+            tModuleKey key    = {slot, (uint32_t)location, (uint32_t)k};
+            tModule *  module = get_module(key);
+
+            if (module != NULL) {
+                ledCountFromModule = module_led_count(module->type);
+
+                if (ledCountFromModule > MAX_LEDS_PER_MODULE) {
+                    // The module still consumes all of its indices, so the ones after it stay in
+                    // step; only the surplus is dropped. Not exit(1): that took the editor down in
+                    // Release too, and said nothing on the way out (LOG_DEBUG is compiled out there).
+                    LOG_ERROR("Module type %u has %u LEDs, MAX_LEDS_PER_MODULE is %u — storing the first %u\n",
+                              module->type, ledCountFromModule, MAX_LEDS_PER_MODULE, MAX_LEDS_PER_MODULE);
+                    EXIT_IN_DEBUG();
+                }
+
+                for (uint32_t l = 0; l < ledCountFromModule; l++) {
+                    if ((ledCount >= startIndex) && (ledCount < LED_STREAM_SIZE)) {
+                        uint32_t offset = ledCount - startIndex;
+
+                        if ((offset / 4) < dataBytes) {
+                            uint32_t ledValue = (buff[dataStart + (offset / 4)] >> ((offset % 4) * 2)) & 0x3;
+
+                            if ((l < MAX_LEDS_PER_MODULE) && (module->led.value[l] != ledValue)) {
+                                module->led.value[l] = ledValue;
+                                changed              = true;
+                            }
+                        }
+                    }
+                    ledCount++;
+                }
+            }
+        }
+    }
+
+    return changed;
+}
+
+static int parse_resources_used(uint32_t slot, uint8_t * buff, uint32_t * bitPos, int length) {
+    uint16_t cyclesRed  = 0;
+    uint16_t cyclesBlue = 0;
+    uint8_t  zpMem      = 0;
+    uint16_t xmemV1     = 0;
+    uint16_t ymemV1     = 0;
+    uint16_t pmemV1     = 0;
+    uint16_t xmemV2     = 0;
+    uint16_t ymemV2     = 0;
+    uint16_t pmemV2     = 0;
+    uint16_t ramRaw     = 0;
+    uint32_t qmemRaw    = 0;
+    uint16_t rmemRaw    = 0;
+    uint16_t unknown    = 0;
+    uint8_t  location   = 0;
+    uint8_t  sub        = 0;
+    float    cyclesLoad = 0.0f;
+    float    memLoad    = 0.0f;
+
+    LOG_DEBUG("Got resources in use slot %u\n", slot);
+
+    if (*bitPos < 8) {
+        LOG_ERROR("Resources used: bitPos underflow (%u)\n", *bitPos);
+        return EXIT_FAILURE;
+    }
+    *bitPos -= 8; // Multiple messages in here, so need to move back a byte to process each sub response
+
+    // notes §14
+#define RESOURCES_RECORD_BYTES    (29)
+
+    while ((BIT_TO_BYTE(*bitPos) + RESOURCES_RECORD_BYTES) <= (length - CRC_BYTES)) {
+        sub                                   = read_bit_stream(buff, bitPos, 8);
+
+        if (sub != SUB_RESPONSE_RESOURCES_USED) {
+            break;
+        }
+        location                              = read_bit_stream(buff, bitPos, 8);
+        cyclesRed                             = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        cyclesBlue                            = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        zpMem                                 = read_bit_stream(buff, bitPos, 8);
+        unknown                               = read_bit_stream(buff, bitPos, 16); // unknown5, discard
+        xmemV1                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        ymemV1                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        pmemV1                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        xmemV2                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        ymemV2                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        pmemV2                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        ramRaw                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+        qmemRaw                               = read_bit_stream(buff, bitPos, 32);
+        rmemRaw                               = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
+
+        cyclesLoad                            = ((float)cyclesRed + (float)cyclesBlue * 0.25f) * 100.0f / 1371.0f;
+
+        float xmem  = (float)(xmemV1 + xmemV2) * 100.0f / 4336.0f;
+        float ymem  = (float)(ymemV1 + ymemV2) * 100.0f / 2992.0f;
+        float pmem  = (float)(pmemV1 + pmemV2) * 100.0f / 6498.0f;
+        float zpmem = (float)zpMem * 100.0f / 128.0f;
+        float ram   = (float)ramRaw * 100.0f * 7.6293945e-06f;
+        float qmem  = (float)qmemRaw * 100.0f / 260096.0f;
+        float rmem  = (float)rmemRaw * 100.0f * 0.00390625f;
+
+        memLoad                               = fmaxf(fmaxf(fmaxf(fmaxf(fmaxf(fmaxf(xmem, ymem), pmem), zpmem), ram), qmem), rmem);
+
+        cyclesLoad                            = roundf(cyclesLoad * 10.0f) / 10.0f;
+        memLoad                               = roundf(memLoad * 10.0f) / 10.0f;
+        gResourceAlloc[slot].mem[location]    = memLoad;
+        gResourceAlloc[slot].cycles[location] = cyclesLoad;
+    }
+    return EXIT_SUCCESS;
+}
+
+static void parse_global_page(uint8_t * buff, uint32_t * bitPos) {
+    static uint32_t count      = 0;
+    uint8_t         globalPage = 0;
+
+    globalPage  = read_bit_stream(buff, bitPos, 8);
+    gGlobalPage = globalPage;
+    LOG_DEBUG("%u Got global page Page=%u Pos=%u\n", count++, globalPage / 3, globalPage % 3);
+}
+
+static void parse_patch_version_change(uint8_t * buff, uint32_t * bitPos) {
+    uint8_t changedSlot = read_bit_stream(buff, bitPos, 8);
+    uint8_t newVersion  = read_bit_stream(buff, bitPos, 8);
+
+    LOG_DEBUG("Patch version change: slot %u new version 0x%02x\n", changedSlot, newVersion);
+
+    if (changedSlot < MAX_SLOTS) {
+        if (newVersion != gGlobalSettings.slot[changedSlot].patchVersion) {
+            gGlobalSettings.slot[changedSlot].patchVersion = newVersion;
+            gotPatchChangeIndication[changedSlot]          = true;
+        }
+    }
+}
+
+static void parse_slot_selection(uint8_t * buff, uint32_t * bitPos) {
+    LOG_DEBUG("Got slot selection dump\n");
+    read_bit_stream(buff, bitPos, 4);  // 4 padding bits (always 0)
+
+    for (uint32_t i = 0; i < MAX_SLOTS; i++) {
+        uint8_t status = (uint8_t)read_bit_stream(buff, bitPos, 1);
+        gGlobalSettings.slot[i].enabled = status;
+        LOG_DEBUG("  Slot %u enabled: %u\n", i, status != 0 ? 1 : 0);
+    }
+}
+
+static void parse_assigned_voices(uint8_t * buff, uint32_t * bitPos) {
+    LOG_DEBUG("Got assigned voices response\n");
+
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        gAssignedVoices[i] = read_bit_stream(buff, bitPos, 8);  // TODO - might have to set target assigned voices to lower number, before attempting increase?
+    }
+}
+
+static void parse_master_clock(uint8_t * buff, uint32_t * bitPos) {
+    uint8_t clock   = 0;
+    uint8_t running = 0;
+    uint8_t type    = 0;
+
+    LOG_DEBUG("Got master clock\n");
+    read_bit_stream(buff, bitPos, 8);  // 0xff - not sure what this is, or if it ever changes
+    type = read_bit_stream(buff, bitPos, 8);
+
+    if (type == 1) {
+        clock                       = read_bit_stream(buff, bitPos, 8);
+        gGlobalSettings.masterClock = clock;
+        LOG_DEBUG_DIRECT("Master clock = %u\n", clock);
+    } else if (type == 0) {
+        running                            = read_bit_stream(buff, bitPos, 8);
+        gGlobalSettings.masterClockRunning = running;
+        LOG_DEBUG_DIRECT("Clock running = %u\n", running);
+    }
+}
+
+static void parse_select_slot(uint8_t * buff, uint32_t * bitPos) {
+    uint32_t newSlot = read_bit_stream(buff, bitPos, 8);
+
+    LOG_DEBUG("Got slot select %u\n", newSlot);
+
+    gSlot                 = newSlot;
+    gPatchParamsEdit.slot = newSlot;
+    set_exclusive_button_highlight(topbarSlotAId, topbarSlotDId,
+                                   (tTopbarControlId)(topbarSlotAId + newSlot));
+    set_exclusive_button_highlight(topbarVariation1Id, topbarVariationInitId,
+                                   (tTopbarControlId)((uint32_t)topbarVariation1Id + gPatchDescr[newSlot].activeVariation));
+}
+
+static int parse_get_patch_name(uint32_t slot, uint8_t * buff, uint32_t * bitPos, int length) {
+    int nameBytes = length - 6;
+
+    LOG_DEBUG("Got patch name (length %d)\n", length);
+
+    if ((nameBytes < 0) || (nameBytes > CLAVIA_NAME_SIZE)) {
+        LOG_ERROR("Patch name length out of range: %d\n", nameBytes);
+        return EXIT_FAILURE;
+    }
+    read_clavia_string(buff, bitPos, gGlobalSettings.slot[slot].patchName, sizeof(gGlobalSettings.slot[slot].patchName));
+    LOG_DEBUG("Patch name: %s\n", gGlobalSettings.slot[slot].patchName);
+    return EXIT_SUCCESS;
+}
+
+static void parse_select_param(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
+    uint32_t unknown     = read_bit_stream(buff, bitPos, 8);
+    uint32_t location    = read_bit_stream(buff, bitPos, 8);
+    uint32_t moduleIndex = read_bit_stream(buff, bitPos, 8);
+    uint32_t paramIndex  = read_bit_stream(buff, bitPos, 8);
+
+    (void)unknown;
+
+    if (slot < MAX_SLOTS) {
+        gSelectedParam[slot].location    = location;
+        gSelectedParam[slot].moduleIndex = moduleIndex;
+        gSelectedParam[slot].paramIndex  = paramIndex;
+    }
+    LOG_DEBUG("Got select param: slot=%u location=%u module=%u param=%u\n",
+              slot, location, moduleIndex, paramIndex);
+}
+
+static void parse_select_variation(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
+    uint8_t variation = read_bit_stream(buff, bitPos, 8);
+
+    LOG_DEBUG("Got variation select: slot %u variation %u at %llu ms\n", (unsigned)slot, (unsigned)variation + 1u,
+              (unsigned long long)get_time_ms());
+
+    // soundEngine notes §214 - while the engine plays, it switches the variations itself
+    if (sound_engine_active() == true) {
+        return;
+    }
+    gPatchDescr[slot].activeVariation = variation;
+    set_exclusive_button_highlight(topbarVariation1Id, topbarVariationInitId,
+                                   (tTopbarControlId)(topbarVariation1Id + variation));
+}
+
+static void parse_sel_param_page(uint8_t * buff, uint32_t * bitPos) {
+    uint8_t paramPage = read_bit_stream(buff, bitPos, 8);
+
+    LOG_DEBUG("Got param page Page=%u Pos=%u\n", paramPage / 3, paramPage % 3);
+}
+
+// notes §15
+static void parse_list_names_response(uint8_t * buff, uint32_t * bitPos, int length) {
+    uint32_t bodyStartBitPos = *bitPos;
+    int      bodyLen         = length - BIT_TO_BYTE(*bitPos) - CRC_BYTES;
+    uint8_t  mode;
+    uint8_t  bank;
+    uint8_t  location;
+
+    sListNamesFinished = false;
+
+    if (bodyLen < 8) {
+        read_bit_stream(buff, bitPos, 32); // 4 unknown bytes
+        sListNamesMode     = (uint8_t)read_bit_stream(buff, bitPos, 8);
+        sListNamesFinished = true;         // bodyLen<8 only ever seen as the "domain exhausted" message
+        return;
+    }
+    read_bit_stream(buff, bitPos, 32);     // 4 unknown bytes
+    mode               = (uint8_t)read_bit_stream(buff, bitPos, 8);
+    read_bit_stream(buff, bitPos, 8);      // 0x03 marker, constant
+    bank               = (uint8_t)read_bit_stream(buff, bitPos, 8);
+    location           = (uint8_t)read_bit_stream(buff, bitPos, 8);
+    sListNamesMode     = mode;
+
+    for ( ; ;) {
+        while (location < NUM_LOCATIONS_PER_BANK) {
+            int      bytesLeft                  = bodyLen - (BIT_TO_BYTE(*bitPos) - BIT_TO_BYTE(bodyStartBitPos));
+
+            if (bytesLeft < 1) {
+                break; // no bytes left at all; resume from here next request
+            }
+            uint32_t peekBitPos                 = *bitPos;
+            uint8_t  peekByte                   = (uint8_t)read_bit_stream(buff, &peekBitPos, 8);
+
+            if (peekByte <= 0x05) {
+                break; // A CONTROL CODE, NOT A NAME. The device's own discriminator is that a name
+                       // notes §16
+            }
+
+            if (bytesLeft < 2) {
+                break; // not enough bytes left for even a minimal entry; resume from here next request
+            }
+            char     name[CLAVIA_NAME_SIZE + 1] = {0};
+            uint8_t  category;
+
+            read_clavia_string(buff, bitPos, name, sizeof(name));
+            category = (uint8_t)read_bit_stream(buff, bitPos, 8);
+
+            if (!sSuppressNameTableUpdate) {
+                if ((mode == BANK_UPLOAD_DOMAIN_PATCH) && (bank < NUM_PATCH_BANKS)) {
+                    sPatchNameTarget[bank][location].populated = true;
+                    // notes §17
+                    COPY_STRING(sPatchNameTarget[bank][location].name, name);
+                    sPatchNameTarget[bank][location].category  = category;
+                } else if ((mode == BANK_UPLOAD_DOMAIN_PERFORMANCE) && (bank < NUM_PERF_BANKS)) {
+                    sPerfNameTarget[bank][location].populated = true;
+                    COPY_STRING(sPerfNameTarget[bank][location].name, name);
+                    sPerfNameTarget[bank][location].category  = category;
+                }
+            }
+            location++;
+        }
+
+        if (BIT_TO_BYTE(*bitPos) - BIT_TO_BYTE(bodyStartBitPos) >= bodyLen) {
+            break; // no bytes left at all; resume from (bank, location) next request
+        }
+        uint8_t code = (uint8_t)read_bit_stream(buff, bitPos, 8);
+
+        if ((code == 0x03) && (BIT_TO_BYTE(*bitPos) - BIT_TO_BYTE(bodyStartBitPos) + 2 <= bodyLen)) {
+            bank     = (uint8_t)read_bit_stream(buff, bitPos, 8);
+            location = (uint8_t)read_bit_stream(buff, bitPos, 8);
+            continue;
+        }
+        // notes §18
+        break;
+    }
+
+    sListNamesNextBank = bank;
+    sListNamesNextLoc  = location;
+}
+
+static void parse_perf_patch_versions(uint8_t * buff, uint32_t * bitPos) {
+    uint8_t newVersion  = 0;
+    uint8_t readSlot    = 0;
+    uint8_t subResponse = 0;
+
+    LOG_DEBUG("\nGot performance patch versions\n\n");
+
+    newVersion = read_bit_stream(buff, bitPos, 8);
+    LOG_DEBUG("Old perf = %u new = %u\n", gGlobalSettings.perfVersion, newVersion);
+
+    if (newVersion != gGlobalSettings.perfVersion) {
+        gGlobalSettings.perfVersion     = newVersion;
+        // Use a flag rather than queuing so rapid switches coalesce into one resync.
+        gotPerfSettingsChangeIndication = true;
+    }
+
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        subResponse = read_bit_stream(buff, bitPos, 8);
+        readSlot    = read_bit_stream(buff, bitPos, 8);
+        newVersion  = read_bit_stream(buff, bitPos, 8);
+
+        if (subResponse == SUB_RESPONSE_PATCH_VERSION) {
+            LOG_DEBUG("Store old patch %u ver = %u new = %u\n", readSlot, gGlobalSettings.slot[readSlot].patchVersion, newVersion);
+
+            if (newVersion != gGlobalSettings.slot[readSlot].patchVersion) {
+                gGlobalSettings.slot[readSlot].patchVersion = newVersion;
+                gotPatchChangeIndication[readSlot]          = true;
+            }
+        }
+    }
+}
+
+// notes §19
+static void parse_bank_upload_data(uint8_t * buff, uint32_t * bitPos) {
+    uint32_t contentLength = 0;
+    uint32_t contentStart  = 0;
+
+    read_bit_stream(buff, bitPos, 8);                              // domain echo — caller already knows which domain it asked for
+    read_bit_stream(buff, bitPos, 8);                              // reserved, always 0x00
+    read_bit_stream(buff, bitPos, 8);                              // location echo — caller already knows which location it asked for
+    read_clavia_string(buff, bitPos, sBankUploadName, sizeof(sBankUploadName));
+    contentLength         = read_bit_stream(buff, bitPos, 16) - 1; // confirmed empirically against known-good .pch2/.prf2 files
+    read_bit_stream(buff, bitPos, 16);                             // echoed [version][type] marker — discarded, repeated in content below
+    contentStart          = BIT_TO_BYTE(*bitPos);
+
+    if (contentLength > PATCH_FILE_SIZE) {
+        LOG_ERROR("Bank upload content length %u exceeds buffer %d, truncating\n", contentLength, PATCH_FILE_SIZE);
+        contentLength = PATCH_FILE_SIZE;
+    }
+
+    if (ensure_bank_scratch_buffer(&sBankUploadContent) == NULL) {
+        return;
+    }
+    memcpy(sBankUploadContent, &buff[contentStart], contentLength);
+    sBankUploadContentLen = contentLength;
+    sBankUploadGotData    = true;
+    LOG_DEBUG("Bank upload: got '%s' (%u bytes)\n", sBankUploadName, contentLength);
+}
+
+static void parse_bank_upload_empty(void) {
+    sBankUploadGotData = false;
+    LOG_DEBUG("Bank upload: location empty\n");
+}
+
+// notes §20
+static bool param_list_header_is_plausible(uint8_t * buff, uint32_t bitPos) {
+    uint32_t pos           = bitPos;
+    uint32_t location      = read_bit_stream(buff, &pos, 2);
+    uint32_t moduleCount   = read_bit_stream(buff, &pos, 8);
+    uint32_t numVariations = read_bit_stream(buff, &pos, 8);
+
+    // notes §21
+    if ((location <= 2) && (moduleCount == 0) && (numVariations == 0)) {
+        return true;
+    }
+    return (location <= 2) && (moduleCount <= MAX_NUM_MODULES) && ((numVariations == 9) || (numVariations == 10));
+}
+
+// notes §22
+typedef enum {
+    paramListFramingNone,
+    paramListFramingNoLength,
+    paramListFramingWithLength,
+    paramListFramingUnrecognised
+} tParamListFraming;
+
+static void report_param_list_framing(tParamListFraming framing, uint32_t slot) {
+    static tParamListFraming reported = paramListFramingNone;
+
+    if (framing == reported) {
+        return;
+    }
+    reported = framing;
+
+    switch (framing) {
+        case paramListFramingNoLength:
+            LOG_INFO("Got param list slot %u — NO section length in front. First one this run.\n", slot);
+            break;
+
+        case paramListFramingWithLength:
+            LOG_INFO("Got param list slot %u — 16-BIT SECTION LENGTH in front, as in a patch dump. First one this run.\n", slot);
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void parse_param_list_message(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
+    if (param_list_header_is_plausible(buff, *bitPos)) {
+        report_param_list_framing(paramListFramingNoLength, slot);
+        parse_param_list(slot, buff, bitPos);
+        return;
+    }
+
+    if (param_list_header_is_plausible(buff, *bitPos + 16)) {
+        report_param_list_framing(paramListFramingWithLength, slot);
+        *bitPos += 16;
+        parse_param_list(slot, buff, bitPos);
+        return;
+    }
+    report_param_list_framing(paramListFramingUnrecognised, slot);
+    uint32_t dumpStart        = BIT_TO_BYTE(*bitPos);
+    char     dump[3 * 16 + 1] = {0};
+
+    for (uint32_t d = 0; d < 16; d++) {
+        snprintf(&dump[d * 3], 4, "%02x ", buff[dumpStart + d]);
+    }
+
+    // LOG_ERROR, and every time rather than once: this is the case where a real message is being
+    // DROPPED, so the patch on screen can go stale against the instrument. It should be loud.
+    LOG_ERROR("param list slot %u: header implausible at either offset, NOT PARSED — params may now be stale\n", slot);
+    LOG_ERROR("  bytes from byte %u: %s\n", dumpStart, dump);
+}
+
+// notes §23
+static int parse_command_response(uint8_t * buff, uint32_t * bitPos,
+                                  uint8_t commandResponse, uint8_t subCommand,
+                                  int length, bool * wantsRedraw) {
+    uint32_t slot = commandResponse & 0x03;
+
+    switch (subCommand) {
+        // notes §24
+        case SUB_RESPONSE_VOLUME_INDICATOR:
+            *wantsRedraw = parse_volume_indicator(slot, buff, bitPos) && (slot == gSlot);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_LED_DATA:
+            *wantsRedraw = parse_led_data(slot, buff, bitPos, length) && (slot == gSlot);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_ERROR:
+            LOG_DEBUG("Got Error!!!\n");
+            return EXIT_FAILURE;
+
+        case SUB_RESPONSE_RESOURCES_USED:
+            return parse_resources_used(slot, buff, bitPos, length);
+
+        case SUB_RESPONSE_KNOBS:
+            LOG_DEBUG("Got knob snapshot slot %u\n", slot);
+            parse_knobs(slot, buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PARAM_CHANGE:
+            parse_param_change(slot, &buff[BIT_TO_BYTE(*bitPos)],
+                               length - BIT_TO_BYTE(*bitPos) - CRC_BYTES);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PATCH_VERSION:
+            LOG_DEBUG("Got patch version\n");
+            return parse_patch_version(&buff[BIT_TO_BYTE(*bitPos)],
+                                       length - BIT_TO_BYTE(*bitPos) - CRC_BYTES);
+
+        case SUB_RESPONSE_SYNTH_SETTINGS:
+            LOG_DEBUG("Got synth settings\n");
+            return parse_synth_settings(&buff[BIT_TO_BYTE(*bitPos)],
+                                        length - BIT_TO_BYTE(*bitPos) - CRC_BYTES);
+
+        case SUB_RESPONSE_MIDI_CC:
+            LOG_DEBUG("Got MIDI CC response slot %u\n", slot);
+            parse_midi_cc(&buff[BIT_TO_BYTE(*bitPos)],
+                          length - BIT_TO_BYTE(*bitPos) - CRC_BYTES, slot);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_GLOBAL_PAGE:
+            parse_global_page(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PATCH_VERSION_CHANGE:
+            parse_patch_version_change(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_SLOT_SELECTION:
+            parse_slot_selection(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_ASSIGNED_VOICES:
+            parse_assigned_voices(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_SET_ASSIGNED_VOICES:
+            LOG_DEBUG("Got assigned voices command — unexpected\n");
+            return EXIT_SUCCESS;
+
+        // notes §25
+
+        case SUB_RESPONSE_PERFORMANCE_SETTINGS:
+            LOG_DEBUG("Got performance settings\n");
+            parse_performance_settings(&buff[BIT_TO_BYTE(*bitPos)],
+                                       length - BIT_TO_BYTE(*bitPos) - CRC_BYTES);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_MASTER_CLOCK:
+            parse_master_clock(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_SELECT_SLOT:
+            parse_select_slot(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PATCH_DESCRIPTION:
+            LOG_DEBUG("Got patch description\n");
+            parse_patch(slot, &buff[BIT_TO_BYTE(*bitPos) - 1],
+                        (length - BIT_TO_BYTE(*bitPos) - CRC_BYTES) + 1);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_GET_PATCH_NAME:
+            return parse_get_patch_name(slot, buff, bitPos, length);
+
+        case SUB_RESPONSE_OK:
+            //LOG_DEBUG("GOT OK %f\n", get_time_ms());
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_SELECT_PARAM:
+            parse_select_param(slot, buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_SELECT_VARIATION:
+            parse_select_variation(slot, buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_SEL_PARAM_PAGE:
+            parse_sel_param_page(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_STORE_PATCH:
+            parse_list_names_response(buff, bitPos, length);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PERF_PATCH_VERSIONS:
+            parse_perf_patch_versions(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_EXT_MASTER_CLOCK:
+            // Don't think we need to process this since we're already setting data via unsolited and a bigger block of incoming data
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_GLOBAL_KNOBS:
+            LOG_DEBUG("Got global knobs\n");
+            read_bit_stream(buff, bitPos, 16);  // section byte count — consumed, not used
+            parse_global_knobs(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_CURRENT_NOTE_2:
+        {
+            uint32_t count = read_bit_stream(buff, bitPos, 16);
+
+            LOG_DEBUG("Got current note slot %u count %u\n", slot, count);
+            store_note2(slot, buff, bitPos, count);
+            return EXIT_SUCCESS;
+        }
+
+        case SUB_RESPONSE_PATCH_NOTES:
+        {
+            uint32_t count = read_bit_stream(buff, bitPos, 16);
+
+            LOG_DEBUG("Got patch notes slot %u count %u\n", slot, count);
+            store_patch_notes(slot, buff, bitPos, count);
+            return EXIT_SUCCESS;
+        }
+
+        case SUB_COMMAND_PATCH_BANK_DATA:
+            parse_bank_upload_data(buff, bitPos);
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PATCH_BANK_UPLOAD:
+            parse_bank_upload_empty();
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_CLEAR:
+            // Ack for SUB_COMMAND_CLEAR (Bank Restore erasing an unpopulated location) — no
+            // fields we need beyond the fact that it arrived; send_and_receive's caller already
+            // knows which location it was clearing.
+            return EXIT_SUCCESS;
+
+        case SUB_RESPONSE_PARAM_LIST:
+            parse_param_list_message(slot, buff, bitPos);
+            return EXIT_SUCCESS;
+
+        default:
+            LOG_DEBUG("Got unknown sub-command 0x%02x - must implement!!!\n", subCommand);
+            exit(1);
+    }
+}
+
+static int parse_incoming(uint8_t * buff, int length, int * response) {
+    if (response != NULL) {
+        *response = SUB_RESPONSE_ERROR;
+    }
+
+    if ((buff == NULL) || (length <= 0)) {
+        return EXIT_FAILURE;
+    }
+    uint32_t bitPos       = 0;
+    uint8_t  responseType = read_bit_stream(buff, &bitPos, 8);
+    int      ret          = EXIT_FAILURE;
+    bool     wantsRedraw  = true;
+
+    switch (responseType) {
+        case RESPONSE_TYPE_INIT:
+            LOG_DEBUG("Got response init\n");
+
+            if (response != NULL) {
+                *response = SUB_RESPONSE_OK;
+            }
+            ret = EXIT_SUCCESS;
+            break;
+
+        case RESPONSE_TYPE_COMMAND:
+        {
+            uint8_t commandResponse = read_bit_stream(buff, &bitPos, 8);
+            /* version */            read_bit_stream(buff, &bitPos, 8);
+            uint8_t subCommand      = read_bit_stream(buff, &bitPos, 8);
+            ret = parse_command_response(buff, &bitPos, commandResponse, subCommand, length, &wantsRedraw);
+
+            if (ret == EXIT_SUCCESS) {
+                if (response != NULL) {
+                    *response = (int)subCommand;
+                }
+            }
+            break;
+        }
+
+        default:
+            LOG_DEBUG("Got unknown response type 0x%02x\n", responseType);
+            ret = EXIT_FAILURE;
+            break;
+    }
+
+    // notes §26
+    if (wantsRedraw) {
+        call_wake_glfw();
+    }
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// USB receive functions
+// ---------------------------------------------------------------------------
+
+static int rcv_extended(int dataLength, int * response, unsigned int timeout_ms) {
+    uint8_t                buff[EXTENDED_MESSAGE_SIZE] = {0};
+    int                    readLength                  = 0;
+    int                    retVal                      = EXIT_FAILURE;
+    int                    try                         = 1;
+    libusb_device_handle * devHandle_local             = NULL;
+    double                 timeDelta                   = 0.0f;
+    static double          largestDelta                = 0.0f;
+
+    if (dataLength > EXTENDED_MESSAGE_SIZE) {
+        LOG_ERROR("Expected message too large (%u > %u)\n", dataLength, EXTENDED_MESSAGE_SIZE);
+        return EXIT_FAILURE;
+    }
+    pthread_mutex_lock(&usbStaticMutex);
+    devHandle_local = devHandle;
+    pthread_mutex_unlock(&usbStaticMutex);
+
+    if (devHandle_local == NULL) {
+        LOG_ERROR("Device handle is NULL\n");
+        return EXIT_FAILURE;
+    }
+
+    // The G2 sometimes sends a zero-length packet on 0x82 before the real data.
+    // Retry up to 3 times on a 0-byte success to absorb ZLPs.
+    for (try = 1; try <= 3; try++) {
+        memset(buff, 0, sizeof(buff));
+        readLength = 0;
+        get_time_delta();
+        retVal     = usb_bulk_transfer_sync(devHandle_local, 0x82, buff,
+                                            sizeof(buff), &readLength,
+                                            timeout_ms);
+        timeDelta  = get_time_delta();
+
+        if (timeDelta > largestDelta) {
+            largestDelta = timeDelta;
+        }
+        //LOG_DEBUG("RX Ext Delta %dms largest %dms\n", (int)timeDelta, (int)largestDelta);
+
+        if (retVal == LIBUSB_SUCCESS) {
+            if (readLength > 0) {
+                uint8_t responseType = buff[0];
+
+                if (  (responseType == RESPONSE_TYPE_INIT)
+                   || (responseType == RESPONSE_TYPE_COMMAND)) {
+                    note_usb_activity(&gUsbRxTime);
+                    usb_log_message("EX", buff, (size_t)readLength);
+                    break;
+                } else {
+                    LOG_DEBUG("Unexpected extended responseType 0x%02x — discarding\n", responseType);
+                    break;
+                }
+            }
+            // readLength == 0: ZLP — device not ready yet, retry
+        } else if (is_disconnect_error(retVal)) {
+            LOG_DEBUG("Disconnect error %s\n", libusb_error_name(retVal));
+            gotBadConnectionIndication = true;
+            return EXIT_FAILURE;
+        } else {
+            LOG_DEBUG("Transfer error %s\n", libusb_error_name(retVal));
+            break;
+        }
+    }
+
+    if (readLength != dataLength) {
+        LOG_DEBUG("Length mismatch read=%d expected=%d\n", readLength, dataLength);
+
+        if (readLength == 0) {
+            LOG_DEBUG("Extended receive got no data — triggering reconnect\n");
+            gotBadConnectionIndication = true;
+        }
+        return EXIT_FAILURE;
+    }
+    uint32_t bitPos = SIGNED_BYTE_TO_BIT(dataLength - 2);
+
+    if (calc_crc16(buff, dataLength - 2) != read_bit_stream(buff, &bitPos, 16)) {
+        LOG_DEBUG("Bad CRC\n");
+        return EXIT_FAILURE;
+    }
+    return parse_incoming(buff, dataLength, response);
+}
+
+static int int_rec(tPoll poll, int expectedResponse, unsigned int timeout_ms) {
+    uint8_t                buff[INTERRUPT_MESSAGE_SIZE] = {0};
+    int                    readLength                   = 0;
+    int                    retVal                       = EXIT_FAILURE;
+    libusb_device_handle * devHandle_local              = NULL;
+    bool                   doLoop                       = true;
+    int                    response                     = SUB_RESPONSE_ERROR;
+    double                 timeDelta                    = 0.0f;
+    static double          largestDelta                 = 0.0f;
+    int                    try                          = 0;
+
+    for (try = 1; try <= 5 && doLoop == true; try++) {
+        pthread_mutex_lock(&usbStaticMutex);
+        devHandle_local = devHandle;
+        pthread_mutex_unlock(&usbStaticMutex);
+
+        if (devHandle_local == NULL) {
+            LOG_ERROR("int_rec: device handle is NULL\n");
+            return EXIT_FAILURE;
+        }
+        memset(buff, 0, sizeof(buff));
+        readLength      = 0;
+        get_time_delta();
+        retVal          = usb_bulk_transfer_sync(devHandle_local, 0x81, buff,
+                                                 sizeof(buff), &readLength,
+                                                 timeout_ms);
+        timeDelta       = get_time_delta();
+
+        if (timeDelta > largestDelta) {
+            largestDelta = timeDelta;
+        }
+        //LOG_DEBUG("RX Int Delta %dms largest %dms\n", (int)timeDelta, (int)largestDelta);
+
+        if (retVal == LIBUSB_SUCCESS) {
+            if (readLength > 0) {
+                note_usb_activity(&gUsbRxTime);
+                usb_log_message("RX", buff, (size_t)readLength);
+            }
+        } else if (retVal == LIBUSB_ERROR_TIMEOUT) {
+            if (poll == ePollYes) {
+                return EXIT_SUCCESS;
+            } else {
+                return EXIT_FAILURE;
+            }
+        } else if (is_disconnect_error(retVal)) {
+            LOG_DEBUG("int_rec: disconnect error %s\n", libusb_error_name(retVal));
+            gotBadConnectionIndication = true;
+            return EXIT_FAILURE;
+        } else {
+            LOG_DEBUG("int_rec: transfer error %s\n", libusb_error_name(retVal));
+        }
+
+        if (readLength <= 0) {
+            return EXIT_FAILURE;
+        }
+        uint32_t bitPos     = 0;
+        int      dataLength = read_bit_stream(buff, &bitPos, 4);
+        int      type       = read_bit_stream(buff, &bitPos, 4);
+
+        if (type == RESPONSE_TYPE_EXTENDED) {
+            bool foundNoneZero = false;
+
+            for (int i = 3; i < readLength; i++) {
+                if (buff[i] != 0) {
+                    foundNoneZero = true;
+                    break;
+                }
+            }
+
+            if (!foundNoneZero) {
+                dataLength = read_bit_stream(buff, &bitPos, 16);
+                retVal     = rcv_extended(dataLength, &response, timeout_ms);
+            }
+        } else if (type == RESPONSE_TYPE_EMBEDDED) {
+            uint32_t crcBitPos = SIGNED_BYTE_TO_BIT(dataLength - 1);
+
+            if (calc_crc16(&buff[1], dataLength - 2) != (uint16_t)read_bit_stream(buff, &crcBitPos, 16)) {
+                LOG_DEBUG("Bad embedded CRC\n");
+                retVal = EXIT_FAILURE;
+            } else {
+                retVal = parse_incoming(buff + 1, dataLength, &response);
+            }
+        }
+
+        if (poll == ePollYes) {
+            doLoop = false;                        // Idle poll — always exit after one
+        } else {
+            LOG_DEBUG("response = 0x%02x expected = 0x%02x\n", response, expectedResponse);
+
+            // A Bank Upload request can legitimately come back either with patch data or
+            // with an "empty location" response — both are valid terminal outcomes.
+            if (  (response == expectedResponse)
+               || ((expectedResponse == SUB_COMMAND_PATCH_BANK_DATA) && (response == SUB_RESPONSE_PATCH_BANK_UPLOAD))) {
+                doLoop = false;                   // Got what we wanted — retVal already correct
+            } else {
+                if (response == SUB_RESPONSE_ERROR) {
+                    doLoop = false;
+                    retVal = EXIT_FAILURE;            // Terminal response but not the expected one
+                }
+            }
+        }
+    }
+
+    return retVal;
+}
+
+// ---------------------------------------------------------------------------
+// USB send functions
+// ---------------------------------------------------------------------------
+
+static int send_message(uint8_t * buff, int pos) {
+    int                    msgLength    = pos - COMMAND_OFFSET;
+    int                    actualLength = 0;
+    int                    result       = 0;
+    uint16_t               crc          = 0;
+    double                 timeDelta    = 0.0f;
+    static double          largestDelta = 0.0f;
+
+    if (msgLength <= 0) {
+        return EXIT_FAILURE;
+    }
+    crc          = calc_crc16(&buff[COMMAND_OFFSET], msgLength);
+    write_uint16(&buff[msgLength + 2], crc);
+    msgLength   += 4;
+    write_uint16(&buff[0], msgLength);
+
+    pthread_mutex_lock(&usbStaticMutex);
+    libusb_device_handle * handle       = devHandle;
+    pthread_mutex_unlock(&usbStaticMutex);
+
+    if (handle == NULL) {
+        gotBadConnectionIndication = true;
+        return EXIT_FAILURE;
+    }
+    actualLength = 0;
+    get_time_delta();
+    result       = usb_bulk_transfer_sync(handle, 3, buff, msgLength,
+                                          &actualLength, USB_SEND_TIMEOUT_MS);
+    timeDelta    = get_time_delta();
+
+    if (timeDelta > largestDelta) {
+        largestDelta = timeDelta;
+    }
+    //LOG_DEBUG("TX Delta %dms largest %dms\n", (int)timeDelta, (int)largestDelta);
+
+    if ((result == 0) && (actualLength == msgLength)) {
+        gLastActivityTime = time(NULL);
+        note_usb_activity(&gUsbTxTime);
+        usb_log_message("TX", buff, (size_t)msgLength);
+        return EXIT_SUCCESS;
+    }
+
+    if (actualLength != msgLength) {
+#if defined (_WIN32)
+        LOG_ERROR("Mismatch: actual length %d, msg length %d (%s)\n", actualLength, msgLength, libusb_error_name(result));
+#else
+        LOG_ERROR("Mismatch: actual length %d, msg length %d\n", actualLength, msgLength);
+#endif
+    }
+
+    if (is_disconnect_error(result)) {
+        LOG_DEBUG("disconnect error %s\n", libusb_error_name(result));
+        gotBadConnectionIndication = true;
+        return EXIT_FAILURE;
+    } else {
+        LOG_ERROR("transfer error %s, Time taken %f with timeout of %u\n", libusb_error_name(result), timeDelta, USB_SEND_TIMEOUT_MS);
+    }
+    return EXIT_FAILURE;
+}
+
+// For non-idempotent commands (add/delete module/cable): retry TX failures only.
+// Never resends after a successful TX because the G2 already actioned the command.
+static int send_and_receive_once(uint8_t * buff, int pos, int expectedResponse, unsigned int timeout_ms) {
+    int retVal  = EXIT_FAILURE;
+    int attempt = 0;
+
+    for (attempt = 1; attempt <= 3; attempt++) {
+        retVal = send_message(buff, pos);
+
+        if (retVal == EXIT_SUCCESS) {
+            retVal = int_rec(ePollNo, expectedResponse, timeout_ms);
+            break;
+        }
+        LOG_ERROR("send failed, attempt %d\n", attempt);
+    }
+
+    return retVal;
+}
+
+static int send_and_receive(uint8_t * buff, int pos, int expectedResponse, unsigned int timeout_ms) {
+    int retVal  = EXIT_FAILURE;
+    int attempt = 0;
+
+    for (attempt = 1; attempt <= 3; attempt++) {
+        retVal = send_message(buff, pos);
+
+        if (retVal == EXIT_SUCCESS) {
+            retVal = int_rec(ePollNo, expectedResponse, timeout_ms);
+
+            if (retVal == EXIT_SUCCESS) {
+                break;
+            }
+            LOG_ERROR("receive failed, attempt %d\n", attempt);
+        } else {
+            LOG_ERROR("send failed, attempt %d\n", attempt);
+        }
+    }
+
+    return retVal;
+}
+
+static int send_init(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    write_bit_stream(buff, &bitPos, 8, 0x80);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static void usb_cmd_sys(uint8_t * buff, uint32_t * bitPos, uint8_t version, uint8_t subCommand) {
+    write_bit_stream(buff, bitPos, 8, 0x01);
+    write_bit_stream(buff, bitPos, 8, COMMAND_REQ | COMMAND_SYS);
+    write_bit_stream(buff, bitPos, 8, version);
+    write_bit_stream(buff, bitPos, 8, subCommand);
+}
+
+static void usb_cmd_slot(uint8_t * buff, uint32_t * bitPos, uint32_t slot, uint8_t commandFlags, uint8_t subCommand) {
+    write_bit_stream(buff, bitPos, 8, 0x01);
+    write_bit_stream(buff, bitPos, 8, commandFlags | COMMAND_SLOT | (uint8_t)slot);
+    write_bit_stream(buff, bitPos, 8, (uint8_t)gGlobalSettings.slot[slot].patchVersion);
+    write_bit_stream(buff, bitPos, 8, subCommand);
+}
+
+static int send_stop(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    int      retVal                  = EXIT_SUCCESS;
+
+    if (stopCount == 0) {
+        usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_START_STOP);
+        write_bit_stream(buff, &bitPos, 8, 0x01);
+        retVal = send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+    }
+    stopCount++;
+
+    if (stopCount > 10) {
+        LOG_ERROR("Stop message count went greater than 10\n");
+        exit(1);
+    }
+    return retVal;
+}
+
+static int send_start(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    int      retVal                  = EXIT_SUCCESS;
+
+    stopCount--;
+
+    if (stopCount < 0) {
+        LOG_ERROR("Stop message count went negative\n");
+        exit(1);
+    }
+
+    if (stopCount == 0) {
+        usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_START_STOP);  // Note: this sub command also starts, with correct param
+        write_bit_stream(buff, &bitPos, 8, 0x00);
+        retVal = send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+    }
+    return retVal;
+}
+
+static int send_select_slot(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_SELECT_SLOT);   // Note that this is focus, not keyboard selection
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)slot);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// Which slot the keyboard plays: 4 zero bits, then one bit per slot, as the G2's own slot selection dump
+static int send_keyboard_focus(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_KEYBOARD_FOCUS);
+    write_bit_stream(buff, &bitPos, 4, 0);
+
+    for (uint32_t i = 0; i < MAX_SLOTS; i++) {
+        write_bit_stream(buff, &bitPos, 1, (i == slot) ? 1u : 0u);
+    }
+
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_get_synth_settings(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_GET_SYNTH_SETTINGS);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_SYNTH_SETTINGS, USB_RECV_DATA_MS);
+}
+
+static int send_get_midi_cc(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    int      retVal                  = 0;
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_GET_MIDI_CC);
+
+    // The reply is parsed synchronously inside send_and_receive(), so bracketing the call is enough
+    // to tell parse_midi_cc() that what it is about to read is a list of existing assignments rather
+    // than news of a controller arriving.
+    midi_cc_parse_set_solicited(true);
+    retVal = send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_MIDI_CC, USB_RECV_DATA_MS);
+    midi_cc_parse_set_solicited(false);
+    return retVal;
+}
+
+static int send_get_slot_selection(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_GET_SLOT_SELECTION);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_SLOT_SELECTION, USB_RECV_DATA_MS);
+}
+
+static int send_get_assigned_voices(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_GET_ASSIGNED_VOICES);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_ASSIGNED_VOICES, USB_RECV_DATA_MS);
+}
+
+static int send_get_master_clock(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_QUERY_MASTER_CLOCK);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_EXT_MASTER_CLOCK, USB_RECV_DATA_MS);
+}
+
+static int send_get_global_page(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_GET_GLOBAL_PAGE);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_GLOBAL_PAGE, USB_RECV_DATA_MS);
+}
+
+static int send_get_performance_settings(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    LOG_DEBUG("Send get performance settings\n");
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_PERFORMANCE_SETTINGS);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PERFORMANCE_SETTINGS, USB_RECV_DATA_MS);
+}
+
+static int send_get_patch_version(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    LOG_DEBUG("Send get patch version\n");
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_GET_PATCH_VERSION);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)slot);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PATCH_VERSION, USB_RECV_DATA_MS);
+}
+
+static int send_get_patch(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_GET_PATCH_SLOT);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PATCH_DESCRIPTION, USB_RECV_DATA_MS);
+}
+
+// notes §27
+static int send_bank_upload_request(uint8_t domain, uint32_t bank, uint32_t location) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_PATCH_BANK_UPLOAD);
+    write_bit_stream(buff, &bitPos, 8, domain);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)bank);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_COMMAND_PATCH_BANK_DATA, USB_RECV_DATA_MS);
+}
+
+// notes §28
+static int send_bank_clear(uint8_t domain, uint32_t bank, uint32_t location) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_CLEAR);
+    write_bit_stream(buff, &bitPos, 8, domain);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)bank);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    write_bit_stream(buff, &bitPos, 8, 0x01);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_CLEAR, USB_RECV_ACK_MS);
+}
+
+// notes §29
+static int send_bank_download_push(uint8_t domain, uint32_t bank, uint32_t location,
+                                   const char * name, const uint8_t * content, uint32_t contentLen) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    uint32_t byteStart               = 0;
+
+    if (contentLen == 0 || BIT_TO_BYTE(bitPos) + CLAVIA_NAME_SIZE + 32 + contentLen > SEND_MESSAGE_SIZE) {
+        LOG_ERROR("send_bank_download_push: content length %u out of range\n", contentLen);
+        return EXIT_FAILURE;
+    }
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_PATCH_BANK_DATA);
+    write_bit_stream(buff, &bitPos, 8, domain);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)bank);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    write_clavia_string(buff, &bitPos, name);
+    write_bit_stream(buff, &bitPos, 16, (uint16_t)(contentLen + 1));
+    write_bit_stream(buff, &bitPos, 8, content[0]);
+    write_bit_stream(buff, &bitPos, 8, content[1]);
+    byteStart = BIT_TO_BYTE(bitPos);
+    memcpy(&buff[byteStart], content, contentLen);
+    bitPos   += BYTE_TO_BIT(contentLen);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PATCH_BANK_UPLOAD, USB_RECV_DATA_MS);
+}
+
+// notes §30
+static int send_store_patch(uint8_t domain, uint32_t bank, uint32_t location) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    int      result;
+
+    // notes §31
+    uint8_t  slotOrPerf              = (domain == BANK_UPLOAD_DOMAIN_PATCH)
+                                       ? (uint8_t)gSlot : (uint8_t)MAX_SLOTS;
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_STORE);
+    write_bit_stream(buff, &bitPos, 8, slotOrPerf);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)bank);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    sSuppressNameTableUpdate = true;
+    result                   = send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_STORE_PATCH, USB_RECV_DATA_MS);
+    sSuppressNameTableUpdate = false;
+    return result;
+}
+
+// notes §32
+static int send_retrieve_patch(uint8_t domain, uint32_t bank, uint32_t location) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    // See send_store_patch(): first payload byte is the target slot, and the performance is
+    // addressed as MAX_SLOTS. Sending the domain value (1) here asked for slot B instead.
+    uint8_t  slotOrPerf              = (domain == BANK_UPLOAD_DOMAIN_PATCH)
+                                       ? (uint8_t)gSlot : (uint8_t)MAX_SLOTS;
+
+    // notes §33
+    uint8_t  expected                = (domain == BANK_UPLOAD_DOMAIN_PATCH)
+                                       ? SUB_RESPONSE_PATCH_VERSION_CHANGE
+                                       : SUB_RESPONSE_PERF_PATCH_VERSIONS;
+
+    LOG_DEBUG("Retrieve: domain %u -> first byte %u (bank %u location %u), expecting 0x%02x\n",
+              domain, slotOrPerf, bank, location, expected);
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_RETRIEVE);
+    write_bit_stream(buff, &bitPos, 8, slotOrPerf);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)bank);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), expected, USB_RECV_DATA_MS);
+}
+
+// notes §34
+static int peek_bank_location(uint8_t domain, uint32_t bank, uint32_t location,
+                              char * outName, size_t outNameSize, bool * outPopulated) {
+    sBankUploadGotData = false;
+
+    if (send_bank_upload_request(domain, bank, location) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+    }
+    *outPopulated      = sBankUploadGotData;
+
+    if (sBankUploadGotData) {
+        strncpy(outName, sBankUploadName, outNameSize - 1);
+        outName[outNameSize - 1] = '\0';
+    } else {
+        outName[0] = '\0';
+    }
+    return EXIT_SUCCESS;
+}
+
+// notes §35
+static void build_unique_backup_filename(char * outName, size_t outNameSize, const char * destFolder,
+                                         const char * baseName, const char * ext) {
+    char probePath[1280] = {0};
+
+    snprintf(outName, outNameSize, "%s.%s", baseName, ext);
+    snprintf(probePath, sizeof(probePath), "%s/%s", destFolder, outName);
+
+    for (uint32_t n = 2; access(probePath, F_OK) == 0 && n < 1000; n++) {
+        snprintf(outName, outNameSize, "%s(%u).%s", baseName, n, ext);
+        snprintf(probePath, sizeof(probePath), "%s/%s", destFolder, outName);
+    }
+}
+
+// notes §36
+static int backup_bank(uint32_t bank, const char * destFolder, bool isPerf, bool silent) {
+    char         manifestPath[1280] = {0};
+    FILE *       manifest           = NULL;
+    uint32_t     written            = 0;
+    uint8_t      domain             = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+    const char * ext                = isPerf ? "prf2" : "pch2";
+    const char * typeLabel          = isPerf ? "Performance" : "Patch";
+    const char * manifestPrefix     = isPerf ? "PerfBank" : "PatchBank";
+    const char * alertTitle         = isPerf ? "Performance Bank Backup" : "Patch Bank Backup";
+    char         msg[256]           = {0};
+
+    if (!device_ready()) {
+        // Fail fast rather than looping NUM_LOCATIONS_PER_BANK times at USB_RECV_DATA_MS each
+        // (over 6 minutes) waiting for a device that isn't there.
+        LOG_ERROR("backup_bank: G2 is not connected\n");
+
+        if (!silent) {
+            snprintf(msg, sizeof(msg), "Backup of %s Bank %u failed: the G2 is not connected", typeLabel, bank + 1);
+            post_alert_response(alertTitle, msg);
+        }
+        return EXIT_FAILURE;
+    }
+    gBankBackupActive   = true;
+    gBankBackupIsPerf   = isPerf;
+    gBankBackupBank     = bank;
+    gBankBackupLocation = 0;
+    gBankBackupWritten  = 0;
+    call_wake_glfw();
+
+    snprintf(manifestPath, sizeof(manifestPath), "%s/%s%u.pchList", destFolder, manifestPrefix, bank + 1);
+    manifest            = fopen(manifestPath, "wb");
+
+    if (manifest != NULL) {
+        fprintf(manifest, "Version=Nord Modular G2 Bank Dump\r\n");
+    } else {
+        LOG_ERROR("backup_bank: could not create manifest %s\n", manifestPath);
+    }
+
+    for (uint32_t location = 0; location < NUM_LOCATIONS_PER_BANK; location++) {
+        if (gotBadConnectionIndication) {
+            LOG_ERROR("backup_bank: aborting early — lost connection to device\n");
+            break;
+        }
+        gBankBackupLocation = location;
+        call_wake_glfw();
+
+        sBankUploadGotData  = false;
+
+        if (send_bank_upload_request(domain, bank, location) != EXIT_SUCCESS) {
+            LOG_ERROR("Bank upload request failed for bank %u location %u\n", bank, location);
+            continue;
+        }
+
+        if (sBankUploadGotData) {
+            char sanitizedName[CLAVIA_NAME_SIZE + 1] = {0};
+            char fileName[CLAVIA_NAME_SIZE + 16]     = {0};
+            char filePath[1280]                      = {0};
+
+            strncpy(sanitizedName, sBankUploadName, CLAVIA_NAME_SIZE);
+
+            for (char * p = sanitizedName; *p != '\0'; p++) {
+                if (*p == '/' || *p == ':') {
+                    *p = '_';  // keep the name filesystem-safe — patch names are free text on the hardware
+                }
+            }
+
+            build_unique_backup_filename(fileName, sizeof(fileName), destFolder, sanitizedName, ext);
+            snprintf(filePath, sizeof(filePath), "%s/%s", destFolder, fileName);
+            write_bank_upload_file(filePath, typeLabel, sBankUploadContent, sBankUploadContentLen);
+
+            if (manifest != NULL) {
+                fprintf(manifest, "%u:%u: %s\r\n", bank + 1, location + 1, fileName);
+            }
+            written++;
+            gBankBackupWritten = written;
+            call_wake_glfw();
+        }
+    }
+
+    if (manifest != NULL) {
+        fclose(manifest);
+    }
+
+    if (!silent) {
+        snprintf(msg, sizeof(msg),
+                 "Backup of %s Bank %u complete: %u %s%s written to %s",
+                 typeLabel, bank + 1, written, typeLabel, written == 1 ? "" : (isPerf ? "s" : "es"), destFolder);
+        gBankBackupActive = false;
+        post_alert_response(alertTitle, msg);
+    }
+    return EXIT_SUCCESS;
+}
+
+// notes §37
+static bool parse_bank_manifest(const char * manifestPath, uint32_t sourceBank1Indexed,
+                                char fileNames[NUM_LOCATIONS_PER_BANK][CLAVIA_NAME_SIZE + 16]) {
+    FILE * manifest   = fopen(manifestPath, "rb");
+    char   line[1280] = {0};
+
+    if (manifest == NULL) {
+        LOG_ERROR("parse_bank_manifest: could not open %s\n", manifestPath);
+        return false;
+    }
+
+    while (fgets(line, sizeof(line), manifest) != NULL) {
+        uint32_t bank       = 0;
+        uint32_t location   = 0;
+        int      nameOffset = 0;
+
+        if ((sscanf(line, "%u:%u:%n", &bank, &location, &nameOffset) == 2) && (nameOffset > 0)) {
+            if ((bank == sourceBank1Indexed) && (location >= 1) && (location <= NUM_LOCATIONS_PER_BANK)) {
+                char * namePtr = line + nameOffset;
+
+                while (*namePtr == ' ') {
+                    namePtr++;
+                }
+                namePtr[strcspn(namePtr, "\r\n")] = '\0';
+                strncpy(fileNames[location - 1], namePtr, sizeof(fileNames[0]) - 1);
+            }
+        }
+    }
+    fclose(manifest);
+    return true;
+}
+
+// notes §38
+static int restore_bank(uint32_t sourceBank, uint32_t destBank, const char * srcFolder, bool isPerf, bool silent) {
+    char         manifestPath[1280] = {0};
+    char         fileNames[NUM_LOCATIONS_PER_BANK][CLAVIA_NAME_SIZE + 16];
+    uint8_t      domain             = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+    const char * typeLabel          = isPerf ? "Performance" : "Patch";
+    const char * manifestPrefix     = isPerf ? "PerfBank" : "PatchBank";
+    uint32_t     written            = 0;
+    uint32_t     cleared            = 0;
+    bool         aborted            = false;
+    const char * alertTitle         = isPerf ? "Performance Bank Restore" : "Patch Bank Restore";
+    char         msg[256]           = {0};
+
+    memset(fileNames, 0, sizeof(fileNames));
+
+    if (!device_ready()) {
+        LOG_ERROR("restore_bank: G2 is not connected\n");
+
+        if (!silent) {
+            snprintf(msg, sizeof(msg), "Restore of %s Bank %u failed: the G2 is not connected", typeLabel, destBank + 1);
+            post_alert_response(alertTitle, msg);
+        }
+        return EXIT_FAILURE;
+    }
+    snprintf(manifestPath, sizeof(manifestPath), "%s/%s%u.pchList", srcFolder, manifestPrefix, sourceBank + 1);
+
+    if (!parse_bank_manifest(manifestPath, sourceBank + 1, fileNames)) {
+        LOG_ERROR("restore_bank: no manifest at %s — refusing to touch destination bank %u\n", manifestPath, destBank + 1);
+
+        if (!silent) {
+            snprintf(msg, sizeof(msg),
+                     "Restore of %s Bank %u failed: no %s found in the chosen folder — nothing was written or cleared",
+                     typeLabel, destBank + 1, manifestPath + strlen(srcFolder) + 1);
+            post_alert_response(alertTitle, msg);
+        }
+        return EXIT_FAILURE;
+    }
+    gBankRestoreActive   = true;
+    gBankRestoreIsPerf   = isPerf;
+    gBankRestoreBank     = destBank;
+    gBankRestoreLocation = 0;
+    gBankRestoreWritten  = 0;
+    call_wake_glfw();
+
+    for (uint32_t location = 0; location < NUM_LOCATIONS_PER_BANK; location++) {
+        if (gotBadConnectionIndication) {
+            LOG_ERROR("restore_bank: aborting — lost connection to device\n");
+            aborted = true;
+            break;
+        }
+        gBankRestoreLocation = location;
+        call_wake_glfw();
+
+        if (fileNames[location][0] != '\0') {
+            char   filePath[1280]                 = {0};
+            char   pushName[CLAVIA_NAME_SIZE + 1] = {0};
+            char * ext                            = NULL;
+            char * suffix                         = NULL;
+
+            snprintf(filePath, sizeof(filePath), "%s/%s", srcFolder, fileNames[location]);
+
+            if (ensure_bank_scratch_buffer(&sBankRestoreContent) == NULL) {
+                aborted = true;
+                break;
+            }
+
+            if (!read_bank_upload_file(filePath, sBankRestoreContent, PATCH_FILE_SIZE, &sBankRestoreContentLen)) {
+                LOG_ERROR("restore_bank: could not read %s\n", filePath);
+                aborted = true;
+                break;
+            }
+            // Best-effort name for the outer wire field (strip extension and any "(2)"-style
+            // backup-collision suffix) — the name that actually sticks on the device is the one
+            // embedded in the content itself, per send_bank_download_push above.
+            strncpy(pushName, fileNames[location], CLAVIA_NAME_SIZE);
+            ext                 = strrchr(pushName, '.');
+
+            if (ext != NULL) {
+                *ext = '\0';
+            }
+            suffix              = strrchr(pushName, '(');
+
+            if ((suffix != NULL) && (suffix != pushName)) {
+                *suffix = '\0';
+            }
+
+            if (send_bank_download_push(domain, destBank, location, pushName, sBankRestoreContent, sBankRestoreContentLen) != EXIT_SUCCESS) {
+                LOG_ERROR("restore_bank: push failed for bank %u location %u\n", destBank, location);
+                aborted = true;
+                break;
+            }
+            written++;
+            gBankRestoreWritten = written;
+
+            // notes §39
+            if (isPerf && (destBank < NUM_PERF_BANKS)) {
+                gPerfNameTable[destBank][location].populated = true;
+                COPY_STRING(gPerfNameTable[destBank][location].name, pushName);
+                gPerfNameTable[destBank][location].category  = peek_patch_category(sBankRestoreContent, sBankRestoreContentLen);
+            } else if (!isPerf && (destBank < NUM_PATCH_BANKS)) {
+                gPatchNameTable[destBank][location].populated = true;
+                COPY_STRING(gPatchNameTable[destBank][location].name, pushName);
+                gPatchNameTable[destBank][location].category  = peek_patch_category(sBankRestoreContent, sBankRestoreContentLen);
+            }
+        } else {
+            if (send_bank_clear(domain, destBank, location) != EXIT_SUCCESS) {
+                LOG_ERROR("restore_bank: clear failed for bank %u location %u\n", destBank, location);
+                aborted = true;
+                break;
+            }
+            cleared++;
+
+            if (isPerf && (destBank < NUM_PERF_BANKS)) {
+                gPerfNameTable[destBank][location].populated = false;
+                gPerfNameTable[destBank][location].name[0]   = '\0';
+                gPerfNameTable[destBank][location].category  = 0;
+            } else if (!isPerf && (destBank < NUM_PATCH_BANKS)) {
+                gPatchNameTable[destBank][location].populated = false;
+                gPatchNameTable[destBank][location].name[0]   = '\0';
+                gPatchNameTable[destBank][location].category  = 0;
+            }
+        }
+        call_wake_glfw();
+    }
+
+    name_tables_edited();
+
+    if (!silent) {
+        if (aborted) {
+            snprintf(msg, sizeof(msg),
+                     "Restore of %s Bank %u stopped at location %u: %u written, %u cleared before the failure",
+                     typeLabel, destBank + 1, gBankRestoreLocation + 1, written, cleared);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "Restore of %s Bank %u complete: %u written, %u location%s cleared",
+                     typeLabel, destBank + 1, written, cleared, cleared == 1 ? "" : "s");
+        }
+        gBankRestoreActive = false;
+        post_alert_response(alertTitle, msg);
+    }
+    return aborted ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+// notes §40
+static int peek_store_target(uint32_t bank, uint32_t location, bool isPerf) {
+    char    name[CLAVIA_NAME_SIZE + 1] = {0};
+    bool    populated                  = false;
+    int     result                     = EXIT_FAILURE;
+    uint8_t domain                     = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+
+    gStorePeekBank      = bank;
+    gStorePeekLocation  = location;
+    gStorePeekIsPerf    = isPerf;
+
+    if (!device_ready()) {
+        LOG_ERROR("peek_store_target: G2 is not connected\n");
+        gStorePeekFailed = true;
+        post_response(eRspStorePeek);
+        return EXIT_FAILURE;
+    }
+    result              = peek_bank_location(domain, bank, location, name, sizeof(name), &populated);
+
+    gStorePeekFailed    = (result != EXIT_SUCCESS);
+    gStorePeekPopulated = populated;
+    strncpy(gStorePeekName, name, sizeof(gStorePeekName) - 1);
+    post_response(eRspStorePeek);
+    return result;
+}
+
+// notes §41
+static int store_patch_to_bank(uint32_t bank, uint32_t location, bool isPerf) {
+    uint8_t      domain    = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+    const char * typeLabel = isPerf ? "Performance" : "Patch";
+    int          result    = EXIT_FAILURE;
+
+    char         msg[256]  = {0};
+
+    if (!device_ready()) {
+        LOG_ERROR("store_patch_to_bank: G2 is not connected\n");
+        post_alert_response("Store to Bank", "Store failed: the G2 is not connected");
+        return EXIT_FAILURE;
+    }
+    result = send_store_patch(domain, bank, location);
+
+    if (result == EXIT_SUCCESS) {
+        // The bank location is now where this lives, rather than any file it was opened from
+        uint32_t index = isPerf ? BANK_ORIGIN_PERF : (uint32_t)gSlot;
+
+        g2_replaced_patch(index);
+        gBankOrigin[index] = BANK_ORIGIN(bank, location);
+
+        snprintf(msg, sizeof(msg), "Stored %s to Bank %u, Location %u", typeLabel, bank + 1, location + 1);
+
+        // notes §42
+        if (isPerf && (bank < NUM_PERF_BANKS)) {
+            gPerfNameTable[bank][location].populated = true;
+            COPY_STRING(gPerfNameTable[bank][location].name, gGlobalSettings.perfName);
+            gPerfNameTable[bank][location].category  = 0;
+        } else if (!isPerf && (bank < NUM_PATCH_BANKS)) {
+            gPatchNameTable[bank][location].populated = true;
+            // gSlot read ONCE into a local first: COPY_STRING expands its source twice, and an
+            // _Atomic read twice over is two separate loads that can disagree — the same trap that
+            // once corrupted a different slot's buffer than the one being copied into.
+            uint32_t slot = gSlot;
+            COPY_STRING(gPatchNameTable[bank][location].name, gGlobalSettings.slot[slot].patchName);
+            gPatchNameTable[bank][location].category  = gPatchDescr[slot].category;
+        }
+        name_tables_edited();
+    } else {
+        snprintf(msg, sizeof(msg), "Store of %s to Bank %u, Location %u failed", typeLabel, bank + 1, location + 1);
+    }
+    post_alert_response("Store to Bank", msg);
+    return result;
+}
+
+// notes §43
+static int peek_delete_target(uint32_t bank, uint32_t location, bool isPerf) {
+    char    name[CLAVIA_NAME_SIZE + 1] = {0};
+    bool    populated                  = false;
+    int     result                     = EXIT_FAILURE;
+    uint8_t domain                     = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+
+    gDeletePeekBank      = bank;
+    gDeletePeekLocation  = location;
+    gDeletePeekIsPerf    = isPerf;
+
+    if (!device_ready()) {
+        LOG_ERROR("peek_delete_target: G2 is not connected\n");
+        gDeletePeekFailed = true;
+        post_response(eRspDeletePeek);
+        return EXIT_FAILURE;
+    }
+    result               = peek_bank_location(domain, bank, location, name, sizeof(name), &populated);
+
+    gDeletePeekFailed    = (result != EXIT_SUCCESS);
+    gDeletePeekPopulated = populated;
+    strncpy(gDeletePeekName, name, sizeof(gDeletePeekName) - 1);
+    post_response(eRspDeletePeek);
+    return result;
+}
+
+// notes §44
+static int delete_bank_location(uint32_t bank, uint32_t location, bool isPerf) {
+    uint8_t      domain    = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+    const char * typeLabel = isPerf ? "Performance" : "Patch";
+    int          result    = EXIT_FAILURE;
+
+    char         msg[256]  = {0};
+
+    if (!device_ready()) {
+        LOG_ERROR("delete_bank_location: G2 is not connected\n");
+        post_alert_response("Delete", "Delete failed: the G2 is not connected");
+        return EXIT_FAILURE;
+    }
+    result = send_bank_clear(domain, bank, location);
+
+    if (result == EXIT_SUCCESS) {
+        snprintf(msg, sizeof(msg), "Deleted %s Bank %u, Location %u", typeLabel, bank + 1, location + 1);
+
+        // Keep the name-table cache in sync immediately — same reasoning as store_patch_to_bank()
+        // above, otherwise the deleted location keeps showing (with its old name) in Load/Store/
+        // Delete pickers until the next full reconnect sweep.
+        if (isPerf && (bank < NUM_PERF_BANKS)) {
+            gPerfNameTable[bank][location].populated = false;
+            gPerfNameTable[bank][location].name[0]   = '\0';
+            gPerfNameTable[bank][location].category  = 0;
+        } else if (!isPerf && (bank < NUM_PATCH_BANKS)) {
+            gPatchNameTable[bank][location].populated = false;
+            gPatchNameTable[bank][location].name[0]   = '\0';
+            gPatchNameTable[bank][location].category  = 0;
+        }
+        name_tables_edited();
+    } else {
+        snprintf(msg, sizeof(msg), "Delete of %s Bank %u, Location %u failed", typeLabel, bank + 1, location + 1);
+    }
+    post_alert_response("Delete", msg);
+    return result;
+}
+
+// notes §45
+static int peek_load_target(uint32_t bank, uint32_t location, bool isPerf) {
+    char    name[CLAVIA_NAME_SIZE + 1] = {0};
+    bool    populated                  = false;
+    int     result                     = EXIT_FAILURE;
+    uint8_t domain                     = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+
+    gLoadPeekBank      = bank;
+    gLoadPeekLocation  = location;
+    gLoadPeekIsPerf    = isPerf;
+
+    if (!device_ready()) {
+        LOG_ERROR("peek_load_target: G2 is not connected\n");
+        gLoadPeekFailed = true;
+        post_response(eRspLoadPeek);
+        return EXIT_FAILURE;
+    }
+    result             = peek_bank_location(domain, bank, location, name, sizeof(name), &populated);
+
+    gLoadPeekFailed    = (result != EXIT_SUCCESS);
+    gLoadPeekPopulated = populated;
+    strncpy(gLoadPeekName, name, sizeof(gLoadPeekName) - 1);
+    post_response(eRspLoadPeek);
+    return result;
+}
+
+// notes §46
+static int load_patch_from_bank(uint32_t bank, uint32_t location, bool isPerf) {
+    uint8_t      domain    = isPerf ? BANK_UPLOAD_DOMAIN_PERFORMANCE : BANK_UPLOAD_DOMAIN_PATCH;
+    const char * typeLabel = isPerf ? "Performance" : "Patch";
+    int          result    = EXIT_FAILURE;
+
+    if (!device_ready()) {
+        LOG_ERROR("load_patch_from_bank: G2 is not connected\n");
+        post_alert_response("Load", "Load failed: the G2 is not connected");
+        return EXIT_FAILURE;
+    }
+    result = send_retrieve_patch(domain, bank, location);
+
+    if ((result == EXIT_SUCCESS) && isPerf) {
+        sPerfStartSlots               = 0;
+        sPerfStartUntilMs             = (uint64_t)get_time_ms() + PERF_START_WAIT_MS;
+        forget_bank_origin(BANK_ORIGIN_PERF);
+        g2_replaced_patch(BANK_ORIGIN_PERF);
+        gBankOrigin[BANK_ORIGIN_PERF] = BANK_ORIGIN(bank, location);
+    } else if (result == EXIT_SUCCESS) {
+        sPendingBankOrigin[gSlot] = BANK_ORIGIN(bank, location);
+    }
+
+    // notes §47
+    if ((result == EXIT_SUCCESS) && (domain == BANK_UPLOAD_DOMAIN_PERFORMANCE)) {
+        send_get_performance_settings();
+    }
+
+    // Success needs no alert — the loaded patch shows on the redrawn canvas. Only report failure.
+    if (result != EXIT_SUCCESS) {
+        char msg[256] = {0};
+        snprintf(msg, sizeof(msg), "Load of %s from Bank %u, Location %u failed", typeLabel, bank + 1, location + 1);
+        post_alert_response("Load", msg);
+    }
+    return result;
+}
+
+// notes §48
+static void build_synth_settings_backup_filename(char * outName, size_t outNameSize) {
+    static const char * monthAbbrev[12] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    };
+    time_t              now             = time(NULL);
+    struct tm           tmNow;
+    int                 hour12;
+
+    localtime_r(&now, &tmNow);
+    hour12 = tmNow.tm_hour % 12;
+
+    if (hour12 == 0) {
+        hour12 = 12;
+    }
+    snprintf(outName, outNameSize, "synth-%d.%02d%s-%02d%s%02d.txt",
+             hour12, tmNow.tm_min, tmNow.tm_hour < 12 ? "am" : "pm",
+             tmNow.tm_mday, monthAbbrev[tmNow.tm_mon], (tmNow.tm_year + 1900) % 100);
+}
+
+// Same "0x00-0x0F = ch 1-16, 0x10 = off" encoding used by the UI (synthSettingsResources.c).
+static const char * midi_chan_text(char * buf, size_t bufSize, uint8_t chan) {
+    if (chan >= 0x10) {
+        snprintf(buf, bufSize, "Off");
+    } else {
+        snprintf(buf, bufSize, "%u", (unsigned)chan + 1u);
+    }
+    return buf;
+}
+
+// notes §49
+static int backup_synth_settings(const char * destFolder, bool silent) {
+    char   fileName[64]     = {0};
+    char   filePath[1280]   = {0};
+    char   chanBuf[4][8]    = {{0}};
+    char   globalChanBuf[8] = {0};
+    char   sysexBuf[8]      = {0};
+    char   msg[256]         = {0};
+    FILE * file             = NULL;
+
+    if (!device_ready()) {
+        LOG_ERROR("backup_synth_settings: G2 is not connected\n");
+
+        if (!silent) {
+            post_alert_response("Synth Settings Backup", "Synth Settings Backup failed: the G2 is not connected");
+        }
+        return EXIT_FAILURE;
+    }
+
+    if (send_get_synth_settings() != EXIT_SUCCESS) {
+        if (!silent) {
+            post_alert_response("Synth Settings Backup", "Synth Settings Backup failed: could not read settings from device");
+        }
+        return EXIT_FAILURE;
+    }
+    build_synth_settings_backup_filename(fileName, sizeof(fileName));
+    snprintf(filePath, sizeof(filePath), "%s/%s", destFolder, fileName);
+
+    file = fopen(filePath, "wb");
+
+    if (file == NULL) {
+        LOG_ERROR("backup_synth_settings: could not create %s\n", filePath);
+
+        if (!silent) {
+            snprintf(msg, sizeof(msg), "Synth Settings Backup failed: could not write to %s", destFolder);
+            post_alert_response("Synth Settings Backup", msg);
+        }
+        return EXIT_FAILURE;
+    }
+
+    if (gSynthSettings.sysexId < 16) {
+        snprintf(sysexBuf, sizeof(sysexBuf), "%u", gSynthSettings.sysexId + 1);
+    } else {
+        snprintf(sysexBuf, sizeof(sysexBuf), "All");
+    }
+    fprintf(file, "Version=G2Alike Synth Settings Backup\r\n");
+    fprintf(file, "Name: %s\r\n", gSynthSettings.name);
+    fprintf(file, "MIDI Channel A: %s\r\n", midi_chan_text(chanBuf[0], sizeof(chanBuf[0]), gSynthSettings.midiChanSlot[0]));
+    fprintf(file, "MIDI Channel B: %s\r\n", midi_chan_text(chanBuf[1], sizeof(chanBuf[1]), gSynthSettings.midiChanSlot[1]));
+    fprintf(file, "MIDI Channel C: %s\r\n", midi_chan_text(chanBuf[2], sizeof(chanBuf[2]), gSynthSettings.midiChanSlot[2]));
+    fprintf(file, "MIDI Channel D: %s\r\n", midi_chan_text(chanBuf[3], sizeof(chanBuf[3]), gSynthSettings.midiChanSlot[3]));
+    fprintf(file, "Global MIDI Channel: %s\r\n", midi_chan_text(globalChanBuf, sizeof(globalChanBuf), gSynthSettings.globalChan));
+    fprintf(file, "Sysex ID: %s\r\n", sysexBuf);
+    fprintf(file, "Local On: %u\r\n", gSynthSettings.localOn);
+    fprintf(file, "Memory Protect: %u\r\n", gSynthSettings.memoryProtect);
+    fprintf(file, "Program Change Receive: %u\r\n", gSynthSettings.progChangeRcv);
+    fprintf(file, "Program Change Send: %u\r\n", gSynthSettings.progChangeSnd);
+    fprintf(file, "Controllers Receive: %u\r\n", gSynthSettings.controllersRcv);
+    fprintf(file, "Controllers Send: %u\r\n", gSynthSettings.controllersSnd);
+    fprintf(file, "Send Clock: %u\r\n", gSynthSettings.sendClock);
+    fprintf(file, "Receive Clock: %u\r\n", gSynthSettings.receiveClock);
+    fprintf(file, "Tune Cents: %d\r\n", gSynthSettings.tuneCent);
+    fprintf(file, "Tune Semitones: %d\r\n", gSynthSettings.tuneSemi);
+    fprintf(file, "Global Octave Shift: %d\r\n", gSynthSettings.globalOctaveShift);
+    fprintf(file, "Global Shift Active: %u\r\n", gSynthSettings.globalShiftActive);
+    fprintf(file, "Pedal Polarity: %s\r\n", gSynthSettings.pedalPolarity ? "Closed" : "Open");
+    fprintf(file, "Pedal Gain: %.2f\r\n", 1.0 + gSynthSettings.pedalGain / 64.0);
+    fprintf(file, "Patch Sort Mode: %u\r\n", gSynthSettings.patchSortMode);
+    fprintf(file, "Perf Sort Mode: %u\r\n", gSynthSettings.perfSortMode);
+    fprintf(file, "Current Perf Bank: %u\r\n", gSynthSettings.perfBank + 1);
+    fprintf(file, "Current Perf Location: %u\r\n", gSynthSettings.perfLocation + 1);
+    fclose(file);
+
+    if (!silent) {
+        snprintf(msg, sizeof(msg), "Synth Settings Backup complete: %s written to %s", fileName, destFolder);
+        post_alert_response("Synth Settings Backup", msg);
+    }
+    return EXIT_SUCCESS;
+}
+
+// Reverse of midi_chan_text() above: "Off" or a 1-16 channel number back to the 0x00-0x0F/0x10
+// encoding. Only ever fed this codebase's own backup_synth_settings() output, so no need for
+// case-insensitive matching or malformed-input recovery beyond clamping the range.
+static uint8_t parse_midi_chan_value(const char * value) {
+    int chan = 0;
+
+    if (strcmp(value, "Off") == 0) {
+        return 0x10;
+    }
+    chan = atoi(value);
+
+    if (chan < 1) {
+        chan = 1;
+    } else if (chan > 16) {
+        chan = 16;
+    }
+    return (uint8_t)(chan - 1);
+}
+
+// Reverse of backup_synth_settings()'s "All"/1-16 Sysex ID encoding (0-15 = that ID, 16 = "All").
+static uint8_t parse_sysex_value(const char * value) {
+    int sysexId = 0;
+
+    if (strcmp(value, "All") == 0) {
+        return 16;
+    }
+    sysexId = atoi(value);
+
+    if (sysexId < 1) {
+        sysexId = 1;
+    } else if (sysexId > 16) {
+        sysexId = 16;
+    }
+    return (uint8_t)(sysexId - 1);
+}
+
+// notes §50
+static bool find_latest_synth_settings_backup(const char * folder, char * outFilePath, size_t outFilePathSize) {
+    DIR *           dir                 = opendir(folder);
+    struct dirent * entry               = NULL;
+    time_t          latestMtime         = 0;
+    bool            found               = false;
+    char            candidatePath[1280] = {0};
+    struct stat     st;
+
+    if (dir == NULL) {
+        LOG_ERROR("find_latest_synth_settings_backup: could not open folder %s\n", folder);
+        return false;
+    }
+
+    while ((entry = readdir(dir)) != NULL) {
+        size_t nameLen = strlen(entry->d_name);
+
+        if (  (strncmp(entry->d_name, "synth-", 6) != 0)
+           || (nameLen < 10)
+           || (strcmp(entry->d_name + nameLen - 4, ".txt") != 0)) {
+            continue;
+        }
+        snprintf(candidatePath, sizeof(candidatePath), "%s/%s", folder, entry->d_name);
+
+        if ((stat(candidatePath, &st) == 0) && (!found || (st.st_mtime > latestMtime))) {
+            latestMtime                      = st.st_mtime;
+            strncpy(outFilePath, candidatePath, outFilePathSize - 1);
+            outFilePath[outFilePathSize - 1] = '\0';
+            found                            = true;
+        }
+    }
+    closedir(dir);
+    return found;
+}
+
+// notes §51
+static bool parse_synth_settings_backup_file(const char * filePath, tSynthSettings * outSettings) {
+    FILE * file      = fopen(filePath, "rb");
+    char   line[512] = {0};
+    char * colon     = NULL;
+    char * value     = NULL;
+
+    if (file == NULL) {
+        LOG_ERROR("parse_synth_settings_backup_file: could not open %s\n", filePath);
+        return false;
+    }
+    memset(outSettings, 0, sizeof(*outSettings));
+
+    if (  (fgets(line, sizeof(line), file) == NULL)
+       || (  (strncmp(line, "Version=G2Alike Synth Settings Backup", strlen("Version=G2Alike Synth Settings Backup")) != 0)
+          && (strncmp(line, "Version=G2-Edit Synth Settings Backup", strlen("Version=G2-Edit Synth Settings Backup")) != 0))) { // a G2-Edit backup still loads
+        LOG_ERROR("parse_synth_settings_backup_file: %s is not a recognized Synth Settings Backup\n", filePath);
+        fclose(file);
+        return false;
+    }
+
+    while (fgets(line, sizeof(line), file) != NULL) {
+        line[strcspn(line, "\r\n")] = '\0';
+        colon                       = strchr(line, ':');
+
+        if (colon == NULL) {
+            continue;
+        }
+        *colon                      = '\0';
+        value                       = colon + 1;
+
+        while (*value == ' ') {
+            value++;
+        }
+
+        if (strcmp(line, "Name") == 0) {
+            // notes §52
+            COPY_STRING(outSettings->name, value);
+        } else if (strcmp(line, "MIDI Channel A") == 0) {
+            outSettings->midiChanSlot[0] = parse_midi_chan_value(value);
+        } else if (strcmp(line, "MIDI Channel B") == 0) {
+            outSettings->midiChanSlot[1] = parse_midi_chan_value(value);
+        } else if (strcmp(line, "MIDI Channel C") == 0) {
+            outSettings->midiChanSlot[2] = parse_midi_chan_value(value);
+        } else if (strcmp(line, "MIDI Channel D") == 0) {
+            outSettings->midiChanSlot[3] = parse_midi_chan_value(value);
+        } else if (strcmp(line, "Global MIDI Channel") == 0) {
+            outSettings->globalChan = parse_midi_chan_value(value);
+        } else if (strcmp(line, "Sysex ID") == 0) {
+            outSettings->sysexId = parse_sysex_value(value);
+        } else if (strcmp(line, "Local On") == 0) {
+            outSettings->localOn = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Memory Protect") == 0) {
+            outSettings->memoryProtect = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Program Change Receive") == 0) {
+            outSettings->progChangeRcv = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Program Change Send") == 0) {
+            outSettings->progChangeSnd = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Controllers Receive") == 0) {
+            outSettings->controllersRcv = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Controllers Send") == 0) {
+            outSettings->controllersSnd = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Send Clock") == 0) {
+            outSettings->sendClock = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Receive Clock") == 0) {
+            outSettings->receiveClock = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Tune Cents") == 0) {
+            outSettings->tuneCent = (int8_t)atoi(value);
+        } else if (strcmp(line, "Tune Semitones") == 0) {
+            outSettings->tuneSemi = (int8_t)atoi(value);
+        } else if (strcmp(line, "Global Octave Shift") == 0) {
+            outSettings->globalOctaveShift = (int8_t)atoi(value);
+        } else if (strcmp(line, "Global Shift Active") == 0) {
+            outSettings->globalShiftActive = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Pedal Polarity") == 0) {
+            outSettings->pedalPolarity = (strcmp(value, "Closed") == 0) ? 1 : 0;
+        } else if (strcmp(line, "Pedal Gain") == 0) {
+            outSettings->pedalGain = (uint8_t)lround((atof(value) - 1.0) * 64.0);
+        } else if (strcmp(line, "Patch Sort Mode") == 0) {
+            outSettings->patchSortMode = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Perf Sort Mode") == 0) {
+            outSettings->perfSortMode = (uint8_t)atoi(value);
+        } else if (strcmp(line, "Current Perf Bank") == 0) {
+            outSettings->perfBank = (uint8_t)(atoi(value) - 1);
+        } else if (strcmp(line, "Current Perf Location") == 0) {
+            outSettings->perfLocation = (uint8_t)(atoi(value) - 1);
+        }
+    }
+    fclose(file);
+    return true;
+}
+
+// notes §53
+static int peek_synth_settings_restore(const char * folder) {
+    char         filePath[1280] = {0};
+    const char * baseName       = NULL;
+
+    if (!find_latest_synth_settings_backup(folder, filePath, sizeof(filePath))) {
+        snprintf(gSynthRestorePeekErrorMessage, sizeof(gSynthRestorePeekErrorMessage),
+                 "No Synth Settings Backup file found in %s", folder);
+        gSynthRestorePeekFailed = true;
+        post_response(eRspSynthRestorePeek);
+        return EXIT_FAILURE;
+    }
+
+    if (!parse_synth_settings_backup_file(filePath, &sSynthSettingsRestoreStaged)) {
+        snprintf(gSynthRestorePeekErrorMessage, sizeof(gSynthRestorePeekErrorMessage),
+                 "Could not parse %s — it may not be a valid Synth Settings Backup", filePath);
+        gSynthRestorePeekFailed = true;
+        post_response(eRspSynthRestorePeek);
+        return EXIT_FAILURE;
+    }
+    baseName                = strrchr(filePath, '/');
+    baseName                = (baseName != NULL) ? baseName + 1 : filePath;
+
+    gSynthRestorePeekFailed = false;
+    strncpy(gSynthRestorePeekFileName, baseName, sizeof(gSynthRestorePeekFileName) - 1);
+    strncpy(gSynthRestorePeekName, sSynthSettingsRestoreStaged.name, sizeof(gSynthRestorePeekName) - 1);
+    post_response(eRspSynthRestorePeek);
+    return EXIT_SUCCESS;
+}
+
+// notes §54
+static int backup_everything(const char * destFolder) {
+    uint32_t totalPatches = 0;
+    uint32_t totalPerfs   = 0;
+    bool     settingsOk   = false;
+    bool     aborted      = false;
+    char     msg[256]     = {0};
+
+    if (!device_ready()) {
+        LOG_ERROR("backup_everything: G2 is not connected\n");
+        post_alert_response("Backup Everything", "Backup Everything failed: the G2 is not connected");
+        return EXIT_FAILURE;
+    }
+    gBankBackupIsEverything = true;
+    gBankBackupActive       = true;
+    call_wake_glfw();
+
+    for (uint32_t bank = 0; bank < NUM_PATCH_BANKS; bank++) {
+        if (gotBadConnectionIndication) {
+            LOG_ERROR("backup_everything: aborting early — lost connection to device\n");
+            aborted = true;
+            break;
+        }
+
+        if (backup_bank(bank, destFolder, false, true) != EXIT_SUCCESS) {
+            aborted = true;
+            break;
+        }
+        totalPatches += gBankBackupWritten;
+    }
+
+    if (!aborted) {
+        for (uint32_t bank = 0; bank < NUM_PERF_BANKS; bank++) {
+            if (gotBadConnectionIndication) {
+                LOG_ERROR("backup_everything: aborting early — lost connection to device\n");
+                aborted = true;
+                break;
+            }
+
+            if (backup_bank(bank, destFolder, true, true) != EXIT_SUCCESS) {
+                aborted = true;
+                break;
+            }
+            totalPerfs += gBankBackupWritten;
+        }
+    }
+
+    if (!aborted) {
+        settingsOk = backup_synth_settings(destFolder, true) == EXIT_SUCCESS;
+    }
+    gBankBackupActive       = false;
+    gBankBackupIsEverything = false; // done — reset now the drain no longer does it, so a later single-bank backup's title is right
+
+    if (aborted) {
+        snprintf(msg, sizeof(msg),
+                 "Backup Everything aborted: lost connection to the G2 after %u patch%s and %u performance%s written to %s",
+                 totalPatches, totalPatches == 1 ? "" : "es", totalPerfs, totalPerfs == 1 ? "" : "s", destFolder);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "Backup Everything complete: %u patch%s across %u bank%s, %u performance%s across %u bank%s, and synth settings%s written to %s",
+                 totalPatches, totalPatches == 1 ? "" : "es", NUM_PATCH_BANKS, NUM_PATCH_BANKS == 1 ? "" : "s",
+                 totalPerfs, totalPerfs == 1 ? "" : "s", NUM_PERF_BANKS, NUM_PERF_BANKS == 1 ? "" : "s",
+                 settingsOk ? "" : " (settings failed)", destFolder);
+    }
+    post_alert_response("Backup Everything", msg);
+    return aborted ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+static int send_get_patch_name(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_GET_PATCH_NAME);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_GET_PATCH_NAME, USB_RECV_DATA_MS);
+}
+
+static int send_get_resources_used(uint32_t slot, tLocation location) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_QUERY_RESOURCES);
+    write_bit_stream(buff, &bitPos, 8, location);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_RESOURCES_USED, USB_RECV_DATA_MS);
+}
+
+static int send_set_module_label(uint32_t slot, tModuleKey moduleKey, const char * name) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_MODULE_LABEL);
+    write_bit_stream(buff, &bitPos, 8, moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, moduleKey.index);
+    write_clavia_string(buff, &bitPos, name);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// How many names this parameter has. paramNumLabels is what the patch declared, but a label set by
+// hand before the count was maintained would read 0 — so a set name always counts for at least one.
+static uint32_t param_label_count(tModule * module, uint32_t paramIndex) {
+    uint32_t labels = module->paramNumLabels[paramIndex];
+
+    if (labels == 0) {
+        labels = 1;
+    }
+    return (labels < MAX_NUM_LABELS) ? labels : MAX_NUM_LABELS;
+}
+
+static int send_set_param_label(uint32_t slot, tModuleKey moduleKey, uint32_t paramIndex, const char * name) {
+    uint8_t   buff[SEND_MESSAGE_SIZE]          = {0};
+    uint32_t  bitPos                           = BYTE_TO_BIT(COMMAND_OFFSET);
+    int       i                                = 0;
+    uint32_t  pi                               = 0;
+    uint32_t  labelCount                       = 0;
+    uint32_t  labelIndices[MAX_NUM_PARAMETERS] = {0};
+
+    LOG_DEBUG("SET PARAM LABEL slot=%u location=%u index=%u param=%u name='%s'\n",
+              slot, moduleKey.location, moduleKey.index, paramIndex, name);
+
+    tModule * module                           = get_module(moduleKey);
+
+    if (module == NULL) {
+        LOG_DEBUG("SET PARAM LABEL get_module FAILED\n");
+        return EXIT_FAILURE;
+    }
+    // notes §55
+    uint32_t  sectionBytes                     = 0;
+
+    for (pi = 0; pi < MAX_NUM_PARAMETERS; pi++) {
+        if (module->paramNameSet[pi][0]) {
+            labelIndices[labelCount++] = pi;
+            sectionBytes              += 3 + (param_label_count(module, pi) * PROTOCOL_PARAM_NAME_SIZE);
+        }
+    }
+
+    if (labelCount == 0) {
+        return EXIT_SUCCESS;
+    }
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_PARAM_LABEL);
+    write_bit_stream(buff, &bitPos, 8, moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)sectionBytes);
+
+    for (uint32_t j = 0; j < labelCount; j++) {
+        uint32_t labels = 0;
+
+        pi     = labelIndices[j];
+        labels = param_label_count(module, pi);
+        write_bit_stream(buff, &bitPos, 8, 1);                                          // isString
+        write_bit_stream(buff, &bitPos, 8, 1 + (labels * PROTOCOL_PARAM_NAME_SIZE));    // paramLength
+        write_bit_stream(buff, &bitPos, 8, (uint8_t)pi);                                // paramIndex
+
+        for (uint32_t label = 0; label < labels; label++) {
+            for (i = 0; i < PROTOCOL_PARAM_NAME_SIZE; i++) {
+                write_bit_stream(buff, &bitPos, 8, (uint8_t)module->paramName[pi][label][i]);
+            }
+        }
+    }
+
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_set_param_value(uint32_t slot, tModuleKey moduleKey, uint32_t param, uint32_t value, uint32_t variation) {
+    int       retVal                  = EXIT_FAILURE;
+    uint8_t   buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t  bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_WRITE_NO_RESP, SUB_COMMAND_SET_PARAM);
+    write_bit_stream(buff, &bitPos, 8, moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, param);
+
+    // moduleResourcesAccess.c notes §7 - an engine-only output reaches the G2 as Out 1/2
+    tModule * module                  = get_module(moduleKey);
+
+    write_bit_stream(buff, &bitPos, 8, (module != NULL) ? param_value_for_g2(module->type, param, value) : value);
+    write_bit_stream(buff, &bitPos, 8, variation);
+    retVal = send_message(buff, BIT_TO_BYTE(bitPos));
+
+    return retVal;
+}
+
+static int send_set_module_colour(uint32_t slot, uint32_t location,
+                                  uint32_t moduleIndex, uint32_t colour) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_MODULE_COLOUR);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)colour);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// CONFIRMED on real hardware - see SUB_COMMAND_SET_MUTATION_LOCK's comment in defs.h. Mirrors
+// send_set_module_colour's exact shape (same location/moduleIndex/value byte layout, same
+// COMMAND_REQ + SUB_RESPONSE_OK ack convention).
+static int send_set_mutation_lock(uint32_t slot, uint32_t location,
+                                  uint32_t moduleIndex, uint32_t locked) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_MUTATION_LOCK);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)locked);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_set_mode(uint32_t slot, tModeData * modeData) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_MODE);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)modeData->moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)modeData->moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)modeData->mode);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)modeData->value);
+    LOG_DEBUG("SET MODE %u %u\n", modeData->mode, modeData->value);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_write_cable(uint32_t slot, tCableData * cableData) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_WRITE_CABLE);
+    write_bit_stream(buff, &bitPos, 8, 0x10 | ((uint8_t)cableData->location << 3) | (uint8_t)cableData->colour);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->moduleFromIndex);
+    write_bit_stream(buff, &bitPos, 8, ((uint8_t)cableData->linkType << 6) | (uint8_t)cableData->connectorFromIoIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->moduleToIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->connectorToIoIndex);
+    return send_and_receive_once(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// notes §56
+static int send_write_cable_colour(uint32_t slot, tCableData * cableData) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_WRITE_CABLE_COLOUR);
+    write_bit_stream(buff, &bitPos, 8, ((uint8_t)cableData->location << 3) | (uint8_t)cableData->colour);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->moduleFromIndex);
+    write_bit_stream(buff, &bitPos, 8, ((uint8_t)cableData->linkType << 6) | (uint8_t)cableData->connectorFromIoIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->moduleToIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->connectorToIoIndex);
+    return send_and_receive_once(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_delete_cable(uint32_t slot, tCableData * cableData) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_DELETE_CABLE);
+    write_bit_stream(buff, &bitPos, 8, 0x2 | (uint8_t)cableData->location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->moduleFromIndex);
+    write_bit_stream(buff, &bitPos, 8, ((uint8_t)cableData->linkType << 6) | (uint8_t)cableData->connectorFromIoIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->moduleToIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)cableData->connectorToIoIndex);
+    return send_and_receive_once(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// Read once: G2ALIKE_OFFLINE=1 (anything but "0") keeps the editor off USB for scripted tests.
+static bool comms_forced_offline(void) {
+    static int offline = -1;
+
+    if (offline < 0) {
+        const char * value = getenv("G2ALIKE_OFFLINE");
+
+        offline = ((value != NULL) && (value[0] != '\0') && (value[0] != '0')) ? 1 : 0;
+    }
+    return offline == 1;
+}
+
+static int send_add_module(uint32_t slot, tModuleData * moduleData) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    int      avail                   = 0;
+    int      written                 = 0;
+    int      i                       = 0;
+
+    LOG_DEBUG("Writing module\n");
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_ADD_MODULE);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->type);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->column);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->row);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->colour);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->upRate);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->excludeFromMutation);
+
+    for (i = 0; i < (int)moduleData->modeCount; i++) {
+        write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleData->mode[i]);
+    }
+
+    avail   = SEND_MESSAGE_SIZE - (int)BIT_TO_BYTE(bitPos);
+    written = snprintf((char *)&buff[BIT_TO_BYTE(bitPos)], avail, "%s", moduleData->name);
+    bitPos += (uint32_t)(((written >= 0) && (written < avail)) ? written + 1 : avail) * 8;
+    return send_and_receive_once(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_move_module(uint32_t slot, tModuleKey moduleKey, uint32_t column, uint32_t row) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_MOVE_MODULE);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)column);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)row);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_delete_module(uint32_t slot, tModuleKey moduleKey) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_DELETE_MODULE);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleKey.index);
+    return send_and_receive_once(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_set_module_uprate(uint32_t slot, tModuleKey moduleKey, uint32_t upRate) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_MODULE_UPRATE);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)upRate);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_set_morph_range(uint32_t slot, tParamMorphData * paramMorphData) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_WRITE_NO_RESP, SUB_COMMAND_SET_MORPH_RANGE);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->moduleKey.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->moduleKey.index);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->param);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->paramMorph);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->value);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->negative);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->variation);
+    return send_message(buff, BIT_TO_BYTE(bitPos));
+}
+
+static int send_select_variation(uint32_t slot, uint32_t variation) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SELECT_VARIATION);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)variation);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// ---------------------------------------------------------------------------
+// Slot data management
+// ---------------------------------------------------------------------------
+
+// notes §57
+static void clear_slot_data_usb(uint32_t slot) {
+    gPatchGeneration[slot]++;   // everything keyed to this slot's modules is now stale
+    database_delete_modules_by_slot(slot);
+    database_delete_cables_by_slot(slot);
+
+    memset(&gPatchDescr[slot], 0, sizeof(tPatchDescr));
+    memset(&gKnobArray[slot], 0, sizeof(tKnobArray));
+    memset(&gControllerArray[slot], 0, sizeof(tControllerArray));
+    gControllerCount[slot] = 0;
+    gMorphCount[slot]      = 8;
+    gPatchNotesSize[slot]  = 0;
+    gNote2Size[slot]       = 0;
+}
+
+static int send_get_global_knobs(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_QUERY_GLOBAL_KNOBS);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_GLOBAL_KNOBS, USB_RECV_DATA_MS);
+}
+
+static int send_get_current_note(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_CURRENT_NOTE);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_CURRENT_NOTE_2, USB_RECV_DATA_MS);
+}
+
+static int send_get_patch_notes(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_QUERY_PATCH_TEXT);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PATCH_NOTES, USB_RECV_DATA_MS);
+}
+
+static int send_get_selected_param(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_GET_SELECTED_PARAM);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_SELECT_PARAM, USB_RECV_DATA_MS);
+}
+
+static int send_get_knob_snapshot(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_KNOB_SNAPSHOT);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS); // Really expected SUB_RESPONSE_KNOBS here
+}
+
+static int send_set_seq_note_custom_data(uint32_t slot, tModuleKey key, uint32_t magnifier, uint32_t octave) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_PARAM_LABEL);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)key.location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)key.index);
+    write_bit_stream(buff, &bitPos, 8, 6);                     // combined TLV data size
+    write_bit_stream(buff, &bitPos, 8, 0);                     // zoom TLV: type
+    write_bit_stream(buff, &bitPos, 8, 1);                     // zoom TLV: len
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)magnifier);    // zoom TLV: val (0=1oct, 1=2oct, 2=3oct)
+    write_bit_stream(buff, &bitPos, 8, 0);                     // offset TLV: type
+    write_bit_stream(buff, &bitPos, 8, 1);                     // offset TLV: len
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)octave);       // offset TLV: val (0=C0..7=C7)
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// Fetch patch data for a single slot. Synth must be stopped before calling.
+static int send_get_patch_data(uint32_t slot) {
+    int retVal = EXIT_SUCCESS;
+
+    clear_slot_data_usb(slot);
+
+    retVal |= send_get_patch_version(slot);
+    retVal |= send_get_patch(slot);
+    retVal |= send_get_patch_name(slot);
+    retVal |= send_get_current_note(slot);
+    retVal |= send_get_patch_notes(slot);
+    retVal |= send_get_resources_used(slot, locationVa);
+    retVal |= send_get_resources_used(slot, locationFx);
+
+    if (send_get_knob_snapshot(slot) != EXIT_SUCCESS) {
+        LOG_DEBUG("send_get_knob_snapshot slot %u failed — skipping\n", slot);
+    }
+    retVal |= send_get_selected_param(slot);
+
+    return retVal;
+}
+
+// notes §58
+
+// The whole slot as SET_PATCH carries it. *contentFrom is where the patch itself begins, after the
+// header - which names the slot and its version, and so differs between two copies of one patch.
+static void build_slot_patch(uint32_t slot, uint8_t * buff, uint32_t * bitPosOut, uint32_t * contentFrom) {
+    uint32_t bitPos = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_PATCH);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    *contentFrom = bitPos;
+
+    write_clavia_string(buff, &bitPos, gGlobalSettings.slot[slot].patchName);
+
+    write_patch_descr(slot, buff, &bitPos);
+    write_module_list(slot, locationVa, buff, &bitPos);
+    write_module_list(slot, locationFx, buff, &bitPos);
+    write_current_note_2(slot, buff, &bitPos);
+    write_cable_list(slot, locationVa, buff, &bitPos);
+    write_cable_list(slot, locationFx, buff, &bitPos);
+    write_param_list(slot, locationMorph, buff, &bitPos, NUM_VARIATIONS_USB);
+    write_param_list(slot, locationVa, buff, &bitPos, NUM_VARIATIONS_USB);
+    write_param_list(slot, locationFx, buff, &bitPos, NUM_VARIATIONS_USB);
+    write_morph_params(slot, buff, &bitPos, NUM_VARIATIONS_USB);
+    write_knobs(slot, buff, &bitPos);
+    write_controllers(slot, buff, &bitPos);
+    write_param_names(slot, locationMorph, buff, &bitPos);   // notes §59
+    write_param_names(slot, locationVa, buff, &bitPos);
+    write_param_names(slot, locationFx, buff, &bitPos);
+    write_module_names(slot, locationVa, buff, &bitPos);
+    write_module_names(slot, locationFx, buff, &bitPos);
+    write_patch_notes(slot, buff, &bitPos);
+    *bitPosOut = bitPos;
+}
+
+static int push_slot_to_device(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = 0;
+    uint32_t contentFrom             = 0;
+
+    LOG_DEBUG("Pushing slot %u to device\n", slot);
+    build_slot_patch(slot, buff, &bitPos, &contentFrom);
+
+    int      expectedResp            = SUB_RESPONSE_PATCH_VERSION;
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), expectedResp, USB_RECV_DATA_MS);
+}
+
+// What the slot holds, as a hash of the patch SET_PATCH would carry - so a re-download that only
+// brings back what the editor itself wrote can be told from the G2 putting a different patch there.
+static uint64_t slot_content_hash(uint32_t slot) {
+    static uint8_t buff[SEND_MESSAGE_SIZE];    // USB thread only
+    uint32_t       bitPos      = 0;
+    uint32_t       contentFrom = 0;
+    uint64_t       hash        = 1469598103934665603ull;
+
+    memset(buff, 0, sizeof(buff));
+    build_slot_patch(slot, buff, &bitPos, &contentFrom);
+
+    for (uint32_t i = BIT_TO_BYTE(contentFrom); i < BIT_TO_BYTE(bitPos); i++) {
+        hash = (hash ^ buff[i]) * 1099511628211ull;
+    }
+
+    return hash;
+}
+
+static int send_set_patch_name(uint32_t slot, const char * name) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_SET_PATCH_NAME);  // 0x27 — used for set AND response
+    write_clavia_string(buff, &bitPos, name);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_assign_knob(uint32_t slot, uint32_t location, uint32_t moduleIndex, uint32_t paramIndex, uint32_t knobIndex) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_ASSIGN_KNOB);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)(location << 6));
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)knobIndex);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_deassign_knob(uint32_t slot, uint32_t knobIndex) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_DEASSIGN_KNOB);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)knobIndex);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_assign_global_knob(uint32_t slotIndex, uint32_t location, uint32_t moduleIndex, uint32_t paramIndex, uint32_t knobIndex) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_ASSIGN_GLOBAL_KNOB);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)((slotIndex << 4) | (location << 2)));
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramIndex);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)knobIndex);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_deassign_global_knob(uint32_t knobIndex) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_DEASSIGN_GLOBAL_KNOB);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)knobIndex);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_assign_midi_cc(uint32_t slot, uint32_t location, uint32_t moduleIndex, uint32_t paramIndex, uint32_t midiCC) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_ASSIGN_MIDICC);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)location);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)moduleIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)paramIndex);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)midiCC);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_deassign_midi_cc(uint32_t slot, uint32_t midiCC) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_DEASSIGN_MIDICC);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)midiCC);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// notes §60
+static int send_play_note(uint32_t note, bool on) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_PLAY_NOTE);
+    write_bit_stream(buff, &bitPos, 8, on ? 0 : 1);   // 0 = sound it, 1 = release it — see above
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)note);
+    return send_message(buff, BIT_TO_BYTE(bitPos));
+}
+
+// notes §61
+static int send_ctrl_snapshot(uint32_t slot) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_CTRL_SNAPSHOT);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_copy_variation(uint32_t slot, uint32_t fromVariation, uint32_t toVariation) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_slot(buff, &bitPos, slot, COMMAND_REQ, SUB_COMMAND_COPY_VARIATION);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)fromVariation);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)toVariation);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_set_master_clock_bpm(uint32_t bpm) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_SET_MASTER_CLOCK);
+    write_bit_stream(buff, &bitPos, 8, 0xFF);
+    write_bit_stream(buff, &bitPos, 8, 0x01);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)bpm);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_set_master_clock_run(uint32_t running) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_COMMAND_SET_MASTER_CLOCK);
+    write_bit_stream(buff, &bitPos, 8, 0xFF);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    write_bit_stream(buff, &bitPos, 8, running ? 0x01 : 0x00);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// Write all synth (global) settings back to the G2.
+static int send_synth_settings(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+    uint32_t i                       = 0;
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_SET_SYNTH_SETTINGS);
+
+    write_clavia_string(buff, &bitPos, gSynthSettings.name);
+
+    write_bit_stream(buff, &bitPos, 1, gGlobalSettings.perfMode);
+    write_bit_stream(buff, &bitPos, 5, 0);
+    write_bit_stream(buff, &bitPos, 2, gSynthSettings.patchSortMode);
+    write_bit_stream(buff, &bitPos, 6, 0);
+    write_bit_stream(buff, &bitPos, 2, gSynthSettings.perfSortMode);
+
+    write_bit_stream(buff, &bitPos, 8, gSynthSettings.perfBank);
+    write_bit_stream(buff, &bitPos, 8, gSynthSettings.perfLocation);
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.memoryProtect);
+    write_bit_stream(buff, &bitPos, 7, 0);        // unknown
+
+    for (i = 0; i < 4; i++) {
+        write_bit_stream(buff, &bitPos, 8, gSynthSettings.midiChanSlot[i]);
+    }
+
+    write_bit_stream(buff, &bitPos, 8, gSynthSettings.globalChan);
+    write_bit_stream(buff, &bitPos, 8, gSynthSettings.sysexId);
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.localOn);
+    write_bit_stream(buff, &bitPos, 7, 0);        // unknown
+    write_bit_stream(buff, &bitPos, 6, 0);        // unknown
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.progChangeRcv);
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.progChangeSnd);
+    write_bit_stream(buff, &bitPos, 6, 0);        // unknown
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.controllersRcv);
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.controllersSnd);
+
+    write_bit_stream(buff, &bitPos, 1, 0);
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.sendClock);
+    write_bit_stream(buff, &bitPos, 1, !gSynthSettings.receiveClock);
+    write_bit_stream(buff, &bitPos, 5, 0);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)gSynthSettings.tuneCent);
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.globalShiftActive);
+    write_bit_stream(buff, &bitPos, 7, 0);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)gSynthSettings.globalOctaveShift);
+    write_bit_stream(buff, &bitPos, 8, (uint8_t)gSynthSettings.tuneSemi);
+
+    write_bit_stream(buff, &bitPos, 8, 0);        // filler - possibly should be vibrato rate, but doesn't seem to work
+    write_bit_stream(buff, &bitPos, 1, gSynthSettings.pedalPolarity);
+    write_bit_stream(buff, &bitPos, 1, 1);
+    write_bit_stream(buff, &bitPos, 6, 0);
+    write_bit_stream(buff, &bitPos, 8, gSynthSettings.pedalGain);
+
+    for (i = 0; i < 16; i++) {
+        write_bit_stream(buff, &bitPos, 8, 0);
+    }
+
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// notes §62
+static int apply_synth_settings_restore(void) {
+    int  result   = EXIT_FAILURE;
+
+    char msg[256] = {0};
+
+    if (!device_ready()) {
+        LOG_ERROR("apply_synth_settings_restore: G2 is not connected\n");
+        post_alert_response("Restore Synth Settings", "Restore failed: the G2 is not connected");
+        return EXIT_FAILURE;
+    }
+    gSynthSettings = sSynthSettingsRestoreStaged;
+    result         = send_synth_settings();
+
+    if (result == EXIT_SUCCESS) {
+        snprintf(msg, sizeof(msg), "Synth Settings restored from %s", gSynthRestorePeekFileName);
+    } else {
+        snprintf(msg, sizeof(msg), "Synth Settings restore failed");
+    }
+    post_alert_response("Restore Synth Settings", msg);
+    return result;
+}
+
+// notes §63
+static int restore_everything(const char * srcFolder) {
+    uint32_t     totalPatches       = 0;
+    uint32_t     totalPerfs         = 0;
+    uint32_t     patchBanksSkipped  = 0;
+    uint32_t     perfBanksSkipped   = 0;
+    uint32_t     patchBanksRestored = 0;
+    uint32_t     perfBanksRestored  = 0;
+    const char * settingsStatus     = "failed";
+    bool         aborted            = false;
+    char         manifestPath[1280] = {0};
+    char         msg[256]           = {0};
+
+    if (!device_ready()) {
+        LOG_ERROR("restore_everything: G2 is not connected\n");
+        post_alert_response("Restore Everything", "Restore Everything failed: the G2 is not connected");
+        return EXIT_FAILURE;
+    }
+    gBankRestoreIsEverything = true;
+    gBankRestoreActive       = true;
+    call_wake_glfw();
+
+    for (uint32_t bank = 0; (bank < NUM_PATCH_BANKS) && !aborted; bank++) {
+        if (gotBadConnectionIndication) {
+            LOG_ERROR("restore_everything: aborting early — lost connection to device\n");
+            aborted = true;
+            break;
+        }
+        snprintf(manifestPath, sizeof(manifestPath), "%s/PatchBank%u.pchList", srcFolder, bank + 1);
+
+        if (access(manifestPath, F_OK) != 0) {
+            patchBanksSkipped++;
+            continue;
+        }
+
+        if (restore_bank(bank, bank, srcFolder, false, true) != EXIT_SUCCESS) {
+            aborted = true;
+            break;
+        }
+        totalPatches += gBankRestoreWritten;
+        patchBanksRestored++;
+    }
+
+    if (!aborted) {
+        for (uint32_t bank = 0; bank < NUM_PERF_BANKS; bank++) {
+            if (gotBadConnectionIndication) {
+                LOG_ERROR("restore_everything: aborting early — lost connection to device\n");
+                aborted = true;
+                break;
+            }
+            snprintf(manifestPath, sizeof(manifestPath), "%s/PerfBank%u.pchList", srcFolder, bank + 1);
+
+            if (access(manifestPath, F_OK) != 0) {
+                perfBanksSkipped++;
+                continue;
+            }
+
+            if (restore_bank(bank, bank, srcFolder, true, true) != EXIT_SUCCESS) {
+                aborted = true;
+                break;
+            }
+            totalPerfs += gBankRestoreWritten;
+            perfBanksRestored++;
+        }
+    }
+
+    if (!aborted) {
+        char synthPath[1280] = {0};
+
+        if (!find_latest_synth_settings_backup(srcFolder, synthPath, sizeof(synthPath))) {
+            settingsStatus = "skipped, no backup found";
+        } else if (!parse_synth_settings_backup_file(synthPath, &sSynthSettingsRestoreStaged)) {
+            settingsStatus = "skipped, backup file unreadable";
+        } else {
+            gSynthSettings = sSynthSettingsRestoreStaged;
+            settingsStatus = (send_synth_settings() == EXIT_SUCCESS) ? "restored" : "failed";
+        }
+    }
+    gBankRestoreActive       = false;
+    gBankRestoreIsEverything = false; // done — reset now the drain no longer does it
+
+    if (aborted) {
+        snprintf(msg, sizeof(msg),
+                 "Restore Everything stopped: %u patch%s across %u bank%s and %u performance%s across %u bank%s written before the failure",
+                 totalPatches, totalPatches == 1 ? "" : "es", patchBanksRestored, patchBanksRestored == 1 ? "" : "s",
+                 totalPerfs, totalPerfs == 1 ? "" : "s", perfBanksRestored, perfBanksRestored == 1 ? "" : "s");
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "Restore Everything complete: %u patch%s across %u bank%s (%u skipped, no manifest), "
+                 "%u performance%s across %u bank%s (%u skipped, no manifest), synth settings %s",
+                 totalPatches, totalPatches == 1 ? "" : "es", patchBanksRestored, patchBanksRestored == 1 ? "" : "s", patchBanksSkipped,
+                 totalPerfs, totalPerfs == 1 ? "" : "s", perfBanksRestored, perfBanksRestored == 1 ? "" : "s", perfBanksSkipped,
+                 settingsStatus);
+    }
+    post_alert_response("Restore Everything", msg);
+    return aborted ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+static int send_set_patch_descr(uint32_t slot) { // Note - currently using values straight from patchDescr in sub-function
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    write_bit_stream(buff, &bitPos, 8, 0x01);
+    write_bit_stream(buff, &bitPos, 8, COMMAND_REQ | COMMAND_SLOT | slot);
+    write_bit_stream(buff, &bitPos, 8, gGlobalSettings.slot[slot].patchVersion);
+    write_patch_descr(slot, buff, &bitPos);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_perf_header(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint8_t  payload[512]            = {0};
+    uint32_t buffBitPos              = BYTE_TO_BIT(COMMAND_OFFSET);
+    uint32_t bitPos                  = 0;
+    uint32_t i                       = 0;
+
+    // protocol.c notes §26 - the same section a .prf2 holds; its 0x11 is the message type below
+    write_perf_header(payload, &bitPos);
+
+    uint32_t totalBytes              = BIT_TO_BYTE(bitPos);
+
+    usb_cmd_sys(buff, &buffBitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_RESPONSE_PERF_HEADER);
+
+    for (i = 1; i < totalBytes && BIT_TO_BYTE(buffBitPos) < SEND_MESSAGE_SIZE; i++) {
+        write_bit_stream(buff, &buffBitPos, 8, payload[i]);
+    }
+
+    return send_and_receive(buff, BIT_TO_BYTE(buffBitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+static int send_perf_name(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, (uint8_t)gGlobalSettings.perfVersion, SUB_RESPONSE_PERFORMANCE_SETTINGS);
+
+    write_clavia_string(buff, &bitPos, gGlobalSettings.perfName);
+
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_OK, USB_RECV_ACK_MS);
+}
+
+// SUB_COMMAND_SET_PARAM_MODE (0x3e) is the performance-mode change.
+// Version byte 0x41 matches all other connection-level sys commands.
+static int send_perf_mode_change(uint8_t perfMode) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_SET_PARAM_MODE);
+    write_bit_stream(buff, &bitPos, 8, perfMode ? 1 : 0);
+    write_bit_stream(buff, &bitPos, 8, 0x00);
+    return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PERF_PATCH_VERSIONS, USB_RECV_ACK_MS);
+}
+
+// notes §64
+static tNameTableEntry sSweepPatchNames[NUM_PATCH_BANKS][NUM_LOCATIONS_PER_BANK];
+static tNameTableEntry sSweepPerfNames[NUM_PERF_BANKS][NUM_LOCATIONS_PER_BANK];
+
+static bool            sNameSweepActive = false;
+static uint8_t         sNameSweepMode   = BANK_UPLOAD_DOMAIN_PATCH;
+static uint8_t         sNameSweepBank   = 0;
+static uint8_t         sNameSweepLoc    = 0;
+static uint32_t        sNameSweepGuard  = 0; // safety cap in case a response is ever malformed enough to not converge
+
+// Points the parser back at the live tables. Any sweep in progress is abandoned, staging and all.
+static void name_sweep_stop(void) {
+    sPatchNameTarget = gPatchNameTable;
+    sPerfNameTarget  = gPerfNameTable;
+    sNameSweepActive = false;
+}
+
+static void name_sweep_begin(void) {
+    memset(sSweepPatchNames, 0, sizeof(sSweepPatchNames));
+    memset(sSweepPerfNames, 0, sizeof(sSweepPerfNames));
+    sPatchNameTarget = sSweepPatchNames;
+    sPerfNameTarget  = sSweepPerfNames;
+    sNameSweepMode   = BANK_UPLOAD_DOMAIN_PATCH;
+    sNameSweepBank   = 0;
+    sNameSweepLoc    = 0;
+    sNameSweepGuard  = 0;
+    sNameSweepActive = true;
+
+    // Marked incomplete for the whole of the sweep, so a run that is interrupted by a disconnect
+    // or a quit leaves the saved cache flagged as partial and the next run re-reads it.
+    name_cache_set_complete(false);
+}
+
+// notes §65
+static void name_tables_edited(void) {
+    if (sNameSweepActive) {
+        name_sweep_begin();
+    } else {
+        name_cache_save();
+    }
+}
+
+// One request per call. Returns true while there is more to read.
+static bool name_sweep_step(void) {
+    uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
+    uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
+
+    if (!sNameSweepActive) {
+        return false;
+    }
+    usb_cmd_sys(buff, &bitPos, 0x41, SUB_COMMAND_LIST_NAMES);
+    write_bit_stream(buff, &bitPos, 8, sNameSweepMode);
+    write_bit_stream(buff, &bitPos, 8, sNameSweepBank);
+    write_bit_stream(buff, &bitPos, 8, sNameSweepLoc);
+
+    if (send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_LIST_NAMES, USB_RECV_DATA_MS) != EXIT_SUCCESS) {
+        LOG_ERROR("name_sweep_step: request failed for mode=%u bank=%u location=%u — abandoning sweep\n",
+                  sNameSweepMode, sNameSweepBank, sNameSweepLoc);
+        name_sweep_stop();
+        return false;
+    }
+
+    if (++sNameSweepGuard > 4000) {
+        LOG_ERROR("name_sweep_step: guard tripped for mode=%u, abandoning sweep\n", sNameSweepMode);
+        name_sweep_stop();
+        return false;
+    }
+
+    if (!sListNamesFinished) {
+        uint8_t nextBank = sListNamesNextBank;
+        uint8_t nextLoc  = sListNamesNextLoc;
+        uint8_t maxBanks = (sNameSweepMode == BANK_UPLOAD_DOMAIN_PATCH) ? NUM_PATCH_BANKS : NUM_PERF_BANKS;
+
+        // notes §66
+        if (  (nextLoc >= NUM_LOCATIONS_PER_BANK)
+           || ((nextBank == sNameSweepBank) && (nextLoc <= sNameSweepLoc))) {
+            nextBank++;
+            nextLoc = 0;
+        }
+
+        if (nextBank < maxBanks) {
+            sNameSweepBank = nextBank;
+            sNameSweepLoc  = nextLoc;
+            return true;
+        }
+        sListNamesFinished = true;  // ran off the end of the domain without the device saying so
+    }
+
+    if (sNameSweepMode < BANK_UPLOAD_DOMAIN_PERFORMANCE) {
+        sNameSweepMode++;
+        sNameSweepBank = 0;
+        sNameSweepLoc  = 0;
+        return true;
+    }
+    // Both domains read. Swap the staging tables in, remember them, and stand down.
+    memcpy(gPatchNameTable, sSweepPatchNames, sizeof(gPatchNameTable));
+    memcpy(gPerfNameTable, sSweepPerfNames, sizeof(gPerfNameTable));
+    name_sweep_stop();
+    name_cache_save();
+    name_cache_set_complete(true);
+    LOG_DEBUG("Name sweep complete (%u requests) — cache written\n", sNameSweepGuard);
+    call_wake_glfw();
+    return false;
+}
+
+// ---------------------------------------------------------------------------
+// Init sequences — linear, no state machine
+// ---------------------------------------------------------------------------
+
+// First connection: G2 is authoritative — pull all patch data from hardware.
+static int send_init_sequence_pull(void) {
+    LOG_DEBUG("Init sequence: pulling from G2\n");
+
+    // Clear any stale data before pulling fresh state
+    database_clear_cables();
+    database_clear_modules();
+
+    send_init();
+    send_stop();
+
+    for (uint32_t slot = 0; slot < MAX_SLOTS; slot++) {
+        send_get_patch_version(slot);
+    }
+
+    send_get_patch_version(4); // Performance slot
+    send_get_synth_settings();
+    send_get_midi_cc();
+    send_select_slot(0);
+    send_get_global_page();
+    send_get_performance_settings();
+
+    for (uint32_t slot = 0; slot < MAX_SLOTS; slot++) {
+        if (send_get_patch_data(slot) != EXIT_SUCCESS) {
+            LOG_DEBUG("Setting to eCommsReconnecting state, due to send_get_patch_data(slot) failing\n");
+            gCommsState = eCommsReconnecting;
+            return EXIT_FAILURE;
+        }
+    }
+
+    send_get_slot_selection();
+    send_get_assigned_voices();
+    send_get_global_knobs();
+    send_get_master_clock();
+
+    // notes §67
+    if (name_cache_load()) {
+        LOG_DEBUG("Name tables restored from cache (%s)\n",
+                  name_cache_is_complete() ? "complete" : "partial, will be re-read");
+    }
+    name_sweep_begin();
+
+    send_start();
+
+    LOG_DEBUG("Pull init sequence complete\n");
+    forget_bank_origin(BANK_ORIGIN_PERF);    // what the G2 holds now came from somewhere we did not see
+    g2_replaced_patch(BANK_ORIGIN_PERF);
+
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        gotPatchChangeIndication[i] = false;
+    }
+
+    call_full_patch_change_notify();
+    call_wake_glfw();
+
+    return EXIT_SUCCESS;
+}
+
+// notes §68
+__attribute__((unused))
+
+static int send_init_sequence_push(void) {
+    LOG_DEBUG("Init sequence: pushing editor data to G2\n");
+
+    send_init();
+    send_stop();
+    send_synth_settings();
+
+    for (uint32_t slot = 0; slot < MAX_SLOTS; slot++) {
+        if (push_slot_to_device(slot) != EXIT_SUCCESS) {
+            LOG_DEBUG("Setting to eCommsReconnecting state, due to push_slot_to_device(slot) failing\n");
+            gCommsState = eCommsReconnecting;
+            return EXIT_FAILURE;
+        }
+    }
+
+    // TODO - Maybe if/when we can write some of these items, we send data from the editor
+    send_get_midi_cc();
+    send_get_performance_settings();
+    send_get_assigned_voices();
+    send_get_global_knobs();
+    send_get_master_clock();
+
+    send_start();
+
+    LOG_DEBUG("Push init sequence complete\n");
+
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        gotPatchChangeIndication[i] = false;
+    }
+
+    call_full_patch_change_notify();
+    call_wake_glfw();
+
+    return EXIT_SUCCESS;
+}
+
+// Pushes the current in-memory performance (all 4 slots + perf name/header/master clock) to the
+// device. Shared by eMsgCmdWritePerf and the perf load path. Clears the patch-change-indication flags
+// on success so the writes we just made don't immediately trigger redundant read-backs.
+static int push_perf_to_device(void) {
+    int retVal = EXIT_FAILURE;
+
+    for (uint32_t s = 0; s < MAX_SLOTS; s++) {
+        retVal = push_slot_to_device(s);
+    }
+
+    if (retVal == EXIT_SUCCESS) {
+        retVal = send_perf_name();
+    }
+
+    if (retVal == EXIT_SUCCESS) {
+        retVal = send_perf_header();
+    }
+
+    if (retVal == EXIT_SUCCESS) {
+        retVal = send_set_master_clock_bpm(gGlobalSettings.masterClock);
+    }
+
+    if (retVal == EXIT_SUCCESS) {
+        retVal = send_set_master_clock_run(gGlobalSettings.masterClockRunning);
+    }
+
+    if (retVal == EXIT_SUCCESS) {
+        for (int i = 0; i < MAX_SLOTS; i++) {
+            gotPatchChangeIndication[i] = false;
+        }
+
+        call_full_patch_change_notify();
+        call_wake_glfw();
+    }
+    return retVal;
+}
+
+// notes §69
+static int read_g2_file_payload(const char * filePath, uint8_t ** outBuf, int64_t * outOffset, int64_t * outLen, uint8_t * outType) {
+    FILE *    file       = fopen(filePath, "rb");
+
+    if (file == NULL) {
+        LOG_ERROR("read_g2_file_payload: cannot open %s\n", filePath);
+        return EXIT_FAILURE;
+    }
+    fseek(file, 0, SEEK_END);
+    long      fileSize   = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    if ((fileSize <= 4) || (fileSize > PERF_FILE_SIZE)) {
+        LOG_ERROR("read_g2_file_payload: bad file size %ld\n", fileSize);
+        fclose(file);
+        return EXIT_FAILURE;
+    }
+    uint8_t * buff       = (uint8_t *)malloc((size_t)fileSize);
+
+    if (buff == NULL) {
+        LOG_ERROR("read_g2_file_payload: alloc failed\n");
+        fclose(file);
+        return EXIT_FAILURE;
+    }
+    size_t    readSize   = fread(buff, 1, (size_t)fileSize, file);
+    fclose(file);
+
+    if (readSize != (size_t)fileSize) {
+        LOG_ERROR("read_g2_file_payload: short read\n");
+        free(buff);
+        return EXIT_FAILURE;
+    }
+    int64_t   byteOffset = 0;
+
+    for (int64_t i = 0; i < fileSize; i++) {
+        if (buff[i] == 0x00) {
+            byteOffset = i + 1;
+            break;
+        }
+    }
+
+    uint16_t  readCrc    = (uint16_t)((buff[fileSize - 2] << 8) | buff[fileSize - 1]);
+    uint16_t  calcCrc    = calc_crc16(buff + byteOffset, (int)((fileSize - byteOffset) - 2));
+
+    if (readCrc != calcCrc) {
+        LOG_WARNING("read_g2_file_payload: CRC check failed for %s\n", filePath);
+        free(buff);
+        return EXIT_FAILURE;
+    }
+
+    if (outType != NULL) {
+        *outType = buff[byteOffset + 1]; // type byte follows the version byte (0 = patch, 1 = perf)
+    }
+    byteOffset += 2; // skip version + type bytes
+
+    *outBuf     = buff;
+    *outOffset  = byteOffset;
+    *outLen     = (fileSize - byteOffset) - 2; // minus the trailing 2-byte CRC
+    return EXIT_SUCCESS;
+}
+
+static void post_sending_to_device(void);
+
+static int load_perf_from_payload(uint8_t * buff, int64_t byteOffset, int64_t payloadLen, const char * filePath) {
+    // Switch the device to perf mode first if needed. Unlike eMsgCmdWriteModePerf we deliberately
+    // do NOT follow it with send_get_performance_settings() here: that would read the OLD perf's
+    // slot names into gGlobalSettings, and we're about to overwrite all of that from the file.
+    if (gGlobalSettings.perfMode == 0) {
+        send_perf_mode_change(1);
+    }
+
+    // notes §70
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        gotPatchChangeIndication[i] = false;
+    }
+
+    gotPerfSettingsChangeIndication = false;
+
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        clear_slot_data_usb(i);
+    }
+
+    // Derive performance name from the filename (strip directory and .prf2 extension).
+    {
+        const char * slash    = strrchr(filePath, '/');
+        const char * baseName = slash ? slash + 1 : filePath;
+        COPY_STRING(gGlobalSettings.perfName, baseName);
+        char *       dot      = strrchr(gGlobalSettings.perfName, '.');
+
+        if (dot) {
+            *dot = '\0';
+        }
+    }
+
+    forget_bank_origin(BANK_ORIGIN_PERF);
+    gGlobalSettings.perfMode        = 1;
+    parse_perf(buff + byteOffset, (int)payloadLen);
+
+    for (uint32_t s = 0; s < MAX_SLOTS; s++) {
+        protocol_upgrade_patch(s, buff[byteOffset - 2]);     // protocol.c notes §28 - before the push
+    }
+
+    perf_engine_only_header_apply(buff, (size_t)byteOffset); // patchWrite.c notes §3
+    free(buff);
+    sound_engine_start_performance();                        // soundEngine notes §216
+    call_full_patch_change_notify();
+    post_sending_to_device();
+
+    int retVal = push_perf_to_device();
+
+    // notes §71
+    gotPerfSettingsChangeIndication = true;
+
+    return retVal;
+}
+
+// notes §72
+static int load_patch_from_payload(uint8_t * buff, int64_t byteOffset, int64_t payloadLen, const char * filePath, uint32_t slot) {
+    // Drop any pending patch-change indication for this slot so a later state_handler() pass doesn't
+    // read the old device patch back over what we're about to parse and write.
+    gotPatchChangeIndication[slot] = false;
+
+    forget_bank_origin(slot);
+    clear_slot_data_usb(slot);
+    parse_patch(slot, buff + byteOffset, (uint32_t)payloadLen);
+    protocol_upgrade_patch(slot, buff[byteOffset - 2]);         // protocol.c notes §28 - before the push
+    engine_only_header_apply(slot, buff, (size_t)byteOffset);   // patchWrite.c notes §2
+    set_patch_name_from_filename(slot, filePath);
+    free(buff);
+    call_full_patch_change_notify();
+    post_sending_to_device();
+
+    int retVal = push_slot_to_device(slot);
+
+    call_full_patch_change_notify();
+    call_wake_glfw();
+    return retVal;
+}
+
+// Reads a .pch2/.prf2, checks its CRC, sniffs the type byte (0 = patch, 1 = perf) and dispatches to
+// the right loader — all on the USB thread (eMsgCmdLoadFile). The UI thread only passes the path, so
+// it touches neither the file nor the shared DB on load. The payload loaders free the buffer.
+static int load_file_to_device(const char * filePath, uint32_t slot) {
+    uint8_t * buff       = NULL;
+    int64_t   byteOffset = 0;
+    int64_t   payloadLen = 0;
+    uint8_t   type       = 0;
+
+    if (read_g2_file_payload(filePath, &buff, &byteOffset, &payloadLen, &type) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+    }
+
+    if (type == 0) {
+        return load_patch_from_payload(buff, byteOffset, payloadLen, filePath, slot);
+    }
+    return load_perf_from_payload(buff, byteOffset, payloadLen, filePath);
+}
+
+// Post an op result back to the UI thread on the reverse queue, then wake the render loop to drain it.
+// First user of the reverse (USB->UI) message channel — see reverse-queue-design.md.
+static void post_file_result_response(uint32_t responseType, int32_t result, const char * path) {
+    tMessageContent rsp = {0};
+
+    rsp.cmd                   = responseType; // eResponseType on the response queue (not eMsgCmd)
+    rsp.fileResultData.result = result;
+
+    if (path != NULL) {
+        COPY_STRING(rsp.fileResultData.path, path);
+    }
+    msg_send(&gToGuiThread, &rsp);
+    call_wake_glfw();
+}
+
+// notes §78 - the file is parsed and on screen; what is left is writing it to the G2
+static void post_sending_to_device(void) {
+    post_file_result_response(eRspDeviceOpStage, EXIT_SUCCESS, "Sending to the G2...");
+}
+
+// Post a bare (payload-less) response — just a signal of the given eResponseType. Used by the peek
+// flows: the peek data itself is already in the gStore/Delete/Load/SynthRestorePeek* globals, so the
+// UI drain only needs the "ready" nudge to read them and open the confirm dialog.
+static void post_response(uint32_t responseType) {
+    tMessageContent rsp = {0};
+
+    rsp.cmd = responseType;
+    msg_send(&gToGuiThread, &rsp);
+    call_wake_glfw();
+}
+
+// Post a plain completion alert (title + message) to the UI thread, then wake the render loop. Used
+// by the whole-bank / store / delete / load / synth-settings ops that just want to show a result.
+static void post_alert_response(const char * title, const char * message) {
+    tMessageContent rsp = {0};
+
+    rsp.cmd = eRspAlert;
+
+    if (title != NULL) {
+        COPY_STRING(rsp.alertData.title, title);
+    }
+
+    if (message != NULL) {
+        COPY_STRING(rsp.alertData.message, message);
+    }
+    msg_send(&gToGuiThread, &rsp);
+    call_wake_glfw();
+}
+
+// notes §73
+static bool command_needs_stop_start(uint32_t cmd) {
+    switch (cmd) {
+        case eMsgCmdSetValue:
+        case eMsgCmdSetParamMorph:
+        case eMsgCmdSetCustomData:
+        case eMsgCmdPeekSynthSettingsRestore:
+            return false;
+
+        default:
+            return true;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// send_write_data — runtime command dispatch
+// ---------------------------------------------------------------------------
+
+// dataBase.c notes §8 - does this edit name a module the G2 does not have? Then it is the engine's alone.
+static bool names_engine_only_module(const tMessageContent * msg) {
+    uint32_t           slot = msg->slot;
+    const tModuleKey * key  = NULL;
+
+    switch (msg->cmd) {
+        case eMsgCmdSetValue:          key = &msg->paramData.moduleKey;
+            break;
+        case eMsgCmdSetParamMorph:     key = &msg->paramMorphData.moduleKey;
+            break;
+        case eMsgCmdSetMode:           key = &msg->modeData.moduleKey;
+            break;
+        case eMsgCmdMoveModule:
+        case eMsgCmdDeleteModule:
+        case eMsgCmdSetModuleUpRate:   key = &msg->moduleData.moduleKey;
+            break;
+        case eMsgCmdSetModuleLabel:    key = &msg->moduleLabelData.moduleKey;
+            break;
+        case eMsgCmdSetModuleColour:   key = &msg->moduleColourData.moduleKey;
+            break;
+        case eMsgCmdSetMutationLock:   key = &msg->moduleMutationLockData.moduleKey;
+            break;
+        case eMsgCmdAssignKnob:        key = &msg->knobAssignData.moduleKey;
+            break;
+        case eMsgCmdAssignMidiCC:      key = &msg->midiCCAssignData.moduleKey;
+            break;
+        case eMsgCmdSetParamLabel:     key = &msg->paramLabelData.moduleKey;
+            break;
+        case eMsgCmdSetCustomData:     key = &msg->customDataMsg.moduleKey;
+            break;
+        case eMsgCmdWriteModule:
+        {
+            return module_is_engine_only((tModuleType)msg->moduleData.type)
+                   || database_index_is_engine_only(slot, msg->moduleData.moduleKey.location, msg->moduleData.moduleKey.index);
+        }
+        case eMsgCmdWriteCable:
+        case eMsgCmdSetCableColour:
+        case eMsgCmdDeleteCable:
+        {
+            return database_index_is_engine_only(slot, msg->cableData.location, msg->cableData.moduleFromIndex)
+                   || database_index_is_engine_only(slot, msg->cableData.location, msg->cableData.moduleToIndex);
+        }
+        default:
+        {
+            return false;
+        }
+    }
+    return database_index_is_engine_only(slot, key->location, key->index);
+}
+
+static int send_write_data(tMessageContent * messageContent) {
+    int  retVal    = EXIT_FAILURE;
+    bool needsStop = command_needs_stop_start(messageContent->cmd);
+
+    if (names_engine_only_module(messageContent)) {
+        return EXIT_SUCCESS;
+    }
+
+    if (needsStop) {
+        send_stop();
+    }
+
+    switch (messageContent->cmd) {
+        case eMsgCmdSetValue:
+            retVal = send_set_param_value(messageContent->slot, messageContent->paramData.moduleKey, messageContent->paramData.param, messageContent->paramData.value, messageContent->paramData.variation);
+            break;
+
+        case eMsgCmdSetMode:
+            retVal = send_set_mode(messageContent->slot, &messageContent->modeData);
+            break;
+
+        case eMsgCmdWriteCable:
+            retVal = send_write_cable(messageContent->slot, &messageContent->cableData);
+            break;
+
+        case eMsgCmdSetCableColour:
+            retVal = send_write_cable_colour(messageContent->slot, &messageContent->cableData);
+            break;
+
+        case eMsgCmdWriteModule:
+            retVal = send_add_module(messageContent->slot, &messageContent->moduleData);
+            break;
+        case eMsgCmdMoveModule:
+            retVal = send_move_module(messageContent->slot, messageContent->moduleData.moduleKey,
+                                      messageContent->moduleData.column, messageContent->moduleData.row);
+            break;
+
+        case eMsgCmdDeleteModule:
+            retVal = send_delete_module(messageContent->slot, messageContent->moduleData.moduleKey);
+            break;
+
+        case eMsgCmdSetModuleUpRate:
+            retVal = send_set_module_uprate(messageContent->slot, messageContent->moduleData.moduleKey,
+                                            messageContent->moduleData.upRate);
+            break;
+
+        case eMsgCmdDeleteCable:
+            retVal = send_delete_cable(messageContent->slot, &messageContent->cableData);
+            break;
+
+        case eMsgCmdSetParamMorph:
+            retVal = send_set_morph_range(messageContent->slot, &messageContent->paramMorphData);
+            break;
+
+        case eMsgCmdSelectVariation:
+            retVal = send_select_variation(messageContent->slot, messageContent->variationData.variation);
+            break;
+
+        case eMsgCmdSelectSlot:
+            retVal = send_select_slot(messageContent->slotData.slot);
+
+            // In patch mode a slot button moves the keyboard too, as the G2's own do; a performance's
+            // Keyboard switches decide that there
+            if ((retVal == EXIT_SUCCESS) && (gGlobalSettings.perfMode == 0)) {
+                retVal = send_keyboard_focus(messageContent->slotData.slot);
+            }
+            break;
+
+        case eMsgCmdSetModuleLabel:
+            retVal = send_set_module_label(messageContent->slot, messageContent->moduleLabelData.moduleKey, messageContent->moduleLabelData.name);
+            break;
+
+        case eMsgCmdSetPatchName:
+            retVal = send_set_patch_name(messageContent->slot, messageContent->patchName.name);
+            break;
+
+        case eMsgCmdSetModuleColour:
+            retVal = send_set_module_colour(messageContent->slot, messageContent->moduleColourData.moduleKey.location, messageContent->moduleColourData.moduleKey.index, messageContent->moduleColourData.colour);
+            break;
+
+        // CONFIRMED on real hardware - see SUB_COMMAND_SET_MUTATION_LOCK's comment in defs.h.
+        // Enqueued from action_toggle_exclude_from_mutation() (menus.c) for each toggled module.
+        case eMsgCmdSetMutationLock:
+            retVal = send_set_mutation_lock(messageContent->slot, messageContent->moduleMutationLockData.moduleKey.location, messageContent->moduleMutationLockData.moduleKey.index, messageContent->moduleMutationLockData.locked);
+            break;
+
+        case eMsgCmdWritePatch:
+        {
+            retVal                                         = push_slot_to_device(messageContent->slot);
+
+            gotPatchChangeIndication[messageContent->slot] = false; // TODO - consider if this is the right thing to do here
+            call_full_patch_change_notify();                        // TODO - not sure we need to do this here
+            call_wake_glfw();
+            break;
+        }
+
+        case eMsgCmdWritePatchDescr:
+        {
+            retVal = send_set_patch_descr(messageContent->slot);
+            break;
+        }
+
+        case eMsgCmdAssignKnob:
+        {
+            uint32_t kSlot  = messageContent->slot;
+            uint32_t kLoc   = messageContent->knobAssignData.moduleKey.location;
+            uint32_t kMod   = messageContent->knobAssignData.moduleKey.index;
+            uint32_t kParam = messageContent->knobAssignData.paramIndex;
+            uint32_t kKnob  = messageContent->knobAssignData.knobIndex;
+
+            retVal = send_assign_knob(kSlot, kLoc, kMod, kParam, kKnob);
+            break;
+        }
+
+        case eMsgCmdDeassignKnob:
+        {
+            retVal = send_deassign_knob(messageContent->slot, messageContent->knobDeassignData.knobIndex);
+            break;
+        }
+
+        case eMsgCmdAssignGlobalKnob:
+        {
+            uint32_t gkSlot  = messageContent->globalKnobAssignData.slotIndex;
+            uint32_t gkLoc   = messageContent->globalKnobAssignData.location;
+            uint32_t gkMod   = messageContent->globalKnobAssignData.moduleIndex;
+            uint32_t gkParam = messageContent->globalKnobAssignData.paramIndex;
+            uint32_t gkKnob  = messageContent->globalKnobAssignData.knobIndex;
+
+            retVal = send_assign_global_knob(gkSlot, gkLoc, gkMod, gkParam, gkKnob);
+            break;
+        }
+
+        case eMsgCmdDeassignGlobalKnob:
+        {
+            retVal = send_deassign_global_knob(messageContent->globalKnobDeassignData.knobIndex);
+            break;
+        }
+
+        case eMsgCmdAssignMidiCC:
+        {
+            uint32_t mLoc   = messageContent->midiCCAssignData.moduleKey.location;
+            uint32_t mMod   = messageContent->midiCCAssignData.moduleKey.index;
+            uint32_t mParam = messageContent->midiCCAssignData.paramIndex;
+            uint32_t mCC    = messageContent->midiCCAssignData.midiCC;
+
+            retVal = send_assign_midi_cc(messageContent->slot, mLoc, mMod, mParam, mCC);
+            break;
+        }
+
+        case eMsgCmdDeassignMidiCC:
+        {
+            retVal = send_deassign_midi_cc(messageContent->slot, messageContent->midiCCDeassignData.midiCC);
+            break;
+        }
+
+        case eMsgCmdPlayNote:
+        {
+            retVal = send_play_note(messageContent->playNoteData.note, messageContent->playNoteData.on);
+            break;
+        }
+
+        case eMsgCmdGetCurrentNote:
+        {
+            retVal = send_get_current_note(messageContent->slot);
+            break;
+        }
+
+        case eMsgCmdSendCtrlSnapshot:
+        {
+            retVal = send_ctrl_snapshot(messageContent->slot);
+            break;
+        }
+
+        case eMsgCmdCopyVariation:
+        {
+            retVal = send_copy_variation(messageContent->slot,
+                                         messageContent->copyVariationData.fromVariation,
+                                         messageContent->copyVariationData.toVariation);
+            break;
+        }
+
+        case eMsgCmdSetMasterClockBPM:
+        {
+            retVal = send_set_master_clock_bpm(messageContent->masterClockBPMData.bpm);
+            break;
+        }
+
+        case eMsgCmdSetMasterClockRun:
+        {
+            retVal = send_set_master_clock_run(messageContent->masterClockRunData.running);
+            break;
+        }
+
+        case eMsgCmdSetParamLabel:
+            retVal = send_set_param_label(messageContent->slot, messageContent->paramLabelData.moduleKey, messageContent->paramLabelData.paramIndex, messageContent->paramLabelData.name);
+            break;
+
+        case eMsgCmdWriteSynthSettings:
+            retVal = send_synth_settings();
+            break;
+
+        case eMsgCmdWriteModePerf:
+            retVal = send_perf_mode_change(1);
+            send_get_performance_settings(); // At least need the perf settings, otherwise name etc. don't come in after change. Might need other data too
+            break;
+
+        case eMsgCmdWriteModePatch:
+            retVal = send_perf_mode_change(0);
+            send_get_performance_settings(); // Same reasoning as the Perf-mode case above: masterClock (and
+                                             // notes §74
+            break;
+
+        case eMsgCmdWritePerf:
+            retVal = push_perf_to_device();
+            break;
+
+        case eMsgCmdLoadFile:
+            retVal = load_file_to_device(messageContent->patchFileData.filePath,
+                                         messageContent->patchFileData.slot);
+            post_file_result_response(eRspFileLoad, retVal, messageContent->patchFileData.filePath);
+            break;
+
+        case eMsgCmdSavePatchFile:
+            // Serialise the slot's DB to file here (not on the UI thread) so the read is atomic
+            // against this thread's own DB writes. No device traffic — pure DB->file.
+            retVal = write_database_to_file(messageContent->patchFileData.filePath, messageContent->patchFileData.slot);
+            post_file_result_response(eRspFileSave, retVal, messageContent->patchFileData.filePath);
+            break;
+
+        case eMsgCmdSavePerfFile:
+            // Same as the patch save, but a whole-DB (all 4 slots) serialise for a .prf2. Runs here so
+            // the read can't tear against this thread's async patch-change reparse. No device traffic.
+            retVal = write_perf_to_file(messageContent->patchFileData.filePath);
+            post_file_result_response(eRspFileSave, retVal, messageContent->patchFileData.filePath);
+            break;
+
+        case eMsgCmdNewPatch:
+        {
+            // init_patch (local DB reset) + push to device as one ordered command — same reason as
+            // the file-load path: nothing can re-read the device over the reset mid-sequence.
+            uint32_t slot = messageContent->patchFileData.slot;
+
+            init_patch(slot);
+            forget_bank_origin(slot);
+
+            // Offline there is nothing to push to, and attempting it would fail the whole command
+            // and report an error for what was a perfectly good local reset.
+            if (gCommsState == eCommsOnLine) {
+                retVal = push_slot_to_device(slot);
+            }
+            call_full_patch_change_notify();
+            call_wake_glfw();
+            post_file_result_response(eRspNewPatch, retVal, "");
+            break;
+        }
+
+        case eMsgCmdWritePerfSettings:
+            retVal = send_perf_header();
+            break;
+
+        case eMsgCmdWritePerfName:
+            retVal = send_perf_name();
+            break;
+
+        //case eMsgCmdReloadAllPatchData:  // TODO - do we really want to reload all patch data, and is it just patch data - this is currently doing a lot more
+        //    LOG_DEBUG("\nGot msg queue command to read all patch data\n\n");
+        //    retVal                         = reload_all_patch_data();
+        //    gSlot= 0;
+        //    gPatchDescr[0].activeVariation = 0;
+        //   set_exclusive_button_highlight(topbarSlotAId, topbarSlotDId,
+        //                                  (tTopbarControlId)(topbarSlotAId));
+        //    set_exclusive_button_highlight(topbarVariation1Id, topbarVariationInitId,
+        //                                  (tTopbarControlId)((uint32_t)topbarVariation1Id));
+        //   call_full_patch_change_notify();
+        //   call_wake_glfw();
+        //   break;
+
+        case eMsgCmdSetCustomData:
+        {
+            tModuleKey key    = messageContent->customDataMsg.moduleKey;
+            tModule *  module = get_module_slot(messageContent->slot, key.location, key.index);
+
+            if (module->type == moduleTypeSeqNote) {
+                retVal = send_set_seq_note_custom_data(
+                    messageContent->slot, key,
+                    messageContent->customDataMsg.customData[0],
+                    messageContent->customDataMsg.customData[1]);
+            }
+            break;
+        }
+
+        case eMsgCmdBackupBank:
+        {
+            retVal = backup_bank(messageContent->bankBackupData.bank, messageContent->bankBackupData.destFolder,
+                                 messageContent->bankBackupData.isPerf, false);
+            break;
+        }
+
+        case eMsgCmdBackupSynthSettings:
+        {
+            retVal = backup_synth_settings(messageContent->settingsBackupData.destFolder, false);
+            break;
+        }
+
+        case eMsgCmdBackupEverything:
+        {
+            retVal = backup_everything(messageContent->settingsBackupData.destFolder);
+            break;
+        }
+
+        case eMsgCmdRestoreBank:
+        {
+            retVal = restore_bank(messageContent->bankRestoreData.sourceBank, messageContent->bankRestoreData.destBank,
+                                  messageContent->bankRestoreData.srcFolder, messageContent->bankRestoreData.isPerf, false);
+            break;
+        }
+
+        case eMsgCmdPeekBankLocation:
+        {
+            retVal = peek_store_target(messageContent->bankLocationPerfData.bank, messageContent->bankLocationPerfData.location,
+                                       messageContent->bankLocationPerfData.isPerf);
+            break;
+        }
+
+        case eMsgCmdStorePatch:
+        {
+            retVal = store_patch_to_bank(messageContent->bankLocationPerfData.bank, messageContent->bankLocationPerfData.location,
+                                         messageContent->bankLocationPerfData.isPerf);
+            break;
+        }
+
+        case eMsgCmdPeekDeleteTarget:
+        {
+            retVal = peek_delete_target(messageContent->bankLocationPerfData.bank, messageContent->bankLocationPerfData.location,
+                                        messageContent->bankLocationPerfData.isPerf);
+            break;
+        }
+
+        case eMsgCmdDeleteBankLocation:
+        {
+            retVal = delete_bank_location(messageContent->bankLocationPerfData.bank, messageContent->bankLocationPerfData.location,
+                                          messageContent->bankLocationPerfData.isPerf);
+            break;
+        }
+
+        case eMsgCmdPeekLoadTarget:
+        {
+            retVal = peek_load_target(messageContent->bankLocationPerfData.bank, messageContent->bankLocationPerfData.location,
+                                      messageContent->bankLocationPerfData.isPerf);
+            break;
+        }
+
+        case eMsgCmdLoadPatch:
+        {
+            retVal = load_patch_from_bank(messageContent->bankLocationPerfData.bank, messageContent->bankLocationPerfData.location,
+                                          messageContent->bankLocationPerfData.isPerf);
+            break;
+        }
+
+        case eMsgCmdPeekSynthSettingsRestore:
+            retVal = peek_synth_settings_restore(messageContent->synthSettingsRestoreData.srcFolder);
+            break;
+
+        case eMsgCmdApplySynthSettingsRestore:
+            retVal = apply_synth_settings_restore();
+            break;
+
+        case eMsgCmdRestoreEverything:
+            retVal = restore_everything(messageContent->synthSettingsRestoreData.srcFolder);
+            break;
+
+        default:
+            LOG_DEBUG("Unknown command %d\n", messageContent->cmd);
+            break;
+    }
+
+    if (needsStop) {
+        send_start();
+    }
+    return retVal;
+}
+
+// ---------------------------------------------------------------------------
+// Main state handler — called in a tight loop from usb_thread_loop
+// ---------------------------------------------------------------------------
+
+static void state_handler(void) {
+    tMessageContent messageContent = {0};
+    bool            foundOneChange = false;
+    bool            newContent     = false;
+
+    //TODO - Don't like early returns. Use retVal
+
+    if (gotBadConnectionIndication) {
+        LOG_DEBUG("Bad connection — closing device\n");
+        gotBadConnectionIndication = false;
+        gDeviceConnected           = false;
+        gCommsState                = eCommsReconnecting;
+        name_sweep_stop();         // half a bank list is not worth swapping in, and the cache stays flagged partial
+
+        pthread_mutex_lock(&usbStaticMutex);
+        close_device();
+        pthread_mutex_unlock(&usbStaticMutex);
+
+        // Do NOT clear the database here — send_init_sequence_pull clears it
+        // once a connection is re-established and fresh state is pulled.
+
+        call_full_patch_change_notify();
+        call_wake_glfw();
+        return;
+    }
+
+    if (gCommsState == eCommsNeverConnected || gCommsState == eCommsReconnecting) {
+        bool opened = false;
+
+        // G2ALIKE_OFFLINE=1 keeps this editor off USB entirely, so a scripted test can build patches
+        // with the owner's G2 plugged in and never touch it (tools/face-shots sets it).
+        if (comms_forced_offline()) {
+            usleep(500000);
+            return;
+        }
+        pthread_mutex_lock(&usbStaticMutex);
+        opened = open_and_claim_device();
+        pthread_mutex_unlock(&usbStaticMutex);
+
+        if (opened) {
+            gCommsState = eCommsWaitingReady;
+        } else {
+            usleep(500000);  // 500ms between open attempts — don't hammer the bus
+        }
+        return;
+    }
+
+    // The user has been asked whether their offline edits or the G2's patches win, and nothing can
+    // proceed until they answer. The alert is modal, so no further edits can arrive meanwhile.
+    if (gCommsState == eCommsAwaitingSyncDecision) {
+        tMessageContent decision = {0};
+
+        if (msg_receive(&gToUsbThread, eRcvPoll, &decision) != EXIT_SUCCESS) {
+            usleep(50000);  // 50ms — waiting on a human, so nothing here needs to be tight
+            return;
+        }
+
+        if (decision.cmd != eMsgCmdResolveOfflineEdits) {
+            return;  // Nothing else should be queued while modal; ignore it rather than act on it
+        }
+
+        // Push BEFORE the pull, then pull as usual: the device ends up holding the editor's
+        // patches and the editor re-reads them, so both sides finish provably identical and the
+        // normal init sequence still runs exactly once.
+        if (decision.offlineEditData.pushToDevice) {
+            for (uint32_t slot = 0; slot < MAX_SLOTS; slot++) {
+                if ((decision.offlineEditData.slotMask & (1u << slot)) != 0) {
+                    LOG_DEBUG("Pushing editor's slot %u to the G2 after offline edits\n", slot);
+                    push_slot_to_device(slot);
+                }
+            }
+        }
+        gCommsState = eCommsWaitingReady;  // Fall through to the normal ready/init path next pass
+        return;
+    }
+
+    if (gCommsState == eCommsWaitingReady) {
+        if (send_get_patch_version(0) == EXIT_SUCCESS) {
+            // IT ANSWERED, SO WE ARE ONLINE — whatever the load sequence does next. Everything
+            // below this point is loading, not connecting, and the indicator should say so.
+            gDeviceConnected = true;
+            call_wake_glfw();
+
+            // Anything still queued was enqueued while the G2 was away, so it is both the record
+            // of what diverged and a set of increments that must NOT be replayed over the patch
+            // the pull is about to install. Drain it, and ask before pulling if it held real edits.
+            uint32_t dirtySlots = device_sync_drain_offline_edits();
+
+            if (dirtySlots != 0) {
+                tMessageContent conflict = {0};
+
+                conflict.cmd                      = eRspOfflineConflict;
+                conflict.offlineEditData.slotMask = dirtySlots;
+                msg_send(&gToGuiThread, &conflict);
+                call_wake_glfw();
+
+                gCommsState                       = eCommsAwaitingSyncDecision;
+                return;
+            }
+            LOG_DEBUG("G2 ready — starting init sequence\n");
+            int      result     = send_init_sequence_pull();
+
+            if (result == EXIT_SUCCESS) {
+                gCommsState = eCommsOnLine;
+            } else {
+                LOG_DEBUG("Init sequence failed — will retry\n");
+                pthread_mutex_lock(&usbStaticMutex);
+                close_device();
+                pthread_mutex_unlock(&usbStaticMutex);
+                gDeviceConnected = false;
+                gCommsState      = eCommsReconnecting;
+            }
+        } else if (!gotBadConnectionIndication) {
+            LOG_DEBUG("G2 not ready yet — polling\n");
+            usleep(500000);  // 500ms between readiness polls
+        }
+        return;
+    }
+
+    // Performance/patch settings changed (e.g. perf mode switch on the G2 panel).
+    // Flag coalesces rapid switches — only one full resync runs per batch.
+    if (gotPerfSettingsChangeIndication) {
+        gotPerfSettingsChangeIndication = false;
+
+        LOG_DEBUG("\nPerf settings change — reloading all slots via reload_all_patch_date()\n\n");
+
+        //if (reload_all_patch_data() != EXIT_SUCCESS) {
+        //    LOG_ERROR("reload_all_patch_data failed\n");
+        //}
+
+        send_stop();
+        send_get_performance_settings();  // TODO - maybe be some more items we need to get here
+        send_start();
+
+        sPerfStartSlots                 = 0; // soundEngine notes §216 - its slots follow as patch changes
+        sPerfStartUntilMs               = (uint64_t)get_time_ms() + PERF_START_WAIT_MS;
+
+        gSlot                           = 0;
+        gPatchDescr[0].activeVariation  = 0;
+        set_exclusive_button_highlight(topbarSlotAId, topbarSlotDId,
+                                       (tTopbarControlId)(topbarSlotAId));
+        set_exclusive_button_highlight(topbarVariation1Id, topbarVariationInitId,
+                                       (tTopbarControlId)((uint32_t)topbarVariation1Id));
+
+        call_full_patch_change_notify();
+        call_wake_glfw();
+        return;
+    }
+
+    for (int i = 0; i < MAX_SLOTS; i++) {
+        if (gotPatchChangeIndication[i] == true) {
+            gotPatchChangeIndication[i] = false;
+            LOG_DEBUG("Patch change on slot %u — reloading\n", i);
+
+            uint64_t before = slot_content_hash((uint32_t)i);
+
+            send_stop();
+            send_get_patch_data(i);
+            send_start();
+
+            if (slot_content_hash((uint32_t)i) != before) {
+                newContent = true;
+            }
+
+            // From the bank location we asked for; or from somewhere we cannot know (the G2's panel)
+            // if what came back is not what we already had - a late notice of our own write is not.
+            if (sPendingBankOrigin[i] != BANK_ORIGIN_NONE) {
+                gBankOrigin[i] = sPendingBankOrigin[i];
+                g2_replaced_patch((uint32_t)i);
+            } else if (slot_content_hash((uint32_t)i) != before) {
+                gBankOrigin[i] = BANK_ORIGIN_NONE;
+                g2_replaced_patch((uint32_t)i);
+            }
+            sPendingBankOrigin[i] = BANK_ORIGIN_NONE;
+            foundOneChange        = true;
+            sPerfStartSlots      |= 1u << i;
+        }
+    }
+
+    // soundEngine notes §216 - each pass that brings new slots of it back starts it again, until all four are in;
+    // a late notice of our own write brings nothing new
+    if ((newContent == true) && ((uint64_t)get_time_ms() < sPerfStartUntilMs)) {
+        sound_engine_start_performance();
+
+        if (sPerfStartSlots == ((1u << MAX_SLOTS) - 1u)) {
+            sPerfStartUntilMs = 0;
+        }
+    }
+
+    if (foundOneChange == true) {
+        call_full_patch_change_notify();
+        call_wake_glfw();
+        return;
+    }
+
+    // Command from UI thread
+    if (msg_receive(&gToUsbThread, eRcvPoll, &messageContent) == EXIT_SUCCESS) {
+        send_write_data(&messageContent);
+
+        return;
+    }
+
+    // Background bank-name sweep: ONE request per pass, and only having found nothing else to do,
+    // so it fills the Load/Store/Delete pickers out of the idle time between the user's actions
+    // rather than out of the eight seconds after connecting. See name_sweep_step().
+    if (sNameSweepActive) {
+        name_sweep_step();
+        return;
+    }
+#if 0
+    // Keepalive: if no outbound traffic for a while, send a lightweight request.
+    // If the G2 doesn't respond, treat it as a bad connection and force a reconnect.
+    if (time(NULL) - gLastActivityTime >= USB_KEEPALIVE_INTERVAL_S) {
+        LOG_DEBUG("USB keepalive\n");
+
+        if (send_get_patch_version(0) != EXIT_SUCCESS) {
+            LOG_DEBUG("Keepalive failed — forcing reconnect\n");
+            gotBadConnectionIndication = true;
+        }
+        return;
+    }
+#endif
+
+    // Nothing to do — poll for unsolicited messages (LED, volume, param change)
+    int_rec(ePollYes, SUB_RESPONSE_NULL, USB_RECV_POLL_MS);
+}
+
+// ---------------------------------------------------------------------------
+// Signal handler and thread entry
+// ---------------------------------------------------------------------------
+
+static void usb_comms_signal_handler(int sigraised) {
+    LOG_DEBUG("USBComms signal %d\n", sigraised);
+    _exit(0);
+}
+
+static int usb_comms_init_signals(void) {
+    signal(SIGINT, usb_comms_signal_handler);
+    signal(SIGBUS, usb_comms_signal_handler);
+    signal(SIGSEGV, usb_comms_signal_handler);
+    signal(SIGTERM, usb_comms_signal_handler);
+    signal(SIGABRT, usb_comms_signal_handler);
+    return EXIT_SUCCESS;
+}
+
+static void * usb_thread_loop(void * arg) {
+    usb_comms_init_signals();
+    msg_init(&gToUsbThread, "toUsbThread", sizeof(tMessageContent));
+    msg_init(&gToGuiThread, "toGuiThread", sizeof(tMessageContent)); // reverse: USB thread -> UI thread (drained in the render loop)
+    usb_log_open();
+
+    if (libusb_init(&libUsbCtx) != LIBUSB_SUCCESS) {
+        LOG_ERROR("libusb_init failed\n");
+        return NULL;
+    }
+    // Only if needed: libusb_set_option(libUsbCtx, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
+
+    while (!synthlib_quit_requested()) {
+        state_handler();
+    }
+    pthread_mutex_lock(&usbStaticMutex);
+    close_device();
+    pthread_mutex_unlock(&usbStaticMutex);
+
+    libusb_exit(libUsbCtx);
+    usb_log_close();
+    return NULL;
+}
+
+void usb_signal_reconnect(void) {
+    LOG_DEBUG("System wake detected — forcing USB reconnect\n");
+    gotBadConnectionIndication = true;
+}
+
+void start_usb_thread(void) {
+    if (pthread_create(&usbThread, NULL, usb_thread_loop, NULL) != EXIT_SUCCESS) {
+        LOG_ERROR("Failed to create USB thread\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+#ifdef __cplusplus
+}
+#endif

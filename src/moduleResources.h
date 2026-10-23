@@ -1,0 +1,4494 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+// NOTE - Only moduleResourcesAccess.c should be including this!
+
+#ifndef __MODULE_RESOURCES_H__
+#define __MODULE_RESOURCES_H__
+
+#include "sysIncludes.h"
+#include "defs.h"
+#include "synthlibDefs.h"
+#include "types.h"
+
+// Terminate the string maps with a NULL, so that we can work out array size
+const char *        fltClassicDbStrMap[]                    = {"12db", "18db", "24db", NULL};
+const char *        fltMultiDbStrMap[]                      = {"6db", "12db", NULL};
+const char *        emptyStrMap[]                           = {" ", NULL};
+const char *        driverTypeStrMap[]                      = {"Reed", "Bow", "-Lip-", "-Mallet-", NULL};
+const char *        octaveStrMap[]                          = {"C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", NULL};
+const char *        seqNoteMagStrMap[]                      = {"3oct", "2oct", "1oct", NULL};
+// The top step is 64, not 63: a bipolar Seq slider runs ...60, 61, 62, 64, skipping 63 - read off
+// the hardware. Same pinning PShift Fine has, and the opposite of a pan knob, which stops at +63.
+const char *        bip128StrMap[]                          = {"-64", "-63", "-62", "-61", "-60", "-59", "-58", "-57", "-56", "-55", "-54", "-53", "-52", "-51", "-50", "-49", "-48", "-47", "-46", "-45", "-44", "-43", "-42", "-41", "-40", "-39", "-38", "-37", "-36", "-35", "-34", "-33", "-32", "-31", "-30", "-29", "-28", "-27", "-26", "-25", "-24", "-23", "-22", "-21", "-20", "-19", "-18", "-17", "-16", "-15", "-14", "-13", "-12", "-11", "-10", "-9", "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "60", "61", "62", "64", NULL};
+const char *        captureStrMap[]                         = {"Closest", "Evenly", NULL};
+const char *        fltNordDbStrMap[]                       = {"12dB", "24dB", NULL};
+const char *        offTo100KbStrMap[]                      = {"Off", "25%", "50%", "75%", "100%", NULL};
+const char *        offOnStrMap[]                           = {"Off", "On", NULL};
+// LevAmp's Type offers only these two. It carried the mixer's three-way Exp/Lin/dB list, so its two
+// settings read "Exp" and "Lin" - naming a curve this module does not have, and omitting the one it
+// does.
+const char *        levAmpTypeStrMap[]                      = {"Lin", "dB", NULL};
+const char *        expStrMap[]                             = {"Exp", "Lin", "dB", NULL};
+const char *        logStrMap[]                             = {"Log", "Lin", NULL};
+// MEASURED 2026-09-07, and the second entry is a BOOST not a cut: engaging it makes a 2-Out 6.02 dB
+// LOUDER (a factor of 2.0016), on two independent modules with the write read back from the
+// instrument each time. CT saw the same thing from the panel - "it's louder at -6dB".
+//
+// WHICH ENTRY IS UNITY is settled by the chorus comparison rather than by these captures, which only
+// give ratios: hardware and engine matched in ABSOLUTE level to 0.07 dB with every pad at index 0 and
+// the engine treating index 0 as 1.0, so index 0 is unity and index 1 is the one that moves.
+//
+// CONFIRMED BY THE MANUAL, which is explicit for the Output modules: "The Pad scroll button on the
+// Input and Output modules can be used to attenuate or amplify the signals. On the Input modules you
+// can select between 0dB, -6dB, -12dB and +6dB and on the Output modules between 0dB and +6dB."
+// It is a make-up gain, and the manual's worked example uses it as one - pad the FX-In by -6 dB for
+// headroom, then take it back with +6 dB on the FX-area Output module.
+//
+// 4-Out shares this map and is unmeasured, but shares the manual's sentence. THE MIXERS DO NOT: see
+// mixerPadStrMap.
+const char *        padStrMap[]                             = {"0dB", "+6dB", NULL};
+
+// THE MIXER'S PAD IS A DIFFERENT CONTROL and used to share the map above, which had it boosting. The
+// manual: "Click the Pad scroll button to attenuate the levels on all mixer inputs by -6 dB (or
+// -12dB)." So it attenuates, and soundEngine.c's 0.5 when engaged is right where the Output module's
+// was not. UNMEASURED, and the manual's "(or -12dB)" hints at a THIRD position this two-entry table
+// cannot hold - so the value count may be wrong as well as the strings were.
+// THREE positions, measured 2026-09-07: 0.00, -6.01 and -12.04 dB, with the parameter clamping at 2
+// (writing 3 reads back 3 but sounds identical to 2). The table used to declare TWO, which matches
+// the manual's phrasing - "attenuate the levels on all mixer inputs by -6 dB (or -12dB)" - only if
+// you read the parenthesis as a second position rather than an aside. It is a second position.
+const char *        mixerPadStrMap[]                        = {"0dB", "-6dB", "-12dB", NULL};
+const char *        db12PadStrMap[]                         = {"+6dB", "0dB", "-6dB", "-12dB", NULL};
+const char *        db12BPadStrMap[]                        = {"0dB", "-6dB", "-12dB", NULL};
+const char *        gcStrMap[]                              = {"GC", "GC", NULL};
+const char *        kbStrMap[]                              = {"KB", "KB", NULL};
+const char *        sideChainStrMap[]                       = {"Side Chain", "Side Chain", NULL};
+const char *             // The Tune dial reads in whichever of these the Pitch Type selector is set to, which is why
+// render_paramType1OscFreq switches on that parameter rather than on the module. Sub is the fifth
+// setting and no module here declares a range that reaches it yet - each oscillator offers its own
+// subset through the range field (OscMaster stops at Factor, most stop at Partial), and which of
+// them also offer Sub is not established. The name is here so the fifth setting reads correctly
+// wherever it does turn up, e.g. in a patch built on the synth itself.
+                    pitchTypeStrMap[]                       = {"Semi", "Freq", "Factor", "Partial", "Sub", NULL};
+const char *        fmTypeStrMap[]                          = {"FM Lin", "FM Trk", NULL};
+const char *        envShapeStrMap[]                        = {"LogExp", "LinExp", "ExpExp", "LinLin", NULL};
+const char *        normalResetStrMap[]                     = {"Normal", "Reset", NULL};
+const char *        posStrMap[]                             = {"Pos", "PosInv", "Neg", "NegInv", "Bip", "BipInv", NULL};
+const char *        posNegInvStrMap[]                       = {"Pos", "PosInv", "Neg", "NegInv", NULL};
+const char *        posNegInvBipStrMap[]                    = {"Pos", "PosInv", "Neg", "NegInv", "Bip", NULL};
+const char *        bipPosNegStrMap[]                       = {"Bip", "Pos", "Neg", NULL};
+const char *        resonAlgStrMap[]                        = {"String1", "String2", "Tube1", "Tube2", "Tube3", NULL};
+const char *        outToStrMap[]                           = {"Out 1/2", "Out 3/4", "FX 1/2", "FX 3/4", "Bus 1/2", "Bus 3/4", "Out 5/6", "Out 7/8", "Out 9/10", "Out 11/12", "Out 13/14", "Out 15/16", NULL};
+const char *        outTo4OutStrMap[]                       = {"Out", "Fx", "Bus", NULL};
+const char *        inFxStrMap[]                            = {"FX 1/2", "FX 3/4", NULL};
+const char *        shapeTypeStrMap[]                       = {"Sine", "Tri", "Saw", "Sqr", "DualSaw", NULL};
+const char *             // Sqr50/25/10 are the three pulse widths; the synth names them that way rather than as "p25"/"p10",
+// and Sqr50 says what "squ" left implicit - a square IS the 50% pulse.
+                    shapeOscATypeStrMap[]                   = {"Sine", "Tri", "Saw", "Sqr50", "Sqr25", "Sqr10", NULL};
+const char *        reverbTypeStrMap[]                      = {"Small", "Medium", "Large", "Hall", NULL};
+const char *        polyMonoStrMap[]                        = {"Poly", "Mono", NULL};
+// RandomA/B's Range. Sub is the FIRST setting, not the fourth: this listed Rate Sub at index 3, so
+// four of its five positions named the wrong range. The random generators use the same five-way
+// range control the LFOs do, and two independent references agree on the order.
+const char *        rangeStrMap[]                           = {"Rate Sub", "Rate Lo", "Rate Hi", "BPM", "Clk", NULL};
+
+// The LFOs' own Range: 0=Sub 1=Lo 2=Hi 3=BPM 4=Clk. LfoShpA and LfoB are the ones that offer Clk.
+const char *        rangeLfoStrMap[]                        = {"Rate Sub", "Rate Lo", "Rate Hi", "BPM", "Clk", NULL};
+const char *        lfoWaveStrMap[]                         = {"Sin", "Tri", "Saw", "Squ", "RndSt", "Rnd", NULL};
+const char *        lfoShpAWaveStrMap[]                     = {"Sine", "CosBell", "TriBell", "Saw2Tri", "Sqr2Tri", "Sqr", NULL};
+const char *        rangeLfoCStrMap[]                       = {"Rate Sub", "Rate Lo", "Rate Hi", "BPM", NULL};        // 0=Sub 1=Lo 2=Hi 3=BPM; LfoC and LfoA have no Clk. Was mis-ordered {Lo,Hi,BPM,Sub}
+const char *        saturateCurveStrMap[]                   = {"1", "2", "3", "4", NULL};
+const char *        shpExpCurveStrMap[]                     = {"x2", "x3", "x4", "x5", NULL};
+const char *        pulseRangeStrMap[]                      = {"Sub", "Lo", "Hi", NULL};
+const char *        pulseModeStrMap[]                       = {"Plus", "Minus", NULL};
+const char *        logicDelayModeStrMap[]                  = {"Pos", "Neg", "Cycle", NULL};
+const char *        oscPmWaveStrMap[]                       = {"Sin", "Tri", NULL};
+const char *        rndClkBCharStrMap[]                     = {"Rnd1", "Rnd2", NULL};
+const char *        rndPatternWaveStrMap[]                  = {"Val", "State", NULL};
+const char *        bipUniStrMap[]                          = {"Bipolar", "Unipolar", NULL};
+const char *        vowelStrMap[]                           = {"A", "E", "I", "O", "U", "Y", "AA", "AE", "OE", NULL};
+const char *        nordFilterTypeStrMap[]                  = {"LP", "BP", "HP", "BR", NULL};
+const char *        staticFilterTypeStrMap[]                = {"LP", "BP", "HP", NULL};
+const char *        multiEnvSustainStrMap[]                 = {"L1", "L2", "L3", "Trg", NULL};
+const char *        drumSynthPresetNames[]                  = {"Kick 1", "Kick 2", "Kick 3", "Kick 4", "Kick 5", "Snare 1", "Snare 2", "Snare 3", "Snare 4", "Snare 5", "Tom1 1", "Tom1 2", "Tom1 3", "Tom2 1", "Tom2 2", "Tom2 3", "Tom3 1", "Tom3 2", "Tom3 3", "Cymb 1", "Cymb 2", "Cymb 3", "Cymb 4", "Cymb 5", "Perc 1", "Perc 2", "Perc 3", "Perc 4", "Perc 5", "Perc 6", NULL};
+const char *        asymSymStrMap[]                         = {"Asym", "Sym", NULL};
+const char *        odTypeStrMap[]                          = {"Soft", "Hard", "Fat", "Heavy", NULL};
+const char *        delayStrMap[]                           = {"12.5ms", "25ms", "50ms", "100ms", NULL};
+const char *        gateTypeStrMap[]                        = {"AND", "NAND", "OR", "NOR", "XOR", "NXOR", NULL};
+const char *        invStrMap[]                             = {"Pos", "Inv", NULL};
+const char *        clkSrcStrMap[]                          = {"Internal", "Master", NULL};
+// ClkGen's Sync every. SIX settings, each twice the last - not the sixteen consecutive beats the
+// shared 1..16 list gave it. Confirmed on the hardware and in both references.
+const char *        clkGenBeatSyncStrMap[]                  = {"1", "2", "4", "8", "16", "32", NULL};
+const char *        int16StrMap[]                           = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", NULL};
+const char *        divModeStrMap[]                         = {"Gated", "Toggled", NULL};
+const char *        out8StrMap[]                            = {"Out 1", "Out 2", "Out 3", "Out 4", "Out 5", "Out 6", "Out 7", "Out 8", NULL};
+const char *        in8StrMap[]                             = {"In 1", "In 2", "In 3", "In 4", "In 5", "In 6", "In 7", "In 8", NULL};
+const char *        rectStrMap[]                            = {"HalfPos", "HalfNeg", "FullPos", "FullNeg", NULL};
+const char *        shpStaticStrMap[]                       = {"Inv x3", "Inv x2", "x2", "x3", NULL};
+const char *        trigGateStrMap[]                        = {"Trig", "Gate", NULL};
+const char *        decayReleaseStrMap[]                    = {"Decay", "Release", NULL};
+const char *        fltLPSlopeStrMap[]                      = {"6db", "12db", "18db", "24db", "30db", "36db", NULL};
+const char *        flipFlopStrMap[]                        = {"D-type", "RS-type", NULL};
+const char *        freqShiftRangeStrMap[]                  = {"Sub", "Lo", "Hi", NULL};
+const char *        fltPhaseTypeStrMap[]                    = {"Notch", "Peak", "Deep", NULL};
+const char *        eq2BandLoStrMap[]                       = {"80Hz", "110Hz", "160Hz", NULL};
+const char *        eq2BandHiStrMap[]                       = {"6kHz", "8kHz", "12kHz", NULL};
+const char *        presetStrMap[]                          = {"Set", NULL};
+const char *        bitsStrMap[]                            = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "Off", NULL};
+const char *        sustainStrMap[]                         = {"L1", "L2", NULL};
+const char *        midiChanStrMap[]                        = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "This", "SlotA", "SlotB", "SlotC", "SlotD", NULL};
+const char *        midiChanRcvStrMap[]                     = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "This", "Keyb", NULL};
+const char *        midiChanAutomateStrMap[]                = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "This", NULL};
+const char *        thruStrMap[]                            = {"Notes only", "Notes+Ctrls", NULL};
+const char *        levConvStrMap[]                         = {"Bip", "Pos", "Neg", NULL};
+const char *        oscShpAStrMap[]                         = {"Sine1", "Sine2", "Sine3", "Sine4", "TriSaw", "SymPulse", NULL};
+const char *        oscShpBStrMap[]                         = {"Sine1", "Sine2", "Sine3", "Sine4", "TriSaw", "DblSaw", "Pulse", "SymPulse", NULL};
+const char *        dxFeedbackStrMap[]                      = {"0", "1", "2", "3", "4", "5", "6", "7", NULL};
+const char *        dxAlgStrMap[]                           = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", NULL};
+const char *        pShiftDelayStrMod[]                     = {"12.5ms", "25ms", "50ms", "100ms", NULL};
+const char *        twoToInSourceStrMap[]                   = {"In 1/2", "In 3/4", "Bus 1/2", "Bus 3/4", NULL};
+const char *        fourToInSourceStrMap[]                  = {"In", "Bus", NULL};
+const char *        delayRangeStrMap[]                      = {"5ms", "25ms", "100ms", "500ms", "1.0s", "2.0s", "2.7s", NULL};
+const char *        delayABRangeStrMap[]                    = {"500ms", "1.0s", "2.0s", "2.7s", NULL};
+const char *        dlyStereoRangeStrMap[]                  = {"500ms", "1.0s", "1.35s", NULL};
+const char *        timeClkStrMap[]                         = {"Time", "Clk", NULL};
+const char *        ratioFixedStrMap[]                      = {"Ratio", "Fixed", NULL};
+const char *        detuneStrMap[]                          = {"-7", "-6", "-5", "-4", "-3", "-2", "-1", "0", "+1", "+2", "+3", "+4", "+5", "+6", "+7", NULL};
+const char *        operator07StrMap[]                      = {"0", "1", "2", "3", "4", "5", "6", "7", NULL};
+const char *        operatorDepthStrMap[]                   = {"-Lin", "-Exp", "+Exp", "+Lin", NULL};
+const char *        phaserTypeStrMap[]                      = {"Type I", "Type II", NULL};
+const char *        invertStrMap[]                          = {"m", "1-m", NULL};
+const char *        monoKeyStrMap[]                         = {"Last", "Lo", "Hi", NULL};
+// The Step probability switch: four settings, starting at 25%. Its own list, because it is NOT the
+// same control as Edge below even though both read as percentages.
+const char *        rndStepProbStrMap[]                     = {"25%", "50%", "75%", "100%", NULL};
+
+// Edge, ascending with 0% first: a smoothly gliding random wave at the bottom of the selector and a
+// hard stepped one at the top (manual, RANDOMA). This ran backwards, so an Edge of 0% read as 100%.
+const char *        edgeStepStrMap[]                        = {"0%", "25%", "50%", "75%", "100%", NULL};
+const char *        vocoderStrMap[]                         = {"Off", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", NULL};
+const char *        sw8to1SelStrMap[]                       = {"Lo", "64'", "32'", "16'", "8'", "4'", "2'", "1'", NULL};
+const char *        seqXFadeStrMap[]                        = {"Off", "25%", "50%", "100%", NULL};
+const char *        clkSyncStrMap[]                         = {"64/1", "48/1",  "32/1",  "24/1", "16/1",  "12/1",  "8/1",  "6/1",   "4/1",  "3/1", "2/1",   "1/1D",
+                                                                "1/1",                                 "1/2D",  "1/1T",  "1/2",  "1/4D",  "1/2T",  "1/4",  "1/8D",  "1/4T", "1/8", "1/16D", "1/8T",
+                                                                "1/16",                                "1/32D", "1/16T", "1/32", "1/64D", "1/32T", "1/64", "1/64T", NULL};
+const char *        noteNameStrMap[]                        = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", NULL};
+const char *             // The eighth group's source is the SECOND global wheel, and the synth names it so - the first one
+// is the alternative source on group five, which is the one group offering a third choice at all.
+// See morph_source_name() in moduleGraphics.c.
+                    morphStrMap[]                           = {"Wheel", "Vel", "Keyb", "Aft.Tch", "Sust.Pd", "Ctrl.Pd", "P.Stick", "G.Wh 2", NULL};
+const char *        compr_attack_timesStrMap[]              = {"Fast", "0.53m", "0.56m", "0.59m", "0.63m", "0.67m", "0.71m", "0.75m", "0.79m", "0.84m", "0.89m", "0.94m", "1.00m", "1.06m", "1.12m", "1.19m", "1.26m", "1.33m", "1.41m", "1.50m", "1.59m", "1.68m", "1.78m", "1.89m", "2.00m", "2.12m", "2.24m", "2.38m", "2.52m", "2.67m", "2.83m", "3.00m", "3.17m", "3.36m", "3.56m", "3.78m", "4.00m", "4.24m", "4.49m", "4.76m", "5.04m", "5.34m", "5.66m", "5.99m", "6.35m", "6.73m", "7.13m", "7.55m", "8.00m", "8.48m", "8.98m", "9.51m", "10.1m", "10.7m", "11.3m", "12.0m", "12.7m", "13.5m", "14.3m", "15.1m", "16.0m", "17.0m", "18.0m", "19.0m", "20.2m", "21.4m", "22.6m", "24.0m", "25.4m", "26.9m", "28.5m", "30.2m", "32.0m", "33.9m", "35.9m", "38.1m", "40.3m", "42.7m", "45.3m", "47.9m", "50.8m", "53.8m", "57.0m", "60.4m", "64.0m", "67.8m", "71.8m", "76.1m", "80.6m", "85.4m", "90.5m", "95.9m", " 102m", " 108m", " 114m", " 121m", " 128m", " 136m", " 144m", " 152m", " 161m", " 171m", " 181m", " 192m", " 203m", " 215m", " 228m", " 242m", " 256m", " 271m", " 287m", " 304m", " 323m", " 342m", " 362m", " 384m", " 406m", " 431m", " 456m", " 483m", " 512m", " 542m", " 575m", " 609m", " 645m", " 683m", " 724m", " 767m", NULL};
+const char *        compr_release_timesStrMap[]             = {" 125m", " 129m", " 134m", " 139m", " 144m", " 149m", " 154m", " 159m", " 165m", " 171m", " 177m", " 183m", " 189m", " 196m", " 203m", " 210m", " 218m", " 225m", " 233m", " 241m", " 250m", " 259m", " 268m", " 277m", " 287m", " 297m", " 308m", " 319m", " 330m", " 342m", " 354m", " 366m", " 379m", " 392m", " 406m", " 420m", " 435m", " 451m", " 467m", " 483m", " 500m", " 518m", " 536m", " 555m", " 574m", " 595m", " 616m", " 637m", " 660m", " 683m", " 707m", " 732m", " 758m", " 785m", " 812m", " 841m", " 871m", " 901m", " 933m", " 966m", "1.00s", "1.04s", "1.07s", "1.11s", "1.15s", "1.19s", "1.23s", "1.27s", "1.32s", "1.37s", "1.41s", "1.46s", "1.52s", "1.57s", "1.62s", "1.68s", "1.74s", "1.80s", "1.87s", "1.93s", "2.00s", "2.07s", "2.14s", "2.22s", "2.30s", "2.38s", "2.46s", "2.55s", "2.64s", "2.73s", "2.83s", "2.93s", "3.03s", "3.14s", "3.25s", "3.36s", "3.48s", "3.61s", "3.73s", "3.86s", "4.00s", "4.14s", "4.29s", "4.44s", "4.59s", "4.76s", "4.92s", "5.10s", "5.28s", "5.46s", "5.66s", "5.86s", "6.06s", "6.28s", "6.50s", "6.73s", "6.96s", "7.21s", "7.46s", "7.73s", "8.00s", "8.28s", "8.57s", "8.88s", "9.19s", "9.51s", "9.85s", "10.2s", NULL};
+const char *        freq_shift_subStrMap[]                  = {"0.000Hz", "0.000Hz", "0.000Hz", "0.000Hz", "0.000Hz", "0.001Hz", "0.001Hz", "0.001Hz", "0.002Hz", "0.003Hz", "0.004Hz", "0.006Hz", "0.007Hz", "0.009Hz", "0.012Hz", "0.014Hz", "0.018Hz", "0.021Hz", "0.025Hz", "0.029Hz", "0.034Hz", "0.040Hz", "0.046Hz", "0.052Hz", "0.059Hz", "0.067Hz", "0.075Hz", "0.084Hz", "0.094Hz", "0.10Hz", "0.12Hz", "0.13Hz", "0.14Hz", "0.15Hz", "0.17Hz", "0.18Hz", "0.20Hz", "0.22Hz", "0.24Hz", "0.25Hz", "0.27Hz", "0.30Hz", "0.32Hz", "0.34Hz", "0.37Hz", "0.39Hz", "0.42Hz", "0.45Hz", "0.47Hz", "0.50Hz", "0.54Hz", "0.57Hz", "0.60Hz", "0.64Hz", "0.67Hz", "0.71Hz", "0.75Hz", "0.79Hz", "0.84Hz", "0.88Hz", "0.93Hz", "0.97Hz", "1.02Hz", "1.07Hz", "1.12Hz", "1.18Hz", "1.23Hz", "1.29Hz", "1.35Hz", "1.41Hz", "1.47Hz", "1.53Hz", "1.60Hz", "1.67Hz", "1.74Hz", "1.81Hz", "1.88Hz", "1.96Hz", "2.03Hz", "2.11Hz", "2.19Hz", "2.28Hz", "2.36Hz", "2.45Hz", "2.54Hz", "2.63Hz", "2.73Hz", "2.82Hz", "2.92Hz", "3.02Hz", "3.12Hz", "3.23Hz", "3.34Hz", "3.45Hz", "3.56Hz", "3.67Hz", "3.79Hz", "3.91Hz", "4.03Hz", "4.16Hz", "4.29Hz", "4.42Hz", "4.55Hz", "4.68Hz", "4.82Hz", "4.96Hz", "5.11Hz", "5.25Hz", "5.40Hz", "5.55Hz", "5.71Hz", "5.86Hz", "6.02Hz", "6.18Hz", "6.35Hz", "6.52Hz", "6.69Hz", "6.87Hz", "7.04Hz", "7.22Hz", "7.41Hz", "7.59Hz", "7.78Hz", "7.98Hz", "8.17Hz", "8.37Hz", "8.57Hz", "8.78Hz", NULL};
+const char *        freq_shift_loStrMap[]                   = {"0.000Hz", "0.000Hz", "0.000Hz", "0.001Hz", "0.003Hz", "0.006Hz", "0.010Hz", "0.016Hz", "0.024Hz", "0.035Hz", "0.048Hz", "0.063Hz", "0.082Hz", "0.10Hz", "0.13Hz", "0.16Hz", "0.20Hz", "0.23Hz", "0.28Hz", "0.33Hz", "0.38Hz", "0.44Hz", "0.51Hz", "0.58Hz", "0.66Hz", "0.74Hz", "0.84Hz", "0.94Hz", "1.05Hz", "1.16Hz", "1.29Hz", "1.42Hz", "1.56Hz", "1.71Hz", "1.87Hz", "2.04Hz", "2.22Hz", "2.41Hz", "2.61Hz", "2.83Hz", "3.05Hz", "3.28Hz", "3.53Hz", "3.79Hz", "4.06Hz", "4.34Hz", "4.64Hz", "4.95Hz", "5.27Hz", "5.61Hz", "5.96Hz", "6.32Hz", "6.70Hz", "7.09Hz", "7.50Hz", "7.93Hz", "8.37Hz", "8.82Hz", "9.30Hz", "9.79Hz", "10.3Hz", "10.8Hz", "11.4Hz", "11.9Hz", "12.5Hz", "13.1Hz", "13.7Hz", "14.3Hz", "15.0Hz", "15.7Hz", "16.3Hz", "17.1Hz", "17.8Hz", "18.5Hz", "19.3Hz", "20.1Hz", "20.9Hz", "21.8Hz", "22.6Hz", "23.5Hz", "24.4Hz", "25.3Hz", "26.3Hz", "27.2Hz", "28.2Hz", "29.3Hz", "30.3Hz", "31.4Hz", "32.5Hz", "33.6Hz", "34.7Hz", "35.9Hz", "37.1Hz", "38.3Hz", "39.6Hz", "40.9Hz", "42.2Hz", "43.5Hz", "44.8Hz", "46.2Hz", "47.6Hz", "49.1Hz", "50.6Hz", "52.1Hz", "53.6Hz", "55.2Hz", "56.7Hz", "58.4Hz", "60.0Hz", "61.7Hz", "63.4Hz", "65.2Hz", "66.9Hz", "68.8Hz", "70.6Hz", "72.5Hz", "74.4Hz", "76.3Hz", "78.3Hz", "80.3Hz", "82.3Hz", "84.4Hz", "86.5Hz", "88.7Hz", "90.8Hz", "93.1Hz", "95.3Hz", "97.6Hz", NULL};
+const char *        freq_shift_hiStrMap[]                   = {"0.000Hz", "0.001Hz", "0.006Hz", "0.021Hz", "0.049Hz", "0.096Hz", "0.17Hz", "0.26Hz", "0.39Hz", "0.56Hz", "0.77Hz", "1.02Hz", "1.32Hz", "1.68Hz", "2.10Hz", "2.58Hz", "3.14Hz", "3.76Hz", "4.46Hz", "5.25Hz", "6.12Hz", "7.09Hz", "8.15Hz", "9.31Hz", "10.6Hz", "12.0Hz", "13.5Hz", "15.1Hz", "16.8Hz", "18.7Hz", "20.7Hz", "22.8Hz", "25.1Hz", "27.5Hz", "30.1Hz", "32.8Hz", "35.7Hz", "38.8Hz", "42.0Hz", "45.4Hz", "49.0Hz", "52.8Hz", "56.7Hz", "60.9Hz", "65.2Hz", "69.8Hz", "74.5Hz", "79.5Hz", "84.7Hz", "90.1Hz", "95.7Hz", "102Hz", "108Hz", "114Hz", "121Hz", "127Hz", "134Hz", "142Hz", "149Hz", "157Hz", "165Hz", "174Hz", "182Hz", "191Hz", "201Hz", "210Hz", "220Hz", "230Hz", "241Hz", "251Hz", "263Hz", "274Hz", "286Hz", "298Hz", "310Hz", "323Hz", "336Hz", "349Hz", "363Hz", "377Hz", "392Hz", "407Hz", "422Hz", "438Hz", "454Hz", "470Hz", "487Hz", "504Hz", "522Hz", "540Hz", "558Hz", "577Hz", "596Hz", "616Hz", "636Hz", "656Hz", "677Hz", "699Hz", "720Hz", "743Hz", "765Hz", "789Hz", "812Hz", "836Hz", "861Hz", "886Hz", "912Hz", "938Hz", "964Hz", "991Hz", "1019Hz", "1047Hz", "1075Hz", "1105Hz", "1134Hz", "1164Hz", "1195Hz", "1226Hz", "1258Hz", "1290Hz", "1323Hz", "1356Hz", "1390Hz", "1424Hz", "1459Hz", "1495Hz", "1531Hz", "1568Hz", NULL};
+const char *        env_follow_attackStrMap[]               = {"0.00ms", "0.53ms", "0.56ms", "0.60ms", "0.64ms", "0.67ms", "0.72ms", "0.76ms", "0.81ms", "0.86ms", "0.91ms", "0.97ms", "1.03ms", "1.09ms", "1.16ms", "1.23ms", "1.30ms", "1.38ms", "1.47ms", "1.56ms", "1.66ms", "1.76ms", "1.87ms", "1.98ms", "2.10ms", "2.23ms", "2.37ms", "2.52ms", "2.67ms", "2.84ms", "3.01ms", "3.20ms", "3.39ms", "3.60ms", "3.83ms", "4.06ms", "4.31ms", "4.58ms", "4.86ms", "5.16ms", "5.48ms", "5.82ms", "6.18ms", "6.56ms", "6.96ms", "7.39ms", "7.85ms", "8.33ms", "8.84ms", "9.39ms", "9.97ms", "10.6ms", "11.2ms", "11.9ms", "12.7ms", "13.4ms", "14.3ms", "15.2ms", "16.1ms", "17.1ms", "18.1ms", "19.3ms", "20.4ms", "21.7ms", "23.0ms", "24.5ms", "26.0ms", "27.6ms", "29.3ms", "31.1ms", "33.0ms", "35.0ms", "37.2ms", "39.5ms", "41.9ms", "44.5ms", "47.3ms", "50.2ms", "53.3ms", "56.5ms", "60.0ms", "63.7ms", "67.7ms", "71.8ms", "76.3ms", "81.0ms", "86.0ms", "91.3ms", "96.9ms", "103ms", "109ms", "116ms", "123ms", "131ms", "139ms", "147ms", "156ms", "166ms", "176ms", "187ms", "199ms", "211ms", "224ms", "238ms", "253ms", "268ms", "285ms", "302ms", "321ms", "341ms", "362ms", "384ms", "408ms", "433ms", "459ms", "488ms", "518ms", "550ms", "584ms", "620ms", "659ms", "699ms", "742ms", "787ms", "837ms", "888ms", "942ms", "1000ms", NULL};
+const char *        env_follow_releaseStrMap[]              = {"10.0ms", "10.5ms", "10.9ms", "11.4ms", "12.0ms", "12.5ms", "13.1ms", "13.7ms", "14.3ms", "15.0ms", "15.7ms", "16.4ms", "17.1ms", "17.9ms", "18.8ms", "19.6ms", "20.5ms", "21.5ms", "22.4ms", "23.5ms", "24.6ms", "25.7ms", "26.9ms", "28.1ms", "29.4ms", "30.7ms", "32.1ms", "33.6ms", "35.2ms", "36.8ms", "38.5ms", "40.2ms", "42.1ms", "44.0ms", "46.0ms", "48.2ms", "50.4ms", "52.7ms", "55.1ms", "57.6ms", "60.3ms", "63.1ms", "66.0ms", "69.0ms", "72.2ms", "75.5ms", "78.9ms", "82.6ms", "86.3ms", "90.3ms", "94.5ms", "98.8ms", "103ms", "108ms", "113ms", "118ms", "124ms", "129ms", "135ms", "142ms", "148ms", "155ms", "162ms", "169ms", "177ms", "185ms", "194ms", "203ms", "212ms", "222ms", "232ms", "243ms", "254ms", "265ms", "278ms", "291ms", "304ms", "318ms", "332ms", "347ms", "363ms", "380ms", "398ms", "416ms", "435ms", "455ms", "476ms", "498ms", "521ms", "545ms", "570ms", "596ms", "624ms", "652ms", "682ms", "713ms", "747ms", "780ms", "816ms", "854ms", "894ms", "934ms", "977ms", "1020ms", "1070ms", "1120ms", "1170ms", "1220ms", "1280ms", "1340ms", "1400ms", "1460ms", "1530ms", "1600ms", "1680ms", "1760ms", "1840ms", "1920ms", "2010ms", "2100ms", "2200ms", "2300ms", "2410ms", "2520ms", "2630ms", "2760ms", "2870ms", "3000ms", NULL};
+const char *        noise_gate_attackStrMap[]               = {"0.2ms", "0.3ms", "0.4ms", "0.5ms", "0.6ms", "0.8ms", "0.9ms", "1.0ms", "1.2ms", "1.4ms", "1.6ms", "1.7ms", "2.0ms", "2.2ms", "2.4ms", "2.6ms", "2.9ms", "3.1ms", "3.4ms", "3.7ms", "4.0ms", "4.3ms", "4.6ms", "4.9ms", "5.3ms", "5.6ms", "6.0ms", "6.3ms", "6.7ms", "7.1ms", "7.5ms", "7.9ms", "8.4ms", "8.8ms", "9.3ms", "9.7ms", "10.2ms", "10.7ms", "11.2ms", "11.7ms", "12.2ms", "12.7ms", "13.3ms", "13.8ms", "14.4ms", "14.9ms", "15.5ms", "16.1ms", "16.7ms", "17.4ms", "18.0ms", "18.6ms", "19.3ms", "19.9ms", "20.6ms", "21.3ms", "22.0ms", "22.7ms", "23.4ms", "24.1ms", "24.9ms", "25.6ms", "26.4ms", "27.2ms", "28.0ms", "28.8ms", "29.6ms", "30.4ms", "31.2ms", "32.1ms", "32.9ms", "33.8ms", "34.6ms", "35.5ms", "36.4ms", "37.3ms", "38.3ms", "39.2ms", "40.1ms", "41.1ms", "42.0ms", "43.0ms", "44.0ms", "45.0ms", "46.0ms", "47.0ms", "48.1ms", "49.1ms", "50.2ms", "51.2ms", "52.3ms", "53.4ms", "54.5ms", "55.6ms", "56.7ms", "57.9ms", "59.0ms", "60.2ms", "61.3ms", "62.5ms", "63.7ms", "64.9ms", "66.1ms", "67.3ms", "68.6ms", "69.8ms", "71.1ms", "72.3ms", "73.6ms", "74.9ms", "76.2ms", "77.5ms", "78.8ms", "80.2ms", "81.5ms", "82.9ms", "84.2ms", "85.6ms", "87.0ms", "88.4ms", "89.8ms", "91.2ms", "92.7ms", "94.1ms", "95.6ms", "97.0ms", "98.5ms", "100ms", NULL};
+const char *        noise_gate_releaseStrMap[]              = {"0.5ms", "0.59ms", "0.67ms", "0.76ms", "0.87ms", "0.98ms", "1.11ms", "1.25ms", "1.40ms", "1.57ms", "1.75ms", "1.95ms", "2.17ms", "2.41ms", "2.66ms", "2.94ms", "3.25ms", "3.57ms", "3.92ms", "4.30ms", "4.71ms", "5.15ms", "5.62ms", "6.12ms", "6.66ms", "7.24ms", "7.85ms", "8.51ms", "9.21ms", "9.96ms", "10.7ms", "11.6ms", "12.5ms", "13.4ms", "14.4ms", "15.5ms", "16.6ms", "17.8ms", "19.1ms", "20.4ms", "21.8ms", "23.3ms", "24.9ms", "26.5ms", "28.2ms", "30.0ms", "32.0ms", "34.0ms", "36.1ms", "38.3ms", "40.6ms", "43.0ms", "45.5ms", "48.2ms", "51.0ms", "53.9ms", "56.9ms", "60.1ms", "63.4ms", "66.8ms", "70.4ms", "74.2ms", "78.1ms", "82.2ms", "86.4ms", "90.9ms", "95.5ms", "100ms", "105ms", "110ms", "116ms", "121ms", "127ms", "133ms", "139ms", "146ms", "153ms", "160ms", "167ms", "174ms", "182ms", "190ms", "198ms", "207ms", "216ms", "225ms", "234ms", "244ms", "254ms", "265ms", "275ms", "286ms", "298ms", "310ms", "322ms", "335ms", "348ms", "361ms", "375ms", "389ms", "404ms", "419ms", "434ms", "450ms", "467ms", "484ms", "501ms", "519ms", "537ms", "556ms", "578ms", "596ms", "616ms", "638ms", "659ms", "682ms", "705ms", "728ms", "752ms", "777ms", "802ms", "828ms", "855ms", "883ms", "911ms", "940ms", "970ms", "1000ms", NULL};
+const char *        noisegate_pitchtrack_threshholdStrMap[] = {"-100.0dB", "-42.1dB", "-36.1dB", "-32.5dB", "-30.0dB", "-28.1dB", "-26.5dB", "-25.2dB", "-24.0dB", "-23.0dB", "-22.1dB", "-21.2dB", "-20.5dB", "-19.8dB", "-19.2dB", "-18.6dB", "-18.0dB", "-17.5dB", "-17.0dB", "-16.5dB", "-16.1dB", "-15.6dB", "-15.2dB", "-14.8dB", "-14.5dB", "-14.1dB", "-13.8dB", "-13.4dB", "-13.1dB", "-12.8dB", "-12.5dB", "-12.2dB", "-12.0dB", "-11.7dB", "-11.4dB", "-11.2dB", "-11.0dB", "-10.7dB", "-10.5dB", "-10.3dB", "-10.0dB", "-9.8dB", "-9.6dB", "-9.4dB", "-9.2dB", "-9.0dB", "-8.8dB", "-8.6dB", "-8.5dB", "-8.3dB", "-8.1dB", "-7.9dB", "-7.8dB", "-7.6dB", "-7.4dB", "-7.3dB", "-7.1dB", "-7.0dB", "-6.8dB", "-6.7dB", "-6.5dB", "-6.4dB", "-6.2dB", "-6.1dB", "-6.0dB", "-5.8dB", "-5.7dB", "-5.6dB", "-5.4dB", "-5.3dB", "-5.2dB", "-5.1dB", "-4.9dB", "-4.8dB", "-4.7dB", "-4.6dB", "-4.5dB", "-4.3dB", "-4.2dB", "-4.1dB", "-4.0dB", "-3.9dB", "-3.8dB", "-3.7dB", "-3.6dB", "-3.5dB", "-3.4dB", "-3.3dB", "-3.2dB", "-3.1dB", "-3.0dB", "-2.9dB", "-2.8dB", "-2.7dB", "-2.6dB", "-2.5dB", "-2.4dB", "-2.3dB", "-2.3dB", "-2.2dB", "-2.1dB", "-2.0dB", "-1.9dB", "-1.8dB", "-1.7dB", "-1.7dB", "-1.6dB", "-1.5dB", "-1.4dB", "-1.3dB", "-1.2dB", "-1.2dB", "-1.1dB", "-1.0dB", "-0.9dB", "-0.9dB", "-0.8dB", "-0.7dB", "-0.6dB", "-0.6dB", "-0.5dB", "-0.4dB", "-0.3dB", "-0.3dB", "-0.2dB", "-0.1dB", "-0.1dB", "-0.0dB", NULL};
+const char *        glide_timeStrMap[]                      = {"0.2ms", "0.2ms", "0.3ms", "0.4ms", "0.5ms", "0.6ms", "0.7ms", "0.9ms", "1.0ms", "1.2ms", "1.4ms", "1.7ms", "2.0ms", "2.3ms", "2.7ms", "3.1ms", "3.6ms", "4.2ms", "4.8ms", "5.5ms", "6.3ms", "7.2ms", "8.2ms", "9.3ms", "11ms", "12ms", "14ms", "15ms", "17ms", "19ms", "22ms", "24ms", "27ms", "30ms", "34ms", "38ms", "42ms", "46ms", "51ms", "57ms", "63ms", "69ms", "77ms", "84ms", "93ms", "102ms", "112ms", "123ms", "135ms", "147ms", "161ms", "178ms", "192ms", "209ms", "228ms", "248ms", "270ms", "293ms", "318ms", "345ms", "374ms", "405ms", "438ms", "473ms", "511ms", "552ms", "595ms", "642ms", "691ms", "744ms", "800ms", "860ms", "924ms", "992ms", "1100ms", "1100ms", "1200ms", "1300ms", "1400ms", "1500ms", "1600ms", "1700ms", "1800ms", "2000ms", "2100ms", "2200ms", "2400ms", "2500ms", "2700ms", "2900ms", "3000ms", "3200ms", "3400ms", "3600ms", "3900ms", "4100ms", "4400ms", "4600ms", "4900ms", "5200ms", "5500ms", "5800ms", "6100ms", "6500ms", "6900ms", "7300ms", "7700ms", "8000ms", "8600ms", "9000ms", "9500ms", "10100ms", "10600ms", "11100ms", "11700ms", "12400ms", "13000ms", "13700ms", "14400ms", "15200ms", "15800ms", "16800ms", "17500ms", "18300ms", "19200ms", "20200ms", "21200ms", "22400ms", NULL};
+const char *        patch_settings_glideStrMap[]            = {"19ms", "20ms", "21ms", "23ms", "24ms", "26ms", "27ms", "29ms", "31ms", "33ms", "35ms", "37ms", "40ms", "42ms", "45ms", "48ms", "51ms", "55ms", "58ms", "62ms", "66ms", "71ms", "75ms", "80ms", "86ms", "91ms", "97ms", "104ms", "110ms", "118ms", "125ms", "133ms", "142ms", "151ms", "160ms", "170ms", "181ms", "192ms", "203ms", "215ms", "227ms", "240ms", "253ms", "267ms", "281ms", "296ms", "311ms", "326ms", "342ms", "358ms", "374ms", "390ms", "406ms", "423ms", "440ms", "456ms", "473ms", "490ms", "506ms", "523ms", "540ms", "556ms", "573ms", "589ms", "605ms", "621ms", "637ms", "653ms", "669ms", "685ms", "701ms", "717ms", "733ms", "749ms", "765ms", "781ms", "798ms", "815ms", "832ms", "849ms", "867ms", "885ms", "903ms", "922ms", "942ms", "962ms", "983ms", "1000ms", "1030ms", "1050ms", "1070ms", "1100ms", "1130ms", "1150ms", "1180ms", "1210ms", "1240ms", "1280ms", "1310ms", "1350ms", "1390ms", "1430ms", "1470ms", "1520ms", "1570ms", "1620ms", "1680ms", "1740ms", "1800ms", "1870ms", "1950ms", "2030ms", "2120ms", "2220ms", "2330ms", "2450ms", "2580ms", "2720ms", "2890ms", "3070ms", "3280ms", "3520ms", "3800ms", "4120ms", "4510ms", "4980ms", "5550ms", "6270ms", NULL};
+
+const char *        pulseLoTimeStrMap[]                     = {"1.04ms", "1.11ms", "1.19ms", "1.28ms", "1.37ms", "1.47ms", "1.57ms", "1.69ms", "1.81ms", "1.94ms", "2.08ms", "2.23ms", "2.39ms", "2.56ms", "2.75ms", "2.94ms", "3.16ms", "3.38ms", "3.63ms", "3.89ms", "4.17ms", "4.48ms", "4.80ms", "5.15ms", "5.52ms", "5.93ms", "6.36ms", "6.82ms", "7.32ms", "7.85ms", "8.42ms", "9.04ms", "9.70ms", "10.4ms", "11.2ms", "12.0ms", "12.9ms", "13.8ms", "14.8ms", "15.9ms", "17.1ms", "18.3ms", "19.7ms", "21.1ms", "22.7ms", "24.4ms", "26.2ms", "28.1ms", "30.2ms", "32.4ms", "34.8ms", "37.4ms", "40.2ms", "43.2ms", "46.4ms", "49.8ms", "53.5ms", "57.5ms", "61.8ms", "66.4ms", "71.3ms", "76.7ms", "82.4ms", "88.6ms", "95.2ms", "102ms", "110ms", "118ms", "127ms", "137ms", "147ms", "158ms", "170ms", "183ms", "196ms", "211ms", "227ms", "244ms", "263ms", "283ms", "304ms", "327ms", "352ms", "379ms", "408ms", "439ms", "472ms", "508ms", "547ms", "588ms", "633ms", "681ms", "734ms", "790ms", "850ms", "915ms", "985ms", "1.07s", "1.15s", "1.24s", "1.33s", "1.43s", "1.54s", "1.66s", "1.79s", "1.93s", "2.07s", "2.23s", "2.41s", "2.59s", "2.79s", "3.01s", "3.24s", "3.49s", "3.76s", "4.06s", "4.37s", "4.71s", "5.08s", "5.48s", "5.90s", "6.36s", "6.86s", "7.40s", "7.98s", "8.60s", "9.28s", "10.0s", NULL};
+
+const tRgb          offOnColourMap[]                        = {RGB_BACKGROUND_GREY, RGB_GREEN_ON};
+
+const tRgb          gCableColourMap[cableColourMax]         = {
+    {0.7,  0.1,  0.1},                                  // red a.k.a Audio
+    {0.3,  0.3,  0.7},                                  // blue a.k.a Control
+    {0.7,  0.7,  0.1},                                  // yellow a.k.a Logic BG
+    // LIGHTENED 2026-08-22. It was {0.8, 0.3, 0.2}, close enough to the red at the top of this list
+    // that the two were hard to tell apart — a reported accessibility problem. This is the midpoint
+    // between what the cable was and what the orange CONNECTOR is ({1.0, 0.75, 0.31}), which pulls it
+    // clear of red mostly in green (0.43 apart now, was 0.20) without turning it yellow. The
+    // connector below is set to the same value so a cable and the connector it plugs into match, and
+    // the topbar's cable-visibility box follows for free — it reads this same map.
+    {0.9, 0.53, 0.26},                                  // orange a.k.a Logic FG
+    {0.1,  0.7,  0.1},                                  // green a.k.a User 1
+    {0.7,  0.1,  0.7},                                  // purple a.k.a User 2
+    {0.9,  0.9,  0.9},                                  // white - apparently not user selectable
+};
+
+// THE COLOUR INDICES GROUPED BY HUE, four shades each, brightest first. gModuleColourMap above is in
+// the order the WIRE uses, which interleaves the hues - index 5 is a blue, 6 a red, 7 a cyan - so
+// anything that walks it in index order shows the shades shuffled. The module right-click menu had
+// this order written out by hand in its own array; the palette band walked the map directly and came
+// out mixed up as a result (CT, 2026-09-08). Both now read this.
+//
+// The two lay it out differently and that is deliberate, not a divergence: the menu is six columns
+// so a COLUMN is a hue and a row is a shade, while the band is two long rows so a hue's four shades
+// sit next to each other. Same grouping, different axis.
+const uint32_t      gModuleColourFamily[MODULE_COLOUR_HUES][MODULE_COLOUR_SHADES] = {
+    { 6, 13, 14,  1},    // red
+    {10,  8, 16,  2},    // green
+    { 5, 20, 12,  3},    // blue
+    { 9, 11, 15,  4},    // yellow
+    {21, 22, 23, 24},    // purple
+    {17,  7, 18, 19},    // cyan
+};
+
+const tRgb          gModuleColourMap[]                                            = {MODULE_STANDARD_GREY,
+                                                                                      MODULE_RED_4,
+                                                                                      MODULE_GREEN_4,
+                                                                                      MODULE_BLUE_4,
+                                                                                      MODULE_YELLOW_4,
+                                                                                      MODULE_BLUE_1,
+                                                                                      MODULE_RED_1,
+                                                                                      MODULE_CYAN_2,
+                                                                                      MODULE_GREEN_2,
+                                                                                      MODULE_YELLOW_1,
+                                                                                      MODULE_GREEN_1,
+                                                                                      MODULE_YELLOW_2,
+                                                                                      MODULE_BLUE_3,
+                                                                                      MODULE_RED_2,
+                                                                                      MODULE_RED_3,
+                                                                                      MODULE_YELLOW_3,
+                                                                                      MODULE_GREEN_3,
+                                                                                      MODULE_CYAN_1,
+                                                                                      MODULE_CYAN_3,
+                                                                                      MODULE_CYAN_4,
+                                                                                      MODULE_BLUE_2,
+                                                                                      MODULE_PURPLE_1,
+                                                                                      MODULE_PURPLE_2,
+                                                                                      MODULE_PURPLE_3,
+                                                                                      MODULE_PURPLE_4};
+
+// Indices match tConnectorType (types.h): Audio, Control, Logic, TurboLogic. TurboLogic's RGB
+// (1.0, 0.75, 0.31) is the real value the synth uses — the only one of the four not otherwise inferable from the manual's colour-name descriptions
+// alone (the manual just says "orange", not an exact hue).
+const tRgb          connectorColourMap[]             = {
+    {0.7,  0.2,  0.2},
+    {0.2,  0.2,  0.7},
+    {0.9,  0.9,  0.0},
+    // Turbo logic — the up-rated orange. Matched to the orange in gCableColourMap so a cable and the
+    // connector it plugs into are the same colour; see the note there.
+    {0.9, 0.53, 0.26}, };
+
+
+// ── Palette groups ──────────────────────────────────────────────────────────
+//
+// See tPaletteEntry in types.h. The order within each group is the order the palette and the
+// create-module menu both offer them in.
+const char *const   gPaletteGroupName[palGroupCount] = {"In/Out",
+                                                         "Osc",
+                                                         "Rnd",
+                                                         "Filter",
+                                                         "Delay",
+                                                         "Level",
+                                                         "Switch",
+                                                         "Seq",
+                                                         "Note",
+                                                         "LFO",
+                                                         "Env",
+                                                         "FX",
+                                                         "Shaper",
+                                                         "Mixer",
+                                                         "Logic",
+                                                         "MIDI",
+                                                         "Special", };
+
+const tPaletteEntry gPaletteList[]                   = {
+    // In/Out
+    {palGroupIo,      moduleType2toOut,      "2 Outputs"            },
+    {palGroupIo,      moduleType4toOut,      "4 Outputs"            },
+    {palGroupIo,      moduleType2toIn,       "2 Inputs"             },
+    {palGroupIo,      moduleType4toIn,       "4 Inputs"             },
+    {palGroupIo,      moduleTypeFxtoIn,      "FX Input"             },
+    {palGroupIo,      moduleTypeKeyboard,    "Keyboard"             },
+    {palGroupIo,      moduleTypeMonoKey,     "Monophonic Keyboard"  },
+    {palGroupIo,      moduleTypeDevice,      "Device"               },
+    {palGroupIo,      moduleTypeStatus,      "Status"               },
+    {palGroupIo,      moduleTypeNoteDet,     "Note Detector"        },
+    {palGroupIo,      moduleTypeName,        "Name Bar"             },
+
+    // Osc
+    {palGroupOsc,     moduleTypeOscA,        "Osc A"                },
+    {palGroupOsc,     moduleTypeOscB,        "Osc B"                },
+    {palGroupOsc,     moduleTypeOscC,        "Osc C"                },
+    {palGroupOsc,     moduleTypeOscD,        "Osc D"                },
+    {palGroupOsc,     moduleTypeOscPM,       "Osc Phase Mod"        },
+    {palGroupOsc,     moduleTypeOscShpA,     "Osc Shape A"          },
+    {palGroupOsc,     moduleTypeOscShpB,     "Osc Shape B"          },
+    {palGroupOsc,     moduleTypeOscDual,     "Osc Dual"             },
+    {palGroupOsc,     moduleTypeOscNoise,    "Noise Osc"            },
+    {palGroupOsc,     moduleTypeNoise,       "Noise"                },
+    {palGroupOsc,     moduleTypeMetNoise,    "Metallic Noise"       },
+    {palGroupOsc,     moduleTypeOscPerc,     "Osc Percussion"       },
+    {palGroupOsc,     moduleTypeDrumSynth,   "Drum Synth"           },
+    {palGroupOsc,     moduleTypeOscString,   "Osc String"           },
+    {palGroupOsc,     moduleTypeOperator,    "FM Operator"          },
+    {palGroupOsc,     moduleTypeDXRouter,    "DX Router"            },
+    {palGroupOsc,     moduleTypeDriver,      "Driver"               },
+    {palGroupOsc,     moduleTypeResonator,   "Resonator"            },
+    {palGroupOsc,     moduleTypeOscMaster,   "Osc Master"           },
+
+    // Rnd
+    {palGroupRnd,     moduleTypeRandomA,     "Random A"             },
+    {palGroupRnd,     moduleTypeRandomB,     "Random B"             },
+    {palGroupRnd,     moduleTypeRndClkA,     "Rnd Clock A"          },
+    {palGroupRnd,     moduleTypeRndClkB,     "Rnd Clock B"          },
+    {palGroupRnd,     moduleTypeRndTrig,     "Rnd Trig"             },
+    {palGroupRnd,     moduleTypeRndPattern,  "Rnd Pattern"          },
+
+    // Filter
+    {palGroupFilter,  moduleTypeFltLP,       "LP Filter"            },
+    {palGroupFilter,  moduleTypeFltHP,       "HP Filter"            },
+    {palGroupFilter,  moduleTypeFltNord,     "Nord Filter"          },
+    {palGroupFilter,  moduleTypeFltClassic,  "Classic Filter"       },
+    {palGroupFilter,  moduleTypeFltMulti,    "Multi Filter"         },
+    {palGroupFilter,  moduleTypeFltPhase,    "Phase Filter"         },
+    {palGroupFilter,  moduleTypeFltComb,     "Comb Filter"          },
+    {palGroupFilter,  moduleTypeFltStatic,   "Static Filter"        },
+    {palGroupFilter,  moduleTypeFltVoice,    "FltVoice"             },
+    {palGroupFilter,  moduleTypeWahWah,      "WahWah"               },
+    {palGroupFilter,  moduleTypeVocoder,     "Vocoder"              },
+    {palGroupFilter,  moduleTypeEq2Band,     "Eq 2-band"            },
+    {palGroupFilter,  moduleTypeEq3band,     "Eq 3-band"            },
+    {palGroupFilter,  moduleTypeEqPeak,      "Eq Peak"              },
+
+    // Delay
+    {palGroupDelay,   moduleTypeDlySingleA,  "Delay Single A"       },
+    {palGroupDelay,   moduleTypeDlySingleB,  "Delay Single B"       },
+    {palGroupDelay,   moduleTypeDelayDual,   "Delay Dual"           },
+    {palGroupDelay,   moduleTypeDelayQuad,   "Delay Quad"           },
+    {palGroupDelay,   moduleTypeDelayA,      "Delay A"              },
+    {palGroupDelay,   moduleTypeDelayB,      "Delay B"              },
+    {palGroupDelay,   moduleTypeDlyStereo,   "Delay Stereo"         },
+    {palGroupDelay,   moduleTypeDlyClock,    "Delay Clock"          },
+    {palGroupDelay,   moduleTypeDlyEight,    "Delay Eight"          },
+    {palGroupDelay,   moduleTypeDlyShiftReg, "DlyShiftReg"          },
+
+    // Level
+    {palGroupLevel,   moduleTypeConstant,    "Constant"             },
+    {palGroupLevel,   moduleTypeConstSwM,    "ConstSwM"             },
+    {palGroupLevel,   moduleTypeConstSwT,    "ConstSwT"             },
+    {palGroupLevel,   moduleTypeCompLev,     "CompLev"              },
+    {palGroupLevel,   moduleTypeCompSig,     "CompSig"              },
+    {palGroupLevel,   moduleTypeLevAdd,      "LevAdd"               },
+    {palGroupLevel,   moduleTypeLevAmp,      "LevAmp"               },
+    {palGroupLevel,   moduleTypeLevConv,     "LevConv"              },
+    {palGroupLevel,   moduleTypeLevMod,      "LevMod"               },
+    {palGroupLevel,   moduleTypeLevMult,     "LevMult"              },
+    {palGroupLevel,   moduleTypeMinMax,      "MinMax"               },
+    {palGroupLevel,   moduleTypeModAmt,      "ModAmt"               },
+    {palGroupLevel,   moduleTypeNoiseGate,   "NoiseGate"            },
+    {palGroupLevel,   moduleTypeEnvFollow,   "EnvFollow"            },
+    {palGroupLevel,   moduleTypeRed2Blue,    "Red2Blue"             },
+    {palGroupLevel,   moduleTypeBlue2Red,    "Blue2Red"             },
+
+    // Switch
+    {palGroupSwitch,  moduleTypeSwOnOffM,    "SwOnOffM"             },
+    {palGroupSwitch,  moduleTypeSwOnOffT,    "SwOnOffT"             },
+    {palGroupSwitch,  moduleTypeSw2to1,      "Sw2-1"                },
+    {palGroupSwitch,  moduleTypeSw2to1M,     "Sw2-1M"               },
+    {palGroupSwitch,  moduleTypeSw4to1,      "Sw4-1"                },
+    {palGroupSwitch,  moduleTypeSw8to1,      "Sw8-1"                },
+    {palGroupSwitch,  moduleTypeSw1to2,      "Sw1-2"                },
+    {palGroupSwitch,  moduleTypeSw1to2M,     "Sw1-2M"               },
+    {palGroupSwitch,  moduleTypeSw1to4,      "Sw1-4"                },
+    {palGroupSwitch,  moduleTypeSw1to8,      "Sw1-8"                },
+    {palGroupSwitch,  moduleTypeValSw2to1,   "ValSw2-1"             },
+    {palGroupSwitch,  moduleTypeValSw1to2,   "ValSw1-2"             },
+    {palGroupSwitch,  moduleTypeMux8to1,     "Mux8-1"               },
+    {palGroupSwitch,  moduleTypeMux1to8,     "Mux1-8"               },
+    {palGroupSwitch,  moduleTypeMux8to1X,    "Mux8-1X"              },
+    {palGroupSwitch,  moduleTypeSandH,       "S&H"                  },
+    {palGroupSwitch,  moduleTypeTandH,       "T&H"                  },
+    {palGroupSwitch,  moduleTypeWindSw,      "WindSw"               },
+
+    // Seq
+    {palGroupSeq,     moduleTypeSeqEvent,    "Sequencer Event"      },
+    {palGroupSeq,     moduleTypeSeqVal,      "Sequencer Values"     },
+    {palGroupSeq,     moduleTypeSeqLev,      "Sequencer Level"      },
+    {palGroupSeq,     moduleTypeSeqNote,     "Sequencer Note"       },
+    {palGroupSeq,     moduleTypeSeqCtr,      "Sequencer Controlled" },
+
+    // Note
+    {palGroupNote,    moduleTypeNoteQuant,   "Note Quantiser"       },
+    {palGroupNote,    moduleTypeKeyQuant,    "Key Quantiser"        },
+    {palGroupNote,    moduleTypePartQuant,   "Partial Quantiser"    },
+    {palGroupNote,    moduleTypeNoteScaler,  "Note Scaler"          },
+    {palGroupNote,    moduleTypeGlide,       "Glide"                },
+    {palGroupNote,    moduleTypePitchTrack,  "Pitch Tracker"        },
+    {palGroupNote,    moduleTypeZeroCnt,     "Zero Crossing Counter"},
+    {palGroupNote,    moduleTypeLevScaler,   "Level Scaler"         },
+
+    // LFO
+    {palGroupLfo,     moduleTypeLfoA,        "LFO A"                },
+    {palGroupLfo,     moduleTypeLfoB,        "LFO B"                },
+    {palGroupLfo,     moduleTypeLfoC,        "LFO C"                },
+    {palGroupLfo,     moduleTypeLfoShpA,     "LFO Shp A"            },
+    {palGroupLfo,     moduleTypeClkGen,      "Clock Generator"      },
+
+    // Env
+    {palGroupEnv,     moduleTypeEnvADSR,     "Envelope ADSR"        },
+    {palGroupEnv,     moduleTypeEnvAHD,      "Envelope AHD"         },
+    {palGroupEnv,     moduleTypeEnvADR,      "Envelope ADR"         },
+    {palGroupEnv,     moduleTypeEnvADDSR,    "Envelop ADDSR"        },
+    {palGroupEnv,     moduleTypeEnvH,        "Envelope H"           },
+    {palGroupEnv,     moduleTypeEnvD,        "Envelope D"           },
+    {palGroupEnv,     moduleTypeEnvMulti,    "Envelope Multi"       },
+    {palGroupEnv,     moduleTypeModAHD,      "Envelope Mod AHD"     },
+    {palGroupEnv,     moduleTypeModADSR,     "Envelope Mod ADSR"    },
+
+    // FX
+    {palGroupFx,      moduleTypeCompress,    "Compressor"           },
+    {palGroupFx,      moduleTypeDigitizer,   "Digitizer"            },
+    {palGroupFx,      moduleTypeFreqShift,   "FreqShift"            },
+    {palGroupFx,      moduleTypeFlanger,     "Flanger"              },
+    {palGroupFx,      moduleTypeStChorus,    "Chorus"               },
+    {palGroupFx,      moduleTypePhaser,      "Phaser"               },
+    {palGroupFx,      moduleTypePShift,      "PShift"               },
+    {palGroupFx,      moduleTypeReverb,      "Reverb"               },
+    {palGroupFx,      moduleTypeScratch,     "Scratch"              },
+
+    // Shaper
+    {palGroupShaper,  moduleTypeSaturate,    "Saturate"             },
+    {palGroupShaper,  moduleTypeClip,        "Clip"                 },
+    {palGroupShaper,  moduleTypeOverdrive,   "OverDrive"            },
+    {palGroupShaper,  moduleTypeShpExp,      "ShpExp"               },
+    {palGroupShaper,  moduleTypeWaveWrap,    "WaveWrap"             },
+    {palGroupShaper,  moduleTypeShpStatic,   "ShpStatic"            },
+    {palGroupShaper,  moduleTypeRect,        "Rect"                 },
+
+    // Mixer
+    {palGroupMixer,   moduleTypeMix1to1A,    "Mixer 1-1 A"          },
+    {palGroupMixer,   moduleTypeMix1to1S,    "Mixer 1-1 S"          },
+    {palGroupMixer,   moduleTypeMix2to1A,    "Mixer 2-1 A"          },
+    {palGroupMixer,   moduleTypeMix4to1A,    "Mixer 4-1 A"          },
+    {palGroupMixer,   moduleTypeMix4to1B,    "Mixer 4-1 B"          },
+    {palGroupMixer,   moduleTypeMix4to1C,    "Mixer 4-1 C"          },
+    {palGroupMixer,   moduleTypeMix4to1S,    "Mixer 4-1 S"          },
+    {palGroupMixer,   moduleTypeMix2to1B,    "Mixer 2-1 B"          },
+    {palGroupMixer,   moduleTypeMix8to1A,    "Mixer 8-1 A"          },
+    {palGroupMixer,   moduleTypeMix8to1B,    "Mixer 8-1 B"          },
+    {palGroupMixer,   moduleTypeMixFader,    "MixFader"             },
+    {palGroupMixer,   moduleTypeMixStereo,   "MixStereo"            },
+    {palGroupMixer,   moduleTypeFade1to2,    "Fade 1-2"             },
+    {palGroupMixer,   moduleTypeFade2to1,    "Fade 2-1"             },
+    {palGroupMixer,   moduleTypeXtoFade,     "X-Fade"               },
+    {palGroupMixer,   moduleTypePan,         "Pan"                  },
+
+    // Logic
+    {palGroupLogic,   moduleTypeInvert,      "Invert"               },
+    {palGroupLogic,   moduleTypePulse,       "Pulse"                },
+    {palGroupLogic,   moduleTypeDelay,       "Delay"                },
+    {palGroupLogic,   moduleTypeGate,        "Gate"                 },
+    {palGroupLogic,   moduleTypeFlipFlop,    "FlipFlop"             },
+    {palGroupLogic,   moduleTypeClkDiv,      "ClkDiv"               },
+    {palGroupLogic,   moduleType8Counter,    "8Counter"             },
+    {palGroupLogic,   moduleTypeBinCounter,  "BinCounter"           },
+    {palGroupLogic,   moduleTypeADConv,      "ADConv"               },
+    {palGroupLogic,   moduleTypeDAConv,      "DAConv"               },
+
+    // MIDI. No NoteDet: the G2 manual describes it in the In/Out group only, above. It was in
+    // both until 2026-09-12.
+    {palGroupMidi,    moduleTypeCtrlSend,    "CtrlSend"             },
+    {palGroupMidi,    moduleTypePCSend,      "PCSend"               },
+    {palGroupMidi,    moduleTypeNoteSend,    "NoteSend"             },
+    {palGroupMidi,    moduleTypeCtrlRcv,     "CtrlRcv"              },
+    {palGroupMidi,    moduleTypeNoteRcv,     "NoteRcv"              },
+    {palGroupMidi,    moduleTypeNoteZone,    "NoteZone"             },
+    // Special - the engine's own, not the G2's
+    {palGroupSpecial, moduleTypeSampler,     "Sampler"              },
+    {palGroupMidi,    moduleTypeAutomate,    "Automate"             }, };
+
+// ── Module replacement roles ────────────────────────────────────────────────
+//
+// See tModuleRole in types.h for what a role is. ALL NINETEEN GROUPS, 1202 rows. The Filter group
+// was written first because its geometry is the most awkward in the instrument and so the least
+// forgiving of a mechanism that quietly relies on indices lining up; the rest followed once it held.
+//
+// EVERY INDEX HERE WAS CHECKED AGAINST OUR OWN TABLES - each parameter index against that module's
+// entry count in paramLocationList, each connector index against its count in the matching direction
+// in connectorLocationList. All 1202 are in range, which is worth more than it sounds: two
+// independently derived descriptions of the same 170 modules agreeing on every index is the check
+// that would have caught a mis-parse.
+//
+// A module that does not appear under a role simply has no counterpart for it: FltStatic has no
+// pitch modulation input, so a cable on the source module's Pitch Mod is dropped when replacing it
+// with one. Equally, a module absent from "Res" keeps whatever its own knob 1 was rather than being
+// given a resonance it does not have.
+//
+// Role names are compared with strcmp, so what identifies a role is its spelling and nothing else.
+// The table is small enough that the comparison costs nothing worth counting, and it means a row
+// can be added without knowing whether the compiler pooled its string literal with the others.
+const tModuleRole        gModuleRoleList[] = {
+    // ── Shaper Group
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeClip,         0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeOverdrive,    0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeSaturate,     0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeShpExp,       0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeWaveWrap,     0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeShpStatic,    0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs",                moduleTypeRect,         0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindInput,  "Inputs Mod",            moduleTypeClip,         1,                0},
+    {moduleGroupShaper,    roleKindInput,  "Inputs Mod",            moduleTypeOverdrive,    1,                0},
+    {moduleGroupShaper,    roleKindInput,  "Inputs Mod",            moduleTypeSaturate,     1,                1},
+    {moduleGroupShaper,    roleKindInput,  "Inputs Mod",            moduleTypeShpExp,       1,                1},
+    {moduleGroupShaper,    roleKindInput,  "Inputs Mod",            moduleTypeWaveWrap,     1,                0},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeClip,         0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeWaveWrap,     0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeRect,         0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeOverdrive,    0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeSaturate,     0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeShpExp,       0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindOutput, "Outputs",               moduleTypeShpStatic,    0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Params",                moduleTypeClip,         1, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Params",                moduleTypeWaveWrap,     1, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Params",                moduleTypeOverdrive,    1, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Params",                moduleTypeSaturate,     0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Params",                moduleTypeShpExp,       0, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeClip,         3, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeWaveWrap,     2, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeRect,         1, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeOverdrive,    2, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeSaturate,     2, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeShpExp,       2, MODULE_ROLE_NONE},
+    {moduleGroupShaper,    roleKindParam,  "Bypass",                moduleTypeShpStatic,    1, MODULE_ROLE_NONE},
+
+    // ── Level Group
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeLevAdd,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeLevConv,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeLevAmp,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeLevMult,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeLevMod,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeEnvFollow,    0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeNoiseGate,    0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeCompLev,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeCompSig,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeMinMax,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs",                moduleTypeModAmt,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs B",              moduleTypeCompSig,      1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs B",              moduleTypeMinMax,       1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs Mod",            moduleTypeLevMult,      1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindInput,  "Inputs Mod",            moduleTypeLevMod,       1,                0},
+    {moduleGroupLevel,     roleKindInput,  "Inputs Mod",            moduleTypeModAmt,       1,                0},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeConstant,     0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeConstSwM,     0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeConstSwT,     0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeLevAdd,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeLevConv,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeLevAmp,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeLevMult,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeLevMod,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeEnvFollow,    0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeNoiseGate,    0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeCompLev,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeCompSig,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeMinMax,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindOutput, "Outputs",               moduleTypeModAmt,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeConstant,     0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeConstSwT,     0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeLevAdd,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeLevAmp,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeLevMod,       1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeCompLev,      0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params",                moduleTypeModAmt,       0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Range",          moduleTypeConstant,     1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Range",          moduleTypeConstSwM,     2, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Range",          moduleTypeConstSwT,     2, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Range",          moduleTypeLevAdd,       1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Range",          moduleTypeLevConv,      1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Range",          moduleTypeLevAmp,       1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Atk",            moduleTypeEnvFollow,    0, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Atk",            moduleTypeNoiseGate,    1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Dcy",            moduleTypeEnvFollow,    1, MODULE_ROLE_NONE},
+    {moduleGroupLevel,     roleKindParam,  "Params Dcy",            moduleTypeNoiseGate,    2, MODULE_ROLE_NONE},
+
+    // ── MIDI Group Send
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs",                moduleTypeCtrlSend,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs",                moduleTypePCSend,       0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs",                moduleTypeNoteSend,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs",                moduleTypeAutomate,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs Ctrl",           moduleTypeCtrlSend,     1, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs Ctrl",           moduleTypePCSend,       1, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindInput,  "Inputs Ctrl",           moduleTypeNoteSend,     2, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindOutput, "Outputs",               moduleTypeCtrlSend,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindOutput, "Outputs",               moduleTypePCSend,       0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindOutput, "Outputs",               moduleTypeAutomate,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Chan",           moduleTypeCtrlSend,     2, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Chan",           moduleTypePCSend,       1, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Chan",           moduleTypeNoteSend,     2, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Chan",           moduleTypeAutomate,     2, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Ctrl",           moduleTypeCtrlSend,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Ctrl",           moduleTypePCSend,       0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Ctrl",           moduleTypeNoteSend,     1, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Ctrl",           moduleTypeAutomate,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Value",          moduleTypeCtrlSend,     1, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Value",          moduleTypeNoteSend,     0, MODULE_ROLE_NONE},
+    {moduleGroupMidiSend,  roleKindParam,  "Params Value",          moduleTypeAutomate,     1, MODULE_ROLE_NONE},
+
+    // ── MIDI Group Recv
+    {moduleGroupMidiRecv,  roleKindOutput, "Outputs",               moduleTypeCtrlRcv,      0, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindOutput, "Outputs",               moduleTypeNoteRcv,      0, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindOutput, "Outputs Ctrl",          moduleTypeCtrlRcv,      1, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindOutput, "Outputs Ctrl",          moduleTypeNoteRcv,      1, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindParam,  "Params Chan",           moduleTypeCtrlRcv,      1, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindParam,  "Params Chan",           moduleTypeNoteRcv,      1, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindParam,  "Params Ctrl",           moduleTypeCtrlRcv,      0, MODULE_ROLE_NONE},
+    {moduleGroupMidiRecv,  roleKindParam,  "Params Ctrl",           moduleTypeNoteRcv,      0, MODULE_ROLE_NONE},
+
+    // ── Note Group
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypeNoteQuant,    0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypeKeyQuant,     0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypePartQuant,    0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypeNoteScaler,   0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypeGlide,        0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypeZeroCnt,      0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindInput,  "In",                    moduleTypePitchTrack,   0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypeNoteQuant,    0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypeKeyQuant,     0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypePartQuant,    0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypeNoteScaler,   0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypeGlide,        0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypeZeroCnt,      0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindOutput, "Out",                   moduleTypePitchTrack,   1, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindParam,  "Range",                 moduleTypeNoteQuant,    0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindParam,  "Range",                 moduleTypeKeyQuant,     0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindParam,  "Range",                 moduleTypePartQuant,    0, MODULE_ROLE_NONE},
+    {moduleGroupNote,      roleKindParam,  "Range",                 moduleTypeNoteScaler,   0, MODULE_ROLE_NONE},
+
+    // ── Osc Group
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscA,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscB,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscC,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscD,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscPM,        0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscShpA,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscShpB,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscDual,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeNoise,        0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscString,    0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscPerc,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeDrumSynth,    0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeMetNoise,     0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOscNoise,     0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindOutput, "Main",                  moduleTypeOperator,     0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Sync",                  moduleTypeOscB,         2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Sync",                  moduleTypeOscC,         1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Sync",                  moduleTypeOscPM,        1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Sync",                  moduleTypeOscShpA,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Sync",                  moduleTypeOscShpB,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Sync",                  moduleTypeOscDual,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscA,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscB,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscC,         3, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscD,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscPM,        3, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscShpA,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscShpB,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscDual,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscString,    1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscPerc,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeDrumSynth,    2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscNoise,     0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Fixed",           moduleTypeOscMaster,    0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscA,         1,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscB,         1,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscC,         0,                7},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscPM,        0,                6},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscShpA,      1,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscShpB,      1,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscDual,      1,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscString,    2,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscPerc,      1,                4},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscNoise,     1,                3},
+    {moduleGroupOsc,       roleKindInput,  "Pitch Variable",        moduleTypeOscMaster,    1,                4},
+    {moduleGroupOsc,       roleKindInput,  "PW & Shape",            moduleTypeOscB,         4,                7},
+    {moduleGroupOsc,       roleKindInput,  "PW & Shape",            moduleTypeOscShpA,      4,                8},
+    {moduleGroupOsc,       roleKindInput,  "PW & Shape",            moduleTypeOscShpB,      4,                7},
+    {moduleGroupOsc,       roleKindInput,  "PW & Shape",            moduleTypeOscDual,      3,                6},
+    {moduleGroupOsc,       roleKindInput,  "FM & Phase",            moduleTypeOscB,         3,                5},
+    {moduleGroupOsc,       roleKindInput,  "FM & Phase",            moduleTypeOscC,         2,                4},
+    {moduleGroupOsc,       roleKindInput,  "FM & Phase",            moduleTypeOscPM,        2,                4},
+    {moduleGroupOsc,       roleKindInput,  "FM & Phase",            moduleTypeOscShpA,      3,                5},
+    {moduleGroupOsc,       roleKindInput,  "FM & Phase",            moduleTypeOscShpB,      3,                5},
+    {moduleGroupOsc,       roleKindInput,  "FM & Phase",            moduleTypeOscDual,      4,               12},
+    {moduleGroupOsc,       roleKindInput,  "Trig",                  moduleTypeOscPerc,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindInput,  "Trig",                  moduleTypeDrumSynth,    0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscA,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscB,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscC,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscD,         0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscPM,        0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscShpA,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscShpB,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscDual,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscString,    0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscPerc,      0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscNoise,     0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Coarse",                moduleTypeOscMaster,    0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscA,         6, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscB,         4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscC,         3, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscD,         3, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscPM,        3, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscShpA,      4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscShpB,      4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscDual,      4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscString,    4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscPerc,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "TuneMode",              moduleTypeOscNoise,     4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscA,         1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscB,         1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscC,         1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscD,         1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscPM,        1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscShpA,      1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscShpB,      1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscDual,      1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscString,    1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscPerc,      1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscNoise,     1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Fine",                  moduleTypeOscMaster,    1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Wave",                  moduleTypeOscA,         4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Wave",                  moduleTypeOscB,         8, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Wave",                  moduleTypeOscShpA,      9, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "FM Type",               moduleTypeOscB,        10, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "FM Type",               moduleTypeOscShpA,      6, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "FM Type",               moduleTypeOscShpB,      9, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscA,         2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscB,         2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscC,         2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscD,         2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscPM,        2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscShpA,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscShpB,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscDual,      2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscString,    2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscPerc,      3, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscNoise,     2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "KBT",                   moduleTypeOscMaster,    2, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "PW & Shape",            moduleTypeOscB,         6, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "PW & Shape",            moduleTypeOscShpA,      7, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "PW & Shape",            moduleTypeOscShpB,      6, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "PW & Shape",            moduleTypeOscDual,     11, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "PW & Shape",            moduleTypeNoise,        0, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscA,         5, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscB,         9, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscC,         5, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscD,         4, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscPM,        5, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscShpA,     10, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscShpB,      8, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscDual,     10, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeNoise,        1, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscString,    7, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscPerc,      8, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeOscNoise,     7, MODULE_ROLE_NONE},
+    {moduleGroupOsc,       roleKindParam,  "Mute",                  moduleTypeMetNoise,     2, MODULE_ROLE_NONE},
+
+    // ── Keyboard Group
+    {moduleGroupKeyboard,  roleKindOutput, "Pitch",                 moduleTypeKeyboard,     0, MODULE_ROLE_NONE},
+    {moduleGroupKeyboard,  roleKindOutput, "Pitch",                 moduleTypeMonoKey,      0, MODULE_ROLE_NONE},
+    {moduleGroupKeyboard,  roleKindOutput, "Gate",                  moduleTypeKeyboard,     1, MODULE_ROLE_NONE},
+    {moduleGroupKeyboard,  roleKindOutput, "Gate",                  moduleTypeMonoKey,      1, MODULE_ROLE_NONE},
+    {moduleGroupKeyboard,  roleKindOutput, "Vel",                   moduleTypeKeyboard,     2, MODULE_ROLE_NONE},
+    {moduleGroupKeyboard,  roleKindOutput, "Vel",                   moduleTypeMonoKey,      2, MODULE_ROLE_NONE},
+
+    // ── Input Group
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleType2toIn,        0, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleType2toIn,        1, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleType4toIn,        0, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleType4toIn,        1, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleType4toIn,        2, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleType4toIn,        3, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleTypeFxtoIn,       0, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindOutput, "Main",                  moduleTypeFxtoIn,       1, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindParam,  "Mute",                  moduleType2toIn,        1, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindParam,  "Mute",                  moduleType4toIn,        1, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindParam,  "Mute",                  moduleTypeFxtoIn,       1, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindParam,  "Pad",                   moduleType2toIn,        2, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindParam,  "Pad",                   moduleType4toIn,        2, MODULE_ROLE_NONE},
+    {moduleGroupIn,        roleKindParam,  "Pad",                   moduleTypeFxtoIn,       2, MODULE_ROLE_NONE},
+
+    // ── Output Group
+    {moduleGroupOut,       roleKindInput,  "Inputs",                moduleType2toOut,       0, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindInput,  "Inputs",                moduleType2toOut,       1, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindInput,  "Inputs",                moduleType4toOut,       0, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindInput,  "Inputs",                moduleType4toOut,       1, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindInput,  "Inputs",                moduleType4toOut,       2, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindInput,  "Inputs",                moduleType4toOut,       3, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindParam,  "Mute",                  moduleType2toOut,       1, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindParam,  "Mute",                  moduleType4toOut,       1, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindParam,  "Pad",                   moduleType2toOut,       2, MODULE_ROLE_NONE},
+    {moduleGroupOut,       roleKindParam,  "Pad",                   moduleType4toOut,       2, MODULE_ROLE_NONE},
+
+    // ── Env Group
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvADDSR,     1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvMulti,     2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvADSR,      2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvADR,       2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvD,         1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvH,         1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeModADSR,      6, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeModAHD,       5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Amp Inputs",            moduleTypeEnvAHD,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvADDSR,     2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvMulti,     1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvADSR,      0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvADR,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvD,         2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvH,         2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeModADSR,      5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeModAHD,       4, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "VCA Inputs",            moduleTypeEnvAHD,       2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvADDSR,     0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvMulti,     0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvADSR,      1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvADR,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvD,         0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvH,         0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeModADSR,      0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeModAHD,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Trig & Gate Inputs",    moduleTypeEnvAHD,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Attack Mod Inputs",     moduleTypeModAHD,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Attack Mod Inputs",     moduleTypeModADSR,      1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Decay Mod Inputs",      moduleTypeModAHD,       3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindInput,  "Decay Mod Inputs",      moduleTypeModADSR,      2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvADDSR,     0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvMulti,     0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvADSR,      0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvADR,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvD,         0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvH,         0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeModADSR,      0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeModAHD,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "EnvOut",                moduleTypeEnvAHD,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvADDSR,     1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvMulti,     1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvADSR,      1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvADR,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvD,         1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvH,         1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeModADSR,      1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeModAHD,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindOutput, "VCAOut",                moduleTypeEnvAHD,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeEnvADDSR,     2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeEnvMulti,     4, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeEnvADSR,      1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeEnvADR,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeModADSR,      0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeEnvAHD,       1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Attack",                moduleTypeModAHD,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvADDSR,     3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvMulti,     5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvADSR,      2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvADR,       3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvD,         0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvH,         0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeModADSR,      1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeEnvAHD,       4, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Decay",                 moduleTypeModAHD,       2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Sustain",               moduleTypeEnvADDSR,     6, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Sustain",               moduleTypeEnvMulti,     1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Sustain",               moduleTypeEnvADSR,      3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Sustain",               moduleTypeModADSR,      2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Release",               moduleTypeEnvADDSR,     7, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Release",               moduleTypeEnvMulti,     7, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Release",               moduleTypeEnvADSR,      4, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Release",               moduleTypeModADSR,      3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Shape",                 moduleTypeEnvADDSR,     1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Shape",                 moduleTypeEnvMulti,    12, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Shape",                 moduleTypeEnvADSR,      0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Shape",                 moduleTypeEnvADR,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Shape",                 moduleTypeEnvAHD,       0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Reset",                 moduleTypeEnvADDSR,    10, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Reset",                 moduleTypeEnvMulti,     8, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Reset",                 moduleTypeEnvADSR,      7, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Reset",                 moduleTypeEnvADR,       2, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Reset",                 moduleTypeEnvAHD,       3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvADDSR,     9, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvMulti,    10, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvADSR,      5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvADR,       5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvD,         1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvH,         1, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeModADSR,      8, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeEnvAHD,       5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "Type",                  moduleTypeModAHD,       6, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeEnvADDSR,     0, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeEnvMulti,    11, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeEnvADSR,      6, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeEnvADR,       6, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeModADSR,      9, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeEnvAHD,       6, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "KBG",                   moduleTypeModAHD,       7, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "AttackModAmount",       moduleTypeModADSR,      4, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "AttackModAmount",       moduleTypeModAHD,       3, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "DecayModAmount",        moduleTypeModADSR,      5, MODULE_ROLE_NONE},
+    {moduleGroupEnv,       roleKindParam,  "DecayModAmount",        moduleTypeModAHD,       5, MODULE_ROLE_NONE},
+
+    // ── Delay Group
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDlySingleA,   0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDlySingleB,   0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayDual,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayDual,    2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayQuad,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayQuad,    2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayQuad,    4, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayQuad,    6, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDlyEight,     0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDlyClock,     0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayA,       0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDelayB,       0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDlyStereo,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Time",                  moduleTypeDlyStereo,    1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Feedback",              moduleTypeDelayA,       1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Feedback",              moduleTypeDelayB,       1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Feedback",              moduleTypeDlyStereo,    2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Feedback",              moduleTypeDlyStereo,    3, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Damp",                  moduleTypeDelayA,       2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Damp",                  moduleTypeDelayB,       2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Damp",                  moduleTypeDelayB,       8, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Damp",                  moduleTypeDlyStereo,    7, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Dry/Wet",               moduleTypeDelayA,       3, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Dry/Wet",               moduleTypeDelayB,       3, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindParam,  "Dry/Wet",               moduleTypeDlyStereo,    8, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDlySingleA,   0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDlySingleB,   0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDelayDual,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDelayQuad,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDlyEight,     0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDlyShiftReg,  0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDlyClock,     0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDelayA,       0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDelayB,       0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Inputs",                moduleTypeDlyStereo,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDlySingleB,   1,                1},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDelayDual,    1,                1},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDelayDual,    2,                3},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDelayQuad,    1,                1},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDelayQuad,    2,                3},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDelayQuad,    3,                5},
+    {moduleGroupDelay,     roleKindInput,  "Delay Time Mod Inputs", moduleTypeDelayQuad,    4,                7},
+    {moduleGroupDelay,     roleKindInput,  "ClockInputs",           moduleTypeDlyShiftReg,  1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindInput,  "ClockInputs",           moduleTypeDlyClock,     1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlySingleA,   0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlySingleB,   0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayDual,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayDual,    1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayQuad,    1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayQuad,    2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayQuad,    3, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayQuad,    4, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     3, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     4, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     5, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     6, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyEight,     7, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  1, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  2, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  3, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  4, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  5, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  6, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyShiftReg,  7, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyClock,     0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayA,       0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDelayB,       0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyStereo,    0, MODULE_ROLE_NONE},
+    {moduleGroupDelay,     roleKindOutput, "Outputs",               moduleTypeDlyStereo,    1, MODULE_ROLE_NONE},
+
+    // ── Switch Group
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeValSw2to1,    2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeValSw1to2,    1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeWindSw,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeMux8to1,      8, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeMux1to8,      1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeMux8to1X,     8, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeSandH,        1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs Ctrl",           moduleTypeTandH,        1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSwOnOffM,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSwOnOffT,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw2to1M,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw2to1M,      1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw2to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw2to1,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw4to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw4to1,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw4to1,       2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw4to1,       3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       4, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       5, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       6, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw8to1,       7, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw1to2M,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw1to2,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw1to4,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSw1to8,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeValSw2to1,    0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeValSw2to1,    1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeValSw1to2,    0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeWindSw,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      4, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      5, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      6, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1,      7, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux1to8,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     4, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     5, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     6, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeMux8to1X,     7, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeSandH,        0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindInput,  "Inputs",                moduleTypeTandH,        0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSwOnOffM,     1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSwOnOffT,     1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw2to1M,      1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw2to1,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw4to1,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw8to1,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw1to2M,      2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw1to2,       2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw1to4,       4, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs Ctrl",          moduleTypeSw1to8,       8, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSwOnOffM,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSwOnOffT,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw2to1M,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw2to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw4to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw8to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to2M,      1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to2M,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to2,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to2,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to4,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to4,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to4,       2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to4,       3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       4, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       5, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       6, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSw1to8,       7, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeValSw2to1,    0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeValSw1to2,    0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeValSw1to2,    1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeWindSw,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux8to1,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      1, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      2, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      3, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      4, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      5, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      6, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux1to8,      7, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeMux8to1X,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeSandH,        0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindOutput, "Outputs",               moduleTypeTandH,        0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSwOnOffT,     0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSw2to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSw4to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSw8to1,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSw1to2,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSw1to4,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Select",                moduleTypeSw1to8,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Ctrl",                  moduleTypeValSw2to1,    0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Ctrl",                  moduleTypeValSw1to2,    0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Ctrl",                  moduleTypeWindSw,       0, MODULE_ROLE_NONE},
+    {moduleGroupSwitch,    roleKindParam,  "Ctrl",                  moduleTypeWindSw,       1, MODULE_ROLE_NONE},
+
+    // ── Mix Group
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix1to1A,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix1to1S,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix1to1S,     3, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix2to1B,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix2to1A,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix4to1B,     4, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix4to1C,     4, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix4to1S,     8, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix4to1S,     9, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMix8to1B,     8, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs Chain",          moduleTypeMixFader,     8, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix1to1A,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix1to1S,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix1to1S,     1,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix2to1B,     0,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix2to1B,     1,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix2to1A,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix2to1A,     1,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1B,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1B,     1,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1B,     2,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1B,     3,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1C,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1C,     1,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1C,     2,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1C,     3,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1A,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1A,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1A,     3, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     1,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     2,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     3,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     4,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     5,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     6,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix4to1S,     7,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     3, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     4, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     5, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     6, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1A,     7, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     1,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     2,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     3,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     4,                4},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     5,                5},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     6,                6},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMix8to1B,     7,                7},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     1,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     2,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     3,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     4,                4},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     5,                5},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     6,                6},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixFader,     7,                7},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixStereo,    0,                0},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixStereo,    1,                1},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixStereo,    2,                2},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixStereo,    3,                3},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixStereo,    4,                4},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeMixStereo,    5,                5},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypePan,          0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeXtoFade,      0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeXtoFade,      1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeFade1to2,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeFade2to1,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "Inputs",                moduleTypeFade2to1,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix1to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix1to1S,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix1to1S,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix2to1B,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix2to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix4to1B,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix4to1C,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix4to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix4to1S,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix4to1S,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix8to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMix8to1B,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMixFader,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMixStereo,    0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeMixStereo,    1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypePan,          0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypePan,          1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeXtoFade,      0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeFade1to2,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeFade1to2,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindOutput, "Outputs",               moduleTypeFade2to1,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix1to1A,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix1to1S,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix2to1A,     4, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix2to1B,     4, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix4to1B,     4, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix4to1C,     9, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMix8to1B,     8, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeMixFader,    16, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypePan,          2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Linear",                moduleTypeXtoFade,      2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Padding",               moduleTypeMix8to1A,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Padding",               moduleTypeMix8to1B,     9, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Padding",               moduleTypeMixFader,    17, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "ModInput",              moduleTypePan,          1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "ModInput",              moduleTypeFade1to2,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "ModInput",              moduleTypeFade2to1,     2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindInput,  "ModInput",              moduleTypeXtoFade,      2, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "ModAmount",             moduleTypePan,          0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "ModAmount",             moduleTypeFade1to2,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "ModAmount",             moduleTypeFade2to1,     1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "ModAmount",             moduleTypeXtoFade,      0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Fade",                  moduleTypePan,          1, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Fade",                  moduleTypeFade1to2,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Fade",                  moduleTypeFade2to1,     0, MODULE_ROLE_NONE},
+    {moduleGroupMix,       roleKindParam,  "Fade",                  moduleTypeXtoFade,      1, MODULE_ROLE_NONE},
+
+    // ── Filter Group
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltLP,        0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltHP,        0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltNord,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltClassic,   0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltMulti,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltStatic,    0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeWahWah,       0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltVoice,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeVocoder,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltPhase,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeFltComb,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeEq2Band,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeEq3band,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindOutput, "Audio Out",             moduleTypeEqPeak,       0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltLP,        0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltHP,        0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltNord,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltClassic,   0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltMulti,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltStatic,    0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeWahWah,       0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltVoice,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeVocoder,      1, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltPhase,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeFltComb,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeEq2Band,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeEq3band,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Audio In",              moduleTypeEqPeak,       0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod Fix",         moduleTypeFltNord,      2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod Fix",         moduleTypeFltClassic,   2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod Fix",         moduleTypeFltMulti,     2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod Fix",         moduleTypeFltPhase,     4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod Fix",         moduleTypeFltComb,      1, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltLP,        1,                1},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltHP,        1,                1},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltNord,      1,                1},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltClassic,   1,                1},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltMulti,     1,                1},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeWahWah,       1,                0},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltVoice,     2,                7},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltPhase,     1,                0},
+    {moduleGroupFilter,    roleKindInput,  "Pitch Mod",             moduleTypeFltComb,      2,                1},
+    {moduleGroupFilter,    roleKindInput,  "Feedback Mod",          moduleTypeFltPhase,     3,                8},
+    {moduleGroupFilter,    roleKindInput,  "Feedback Mod",          moduleTypeFltComb,      3,                4},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltLP,        0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltHP,        0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltNord,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltClassic,   0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltMulti,     0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltStatic,    0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeWahWah,       1, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltVoice,     6, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltPhase,     1, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeFltComb,      0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeEq3band,      2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Cutoff",                moduleTypeEqPeak,       0, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltLP,        3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltHP,        3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltNord,      6, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltClassic,   5, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltMulti,     6, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltStatic,    3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeWahWah,       2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltVoice,     9, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeVocoder,      9, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltPhase,     6, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeFltComb,      7, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeEq2Band,      3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeEq3band,      5, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Bypass",                moduleTypeEqPeak,       3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Res",                   moduleTypeFltNord,      4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Res",                   moduleTypeFltClassic,   3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Res",                   moduleTypeFltMulti,     4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Res",                   moduleTypeFltVoice,     8, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Res",                   moduleTypeFltStatic,    1, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltLP,        2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltHP,        2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltNord,      2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltClassic,   2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltMulti,     2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltPhase,    10, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "KBT",                   moduleTypeFltComb,      2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "InLvl",                 moduleTypeFltPhase,     7, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "InLvl",                 moduleTypeFltComb,      6, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "InLvl",                 moduleTypeEq3band,      4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "InLvl",                 moduleTypeEq2Band,      2, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "InLvl",                 moduleTypeEqPeak,       4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Feedback",              moduleTypeFltPhase,     3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Feedback",              moduleTypeFltComb,      3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "FeedbackAmount",        moduleTypeFltPhase,     8, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "FeedbackAmount",        moduleTypeFltComb,      4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Variant",               moduleTypeFltPhase,     9, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Variant",               moduleTypeFltComb,      5, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Lo Gain",               moduleTypeEq2Band,      1, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Lo Gain",               moduleTypeEq3band,      3, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Lo Freq",               moduleTypeEq2Band,      5, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Lo Freq",               moduleTypeEq3band,      7, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Hi Freq",               moduleTypeEq2Band,      4, MODULE_ROLE_NONE},
+    {moduleGroupFilter,    roleKindParam,  "Hi Freq",               moduleTypeEq3band,      6, MODULE_ROLE_NONE},
+
+    // ── Effect Group
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeStChorus,     0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeDigitizer,    0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeFlanger,      0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeFreqShift,    0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeReverb,       0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeReverb,       1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeCompress,     0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeCompress,     1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypePhaser,       0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypePShift,       0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Inputs",                moduleTypeScratch,      0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindInput,  "Modulation",            moduleTypeScratch,      1,                1},
+    {moduleGroupEffect,    roleKindInput,  "Modulation",            moduleTypePShift,       1,                2},
+    {moduleGroupEffect,    roleKindInput,  "Modulation",            moduleTypeFreqShift,    1,                1},
+    {moduleGroupEffect,    roleKindInput,  "Modulation",            moduleTypeDigitizer,    1,                2},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeStChorus,     0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeStChorus,     1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeDigitizer,    0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeFlanger,      0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeFreqShift,    0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeFreqShift,    1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeReverb,       0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeReverb,       1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeCompress,     1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeCompress,     0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypePhaser,       0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypePShift,       0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindOutput, "Outputs",               moduleTypeScratch,      0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeStChorus,     2, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeDigitizer,    3, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeFlanger,      3, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeReverb,       3, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeCompress,     6, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypePhaser,       3, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypePShift,       4, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeScratch,      3, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Bypass",                moduleTypeFreqShift,    3, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Rate",                  moduleTypeFlanger,      0, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Rate",                  moduleTypePhaser,       1, MODULE_ROLE_NONE},
+    {moduleGroupEffect,    roleKindParam,  "Depth",                 moduleTypeFlanger,      1, MODULE_ROLE_NONE},
+
+    // ── LFO Group
+    {moduleGroupLfo,       roleKindInput,  "Pitch Fixed",           moduleTypeLfoA,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindInput,  "Pitch Fixed",           moduleTypeLfoB,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindInput,  "Pitch Fixed",           moduleTypeLfoShpA,      0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindInput,  "Pitch Fixed",           moduleTypeLfoC,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindInput,  "Reset",                 moduleTypeLfoB,         2, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindInput,  "Reset",                 moduleTypeLfoShpA,      2, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindInput,  "Pitch",                 moduleTypeLfoA,         1,                3},
+    {moduleGroupLfo,       roleKindInput,  "Pitch",                 moduleTypeLfoB,         1,                1},
+    {moduleGroupLfo,       roleKindInput,  "Pitch",                 moduleTypeLfoShpA,      1,                3},
+    {moduleGroupLfo,       roleKindOutput, "Outputs",               moduleTypeLfoA,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindOutput, "Outputs",               moduleTypeLfoB,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindOutput, "Outputs",               moduleTypeLfoShpA,      0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindOutput, "Outputs",               moduleTypeLfoC,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindOutput, "SyncOut",               moduleTypeLfoB,         1, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindOutput, "SyncOut",               moduleTypeLfoShpA,      1, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Freq",           moduleTypeLfoA,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Freq",           moduleTypeLfoB,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Freq",           moduleTypeLfoShpA,      0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Freq",           moduleTypeLfoC,         0, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Range",          moduleTypeLfoA,         7, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Range",          moduleTypeLfoB,         2, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Range",          moduleTypeLfoShpA,      1, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Range",          moduleTypeLfoC,         3, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mono",           moduleTypeLfoA,         1, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mono",           moduleTypeLfoB,         5, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mono",           moduleTypeLfoShpA,      9, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mono",           moduleTypeLfoC,         1, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params KBT",            moduleTypeLfoA,         2, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params KBT",            moduleTypeLfoB,         3, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params KBT",            moduleTypeLfoShpA,      2, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mute",           moduleTypeLfoA,         5, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mute",           moduleTypeLfoB,         7, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mute",           moduleTypeLfoShpA,      4, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "Params Mute",           moduleTypeLfoC,         4, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "LevelShift",            moduleTypeLfoA,         6, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "LevelShift",            moduleTypeLfoB,         8, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "LevelShift",            moduleTypeLfoShpA,     10, MODULE_ROLE_NONE},
+    {moduleGroupLfo,       roleKindParam,  "LevelShift",            moduleTypeLfoC,         2, MODULE_ROLE_NONE},
+
+    // ── RND Group
+    {moduleGroupRandom,    roleKindInput,  "Pitch Fixed",           moduleTypeRandomA,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Pitch Fixed",           moduleTypeRandomB,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Pitch",                 moduleTypeRandomB,      1,                3},
+    {moduleGroupRandom,    roleKindInput,  "Clk",                   moduleTypeRndClkA,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Clk",                   moduleTypeRndTrig,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Clk",                   moduleTypeRndClkB,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Clk",                   moduleTypeRndPattern,   0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Reset",                 moduleTypeRndClkA,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Reset",                 moduleTypeRndTrig,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Reset",                 moduleTypeRndClkB,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Reset",                 moduleTypeRndPattern,   1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "SeedInput",             moduleTypeRndClkA,      2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "SeedInput",             moduleTypeRndTrig,      2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "SeedInput",             moduleTypeRndClkB,      2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "SeedInput",             moduleTypeRndPattern,   2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "SeedInput",             moduleTypeRndPattern,   3, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindInput,  "Step",                  moduleTypeRndClkB,      3,                4},
+    {moduleGroupRandom,    roleKindInput,  "Step",                  moduleTypeRndPattern,   4,                4},
+    {moduleGroupRandom,    roleKindOutput, "MainOut",               moduleTypeRandomA,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindOutput, "MainOut",               moduleTypeRandomB,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindOutput, "MainOut",               moduleTypeRndClkA,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindOutput, "MainOut",               moduleTypeRndTrig,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindOutput, "MainOut",               moduleTypeRndClkB,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindOutput, "MainOut",               moduleTypeRndPattern,   0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Smooth",                moduleTypeRandomA,      5, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Smooth",                moduleTypeRandomB,      8, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Step",                  moduleTypeRandomA,      6, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Step",                  moduleTypeRandomB,      4, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Step",                  moduleTypeRndClkA,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Step",                  moduleTypeRndClkB,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Step",                  moduleTypeRndPattern,   2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Prob",                  moduleTypeRndTrig,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "LevShift",              moduleTypeRandomA,      2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "LevShift",              moduleTypeRandomB,      6, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "LevShift",              moduleTypeRndClkA,      3, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "LevShift",              moduleTypeRndClkB,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "LevShift",              moduleTypeRndPattern,   5, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Mono",                  moduleTypeRandomA,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Mono",                  moduleTypeRandomB,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Mono",                  moduleTypeRndClkA,      1, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Mono",                  moduleTypeRndTrig,      3, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Mono",                  moduleTypeRndClkB,      3, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Active",                moduleTypeRandomA,      4, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Active",                moduleTypeRandomB,      5, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Active",                moduleTypeRndClkA,      4, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Active",                moduleTypeRndTrig,      2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Active",                moduleTypeRndClkB,      2, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Active",                moduleTypeRndPattern,   6, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Rate",                  moduleTypeRandomA,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Rate",                  moduleTypeRandomB,      0, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Range",                 moduleTypeRandomA,      3, MODULE_ROLE_NONE},
+    {moduleGroupRandom,    roleKindParam,  "Range",                 moduleTypeRandomB,      7, MODULE_ROLE_NONE},
+
+    // ── Sequencer Group
+    {moduleGroupSequencer, roleKindInput,  "Clock Inputs",          moduleTypeSeqEvent,     0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Clock Inputs",          moduleTypeSeqVal,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Clock Inputs",          moduleTypeSeqLev,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Clock Inputs",          moduleTypeSeqNote,      0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Rst Inputs",            moduleTypeSeqEvent,     1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Rst Inputs",            moduleTypeSeqVal,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Rst Inputs",            moduleTypeSeqLev,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Rst Inputs",            moduleTypeSeqNote,      1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Loop Inputs",           moduleTypeSeqEvent,     2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Loop Inputs",           moduleTypeSeqVal,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Loop Inputs",           moduleTypeSeqLev,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Loop Inputs",           moduleTypeSeqNote,      2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Park Inputs",           moduleTypeSeqEvent,     3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Park Inputs",           moduleTypeSeqVal,       3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Park Inputs",           moduleTypeSeqLev,       3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Park Inputs",           moduleTypeSeqNote,      3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain1 Inputs",         moduleTypeSeqEvent,     4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain1 Inputs",         moduleTypeSeqVal,       4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain1 Inputs",         moduleTypeSeqLev,       4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain1 Inputs",         moduleTypeSeqNote,      4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain1 Inputs",         moduleTypeSeqCtr,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain2 Inputs",         moduleTypeSeqEvent,     5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain2 Inputs",         moduleTypeSeqVal,       5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain2 Inputs",         moduleTypeSeqLev,       5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain2 Inputs",         moduleTypeSeqNote,      5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindInput,  "Chain2 Inputs",         moduleTypeSeqCtr,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Link Outputs",          moduleTypeSeqEvent,     0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Link Outputs",          moduleTypeSeqVal,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Link Outputs",          moduleTypeSeqLev,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Link Outputs",          moduleTypeSeqNote,      0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain1 Outputs",        moduleTypeSeqEvent,     1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain1 Outputs",        moduleTypeSeqVal,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain1 Outputs",        moduleTypeSeqLev,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain1 Outputs",        moduleTypeSeqNote,      1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain1 Outputs",        moduleTypeSeqCtr,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain2 Outputs",        moduleTypeSeqEvent,     2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain2 Outputs",        moduleTypeSeqVal,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain2 Outputs",        moduleTypeSeqLev,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain2 Outputs",        moduleTypeSeqNote,      2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindOutput, "Chain2 Outputs",        moduleTypeSeqCtr,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Loop",                  moduleTypeSeqEvent,    32, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Loop",                  moduleTypeSeqVal,      32, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Loop",                  moduleTypeSeqLev,      32, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Loop",                  moduleTypeSeqNote,     32, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Length",                moduleTypeSeqEvent,    33, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Length",                moduleTypeSeqVal,      33, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Length",                moduleTypeSeqLev,      33, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Length",                moduleTypeSeqNote,     33, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Polarity",              moduleTypeSeqVal,      34, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Polarity",              moduleTypeSeqLev,      34, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Polarity",              moduleTypeSeqCtr,      33, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 1",               moduleTypeSeqEvent,     0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 1",               moduleTypeSeqVal,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 1",               moduleTypeSeqLev,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 1",               moduleTypeSeqNote,      0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 1",               moduleTypeSeqCtr,       0, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 2",               moduleTypeSeqEvent,     1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 2",               moduleTypeSeqVal,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 2",               moduleTypeSeqLev,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 2",               moduleTypeSeqNote,      1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 2",               moduleTypeSeqCtr,       1, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 3",               moduleTypeSeqEvent,     2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 3",               moduleTypeSeqVal,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 3",               moduleTypeSeqLev,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 3",               moduleTypeSeqNote,      2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 3",               moduleTypeSeqCtr,       2, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 4",               moduleTypeSeqEvent,     3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 4",               moduleTypeSeqVal,       3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 4",               moduleTypeSeqLev,       3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 4",               moduleTypeSeqNote,      3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 4",               moduleTypeSeqCtr,       3, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 5",               moduleTypeSeqEvent,     4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 5",               moduleTypeSeqVal,       4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 5",               moduleTypeSeqLev,       4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 5",               moduleTypeSeqNote,      4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 5",               moduleTypeSeqCtr,       4, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 6",               moduleTypeSeqEvent,     5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 6",               moduleTypeSeqVal,       5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 6",               moduleTypeSeqLev,       5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 6",               moduleTypeSeqNote,      5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 6",               moduleTypeSeqCtr,       5, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 7",               moduleTypeSeqEvent,     6, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 7",               moduleTypeSeqVal,       6, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 7",               moduleTypeSeqLev,       6, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 7",               moduleTypeSeqNote,      6, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 7",               moduleTypeSeqCtr,       6, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 8",               moduleTypeSeqEvent,     7, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 8",               moduleTypeSeqVal,       7, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 8",               moduleTypeSeqLev,       7, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 8",               moduleTypeSeqNote,      7, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 8",               moduleTypeSeqCtr,       7, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 9",               moduleTypeSeqEvent,     8, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 9",               moduleTypeSeqVal,       8, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 9",               moduleTypeSeqLev,       8, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 9",               moduleTypeSeqNote,      8, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 9",               moduleTypeSeqCtr,       8, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 10",              moduleTypeSeqEvent,     9, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 10",              moduleTypeSeqVal,       9, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 10",              moduleTypeSeqLev,       9, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 10",              moduleTypeSeqNote,      9, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 10",              moduleTypeSeqCtr,       9, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 11",              moduleTypeSeqEvent,    10, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 11",              moduleTypeSeqVal,      10, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 11",              moduleTypeSeqLev,      10, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 11",              moduleTypeSeqNote,     10, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 11",              moduleTypeSeqCtr,      10, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 12",              moduleTypeSeqEvent,    11, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 12",              moduleTypeSeqVal,      11, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 12",              moduleTypeSeqLev,      11, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 12",              moduleTypeSeqNote,     11, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 12",              moduleTypeSeqCtr,      11, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 13",              moduleTypeSeqEvent,    12, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 13",              moduleTypeSeqVal,      12, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 13",              moduleTypeSeqLev,      12, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 13",              moduleTypeSeqNote,     12, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 13",              moduleTypeSeqCtr,      12, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 14",              moduleTypeSeqEvent,    13, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 14",              moduleTypeSeqVal,      13, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 14",              moduleTypeSeqLev,      13, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 14",              moduleTypeSeqNote,     13, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 14",              moduleTypeSeqCtr,      13, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 15",              moduleTypeSeqEvent,    14, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 15",              moduleTypeSeqVal,      14, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 15",              moduleTypeSeqLev,      14, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 15",              moduleTypeSeqNote,     14, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 15",              moduleTypeSeqCtr,      14, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 16",              moduleTypeSeqEvent,    15, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 16",              moduleTypeSeqVal,      15, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 16",              moduleTypeSeqLev,      15, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 16",              moduleTypeSeqNote,     15, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Value 16",              moduleTypeSeqCtr,      15, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 1",               moduleTypeSeqEvent,    16, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 1",               moduleTypeSeqVal,      16, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 1",               moduleTypeSeqLev,      16, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 1",               moduleTypeSeqNote,     16, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 1",               moduleTypeSeqCtr,      16, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 2",               moduleTypeSeqEvent,    17, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 2",               moduleTypeSeqVal,      17, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 2",               moduleTypeSeqLev,      17, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 2",               moduleTypeSeqNote,     17, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 2",               moduleTypeSeqCtr,      17, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 3",               moduleTypeSeqEvent,    18, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 3",               moduleTypeSeqVal,      18, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 3",               moduleTypeSeqLev,      18, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 3",               moduleTypeSeqNote,     18, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 3",               moduleTypeSeqCtr,      18, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 4",               moduleTypeSeqEvent,    19, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 4",               moduleTypeSeqVal,      19, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 4",               moduleTypeSeqLev,      19, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 4",               moduleTypeSeqNote,     19, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 4",               moduleTypeSeqCtr,      19, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 5",               moduleTypeSeqEvent,    20, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 5",               moduleTypeSeqVal,      20, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 5",               moduleTypeSeqLev,      20, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 5",               moduleTypeSeqNote,     20, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 5",               moduleTypeSeqCtr,      20, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 6",               moduleTypeSeqEvent,    21, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 6",               moduleTypeSeqVal,      21, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 6",               moduleTypeSeqLev,      21, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 6",               moduleTypeSeqNote,     21, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 6",               moduleTypeSeqCtr,      21, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 7",               moduleTypeSeqEvent,    22, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 7",               moduleTypeSeqVal,      22, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 7",               moduleTypeSeqLev,      22, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 7",               moduleTypeSeqNote,     22, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 7",               moduleTypeSeqCtr,      22, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 8",               moduleTypeSeqEvent,    23, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 8",               moduleTypeSeqVal,      23, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 8",               moduleTypeSeqLev,      23, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 8",               moduleTypeSeqNote,     23, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 8",               moduleTypeSeqCtr,      23, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 9",               moduleTypeSeqEvent,    24, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 9",               moduleTypeSeqVal,      24, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 9",               moduleTypeSeqLev,      24, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 9",               moduleTypeSeqNote,     24, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 9",               moduleTypeSeqCtr,      24, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 10",              moduleTypeSeqEvent,    25, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 10",              moduleTypeSeqVal,      25, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 10",              moduleTypeSeqLev,      25, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 10",              moduleTypeSeqNote,     25, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 10",              moduleTypeSeqCtr,      25, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 11",              moduleTypeSeqEvent,    26, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 11",              moduleTypeSeqVal,      26, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 11",              moduleTypeSeqLev,      26, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 11",              moduleTypeSeqNote,     26, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 11",              moduleTypeSeqCtr,      26, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 12",              moduleTypeSeqEvent,    27, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 12",              moduleTypeSeqVal,      27, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 12",              moduleTypeSeqLev,      27, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 12",              moduleTypeSeqNote,     27, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 12",              moduleTypeSeqCtr,      27, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 13",              moduleTypeSeqEvent,    28, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 13",              moduleTypeSeqVal,      28, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 13",              moduleTypeSeqLev,      28, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 13",              moduleTypeSeqNote,     28, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 13",              moduleTypeSeqCtr,      28, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 14",              moduleTypeSeqEvent,    29, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 14",              moduleTypeSeqVal,      29, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 14",              moduleTypeSeqLev,      29, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 14",              moduleTypeSeqNote,     29, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 14",              moduleTypeSeqCtr,      29, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 15",              moduleTypeSeqEvent,    30, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 15",              moduleTypeSeqVal,      30, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 15",              moduleTypeSeqLev,      30, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 15",              moduleTypeSeqNote,     30, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 15",              moduleTypeSeqCtr,      30, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 16",              moduleTypeSeqEvent,    31, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 16",              moduleTypeSeqVal,      31, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 16",              moduleTypeSeqLev,      31, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 16",              moduleTypeSeqNote,     31, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Event 16",              moduleTypeSeqCtr,      31, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Gate",                  moduleTypeSeqEvent,    35, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Gate",                  moduleTypeSeqVal,      35, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Gate",                  moduleTypeSeqLev,      35, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Gate",                  moduleTypeSeqNote,     34, MODULE_ROLE_NONE},
+    {moduleGroupSequencer, roleKindParam,  "Gate",                  moduleTypeSeqCtr,      32, MODULE_ROLE_NONE},
+
+    // ── Logic Group
+    {moduleGroupLogic,     roleKindInput,  "Inputs Clock",          moduleTypeFlipFlop,     0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Clock",          moduleTypeClkDiv,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Clock",          moduleType8Counter,     0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Clock",          moduleTypeBinCounter,   0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Reset",          moduleTypeFlipFlop,     2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Reset",          moduleTypeClkDiv,       1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Reset",          moduleType8Counter,     1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Reset",          moduleTypeBinCounter,   1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Mod",            moduleTypePulse,        1,                1},
+    {moduleGroupLogic,     roleKindInput,  "Inputs Mod",            moduleTypeDelay,        1,                1},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeGate,         1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeGate,         0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeGate,         3, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeGate,         2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeInvert,       1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeInvert,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeFlipFlop,     1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypePulse,        0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDelay,        0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       3, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       4, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       5, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       6, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindInput,  "Inputs",                moduleTypeDAConv,       7, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeGate,         0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeGate,         1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeInvert,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeInvert,       1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeFlipFlop,     1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeFlipFlop,     0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeClkDiv,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypePulse,        0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeDelay,        0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     3, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     4, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     5, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     6, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleType8Counter,     7, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   3, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   4, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   5, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   6, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeBinCounter,   7, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       1, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       3, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       4, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       5, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       6, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeADConv,       7, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindOutput, "OutPuts",               moduleTypeDAConv,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindParam,  "Params Time",           moduleTypePulse,        0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindParam,  "Params Time",           moduleTypeDelay,        0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindParam,  "Params Time",           moduleTypeClkDiv,       0, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindParam,  "Params Range",          moduleTypePulse,        2, MODULE_ROLE_NONE},
+    {moduleGroupLogic,     roleKindParam,  "Params Range",          moduleTypeDelay,        2, MODULE_ROLE_NONE}, };
+
+const tModuleProperties  gModuleProperties[] = {
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Keyboard",     2, volumeTypeNone,      ledTypeNo,  moduleGroupKeyboard },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"4-Out",        2, volumeTypeQuad,      ledTypeYes, moduleGroupOut      },
+    {"2-Out",        2, volumeTypeStereo,    ledTypeYes, moduleGroupOut      },
+    {"Invert",       2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"OscB",         5, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"OscShpB",      4, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"OscC",         3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Reverb",       3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"OscString",    3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Sw8-1",        4, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"ValSw1-2",     2, volumeTypeNone,      ledTypeYes, moduleGroupSwitch   },
+    {"X-Fade",       2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"Mix4-1B",      2, volumeTypeMono,      ledTypeNo,  moduleGroupMix      },
+    {"EnvADSR",      4, volumeTypeNone,      ledTypeYes, moduleGroupEnv      },
+    {"Mux1-8",       2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"PartQuant",    2, volumeTypeNone,      ledTypeNo,  moduleGroupNote     },
+    {"ModADSR",      5, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"LfoC",         2, volumeTypeNone,      ledTypeNo,  moduleGroupLfo      },
+    {"LfoShpA",      5, volumeTypeNone,      ledTypeNo,  moduleGroupLfo      },
+    {"LfoA",         3, volumeTypeNone,      ledTypeNo,  moduleGroupLfo      },
+    {"OscMaster",    3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Saturate",     2, volumeTypeNone,      ledTypeNo,  moduleGroupShaper   },
+    {"MetNoise",     2, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Device",       3, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Noise",        2, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Eq2Band",      3, volumeTypeMono,      ledTypeNo,  moduleGroupFilter   },
+    {"Eq3band",      4, volumeTypeMono,      ledTypeNo,  moduleGroupFilter   },
+    {"ShpExp",       2, volumeTypeNone,      ledTypeNo,  moduleGroupShaper   },
+    {"Driver",       3, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"SwOnOffM",     2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Pulse",        2, volumeTypeNone,      ledTypeYes, moduleGroupLogic    },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Mix8-1B",      4, volumeTypeMono,      ledTypeNo,  moduleGroupMix      },
+    {"EnvH",         2, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    // TWO ROWS. This was briefly changed to 3 on 2026-08-30 and that was WRONG: ours is type 42,
+    // the LOGIC delay, not the FX delay, and the manual's picture of it (p237) is a single row of
+    // controls.
+    {"Delay",        2, volumeTypeNone,      ledTypeYes, moduleGroupLogic    },
+    {"Constant",     2, volumeTypeNone,      ledTypeNo,  moduleGroupLevel    },
+    {"LevMult",      2, volumeTypeNone,      ledTypeNo,  moduleGroupLevel    },
+    {"FltVoice",     4, volumeTypeMono,      ledTypeNo,  moduleGroupFilter   },
+    {"EnvAHD",       4, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"Pan",          2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"MixStereo",    5, volumeTypeStereo,    ledTypeYes, moduleGroupMix      },
+    {"FltMulti",     4, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"ConstSwT",     2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"FltNord",      5, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"EnvMulti",     6, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"SandH",        2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"FltStatic",    3, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"EnvD",         2, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"Resonator",    5, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Automate",     2, volumeTypeNone,      ledTypeYes, moduleGroupMidiSend },
+    {"DrumSynth",    8, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"CompLev",      2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"Mux8-1X",      3, volumeTypeNone,      ledTypeYes, moduleGroupSwitch   },
+    {"Clip",         2, volumeTypeNone,      ledTypeNo,  moduleGroupShaper   },
+    {"Overdrive",    2, volumeTypeNone,      ledTypeNo,  moduleGroupShaper   },
+    {"Scratch",      3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"Gate",         2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Mix2-1B",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"ClkGen",       4, volumeTypeNone,      ledTypeYes, moduleGroupLfo      },
+    {"ClkDiv",       2, volumeTypeNone,      ledTypeYes, moduleGroupLogic    },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"EnvFollow",    2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"NoteScaler",   2, volumeTypeNone,      ledTypeNo,  moduleGroupNote     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"WaveWrap",     2, volumeTypeNone,      ledTypeNo,  moduleGroupShaper   },
+    {"NoteQuant",    2, volumeTypeNone,      ledTypeYes, moduleGroupNote     },
+    {"SwOnOffT",     2, volumeTypeNone,      ledTypeYes, moduleGroupSwitch   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Sw1-8",        4, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Sw4-1",        3, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"LevAmp",       2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"Rect",         2, volumeTypeNone,      ledTypeYes, moduleGroupShaper   },
+    {"ShpStatic",    2, volumeTypeNone,      ledTypeYes, moduleGroupShaper   },
+    {"EnvADR",       3, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"WindSw",       2, volumeTypeNone,      ledTypeYes, moduleGroupSwitch   },
+    {"8Counter",     2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"FltLP",        2, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"Sw1-4",        3, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Flanger",      3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"Sw1-2",        2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"FlipFlop",     2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"FltClassic",   4, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"StChorus",     3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"OscD",         2, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"OscA",         3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"FreqShift",    3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Sw2-1",        2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"FltPhase",     5, volumeTypeMono,      ledTypeNo,  moduleGroupFilter   },
+    {"EqPeak",       4, volumeTypeMono,      ledTypeNo,  moduleGroupFilter   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"ValSw2-1",     2, volumeTypeNone,      ledTypeYes, moduleGroupSwitch   },
+    {"OscNoise",     3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Vocoder",      8, volumeTypeNone,      ledTypeYes, moduleGroupFilter   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"LevAdd",       2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"Fade1-2",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"Fade2-1",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"LevScaler",    3, volumeTypeNone,      ledTypeYes, moduleGroupNone     },
+    {"Mix8-1A",      2, volumeTypeMono,      ledTypeNo,  moduleGroupMix      },
+    {"LevMod",       3, volumeTypeNone,      ledTypeNo,  moduleGroupLevel    },
+    {"Digitizer",    3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"EnvADDSR",     5, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"SeqNote",      9, volumeTypeSequencer, ledTypeNo,  moduleGroupSequencer},
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Mix4-1C",      4, volumeTypeMono,      ledTypeNo,  moduleGroupMix      },
+    {"Mux8-1",       2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"WahWah",       2, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"Name",         1, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Fx-In",        2, volumeTypeStereo,    ledTypeYes, moduleGroupIn       },
+    {"MinMax",       2, volumeTypeNone,      ledTypeNo,  moduleGroupLevel    },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"BinCounter",   2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"ADConv",       2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"DAConv",       2, volumeTypeNone,      ledTypeNo,  moduleGroupLogic    },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"FltHP",        2, volumeTypeNone,      ledTypeNo,  moduleGroupFilter   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"T&H",          2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Mix4-1S",      4, volumeTypeStereo,    ledTypeNo,  moduleGroupMix      },
+    {"CtrlSend",     2, volumeTypeNone,      ledTypeYes, moduleGroupMidiSend },
+    {"PCSend",       2, volumeTypeNone,      ledTypeYes, moduleGroupMidiSend },
+    {"NoteSend",     2, volumeTypeNone,      ledTypeYes, moduleGroupMidiSend },
+    {"SeqEvent",     5, volumeTypeSequencer, ledTypeNo,  moduleGroupSequencer},
+    {"SeqVal",       8, volumeTypeSequencer, ledTypeNo,  moduleGroupSequencer},
+    {"SeqLev",       8, volumeTypeSequencer, ledTypeNo,  moduleGroupSequencer},
+    {"CtrlRcv",      2, volumeTypeNone,      ledTypeYes, moduleGroupMidiRecv },
+    {"NoteRcv",      2, volumeTypeNone,      ledTypeYes, moduleGroupMidiRecv },
+    {"NoteZone",     3, volumeTypeNone,      ledTypeYes, moduleGroupNone     },
+    {"Compress",     5, volumeTypeCompress,  ledTypeYes, moduleGroupEffect   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"KeyQuant",     2, volumeTypeNone,      ledTypeNo,  moduleGroupNote     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"SeqCtr",       8, volumeTypeSequencer, ledTypeNo,  moduleGroupSequencer},
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"NoteDet",      2, volumeTypeNone,      ledTypeYes, moduleGroupNone     },
+    {"LevConv",      2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"Glide",        2, volumeTypeNone,      ledTypeNo,  moduleGroupNote     },
+    {"CompSig",      2, volumeTypeNone,      ledTypeNo,  moduleGroupLevel    },
+    {"ZeroCnt",      2, volumeTypeNone,      ledTypeNo,  moduleGroupNote     },
+    {"MixFader",     9, volumeTypeMono,      ledTypeNo,  moduleGroupMix      },
+    {"FltComb",      4, volumeTypeMono,      ledTypeNo,  moduleGroupFilter   },
+    {"OscShpA",      5, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"OscDual",      5, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"DXRouter",     6, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"PShift",       3, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"ModAHD",       5, volumeTypeNone,      ledTypeNo,  moduleGroupEnv      },
+    {"2-In",         2, volumeTypeStereo,    ledTypeYes, moduleGroupIn       },
+    {"4-In",         2, volumeTypeQuad,      ledTypeYes, moduleGroupIn       },
+    {"DlySingleA",   2, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DlySingleB",   2, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DelayDual",    3, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DelayQuad",    5, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DelayA",       3, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DelayB",       4, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DlyClock",     2, volumeTypeNone,      ledTypeYes, moduleGroupDelay    },
+    {"DlyShiftReg",  2, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"Operator",    12, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"DlyEight",     3, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"DlyStereo",    5, volumeTypeNone,      ledTypeNo,  moduleGroupDelay    },
+    {"OscPM",        3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Mix1-1A",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"Mix1-1S",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"Sw1-2M",       2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"Sw2-1M",       2, volumeTypeNone,      ledTypeNo,  moduleGroupSwitch   },
+    {"ConstSwM",     2, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"NoiseGate",    3, volumeTypeNone,      ledTypeYes, moduleGroupLevel    },
+    {"LfoB",         4, volumeTypeNone,      ledTypeNo,  moduleGroupLfo      },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"Phaser",       2, volumeTypeNone,      ledTypeNo,  moduleGroupEffect   },
+    {"Mix4-1A",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"Mix2-1A",      2, volumeTypeNone,      ledTypeNo,  moduleGroupMix      },
+    {"ModAmt",       2, volumeTypeNone,      ledTypeNo,  moduleGroupLevel    },
+    {"OscPerc",      3, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      },
+    {"Status",       2, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"PitchTrack",   2, volumeTypeNone,      ledTypeYes, moduleGroupNote     },
+    {"MonoKey",      2, volumeTypeNone,      ledTypeYes, moduleGroupKeyboard },
+    {"RandomA",      2, volumeTypeNone,      ledTypeNo,  moduleGroupRandom   },
+    {"Red2Blue",     2, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"RandomB",      3, volumeTypeNone,      ledTypeNo,  moduleGroupRandom   },
+    {"Blue2Red",     2, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"RndClkA",      2, volumeTypeNone,      ledTypeNo,  moduleGroupRandom   },
+    {"RndTrig",      2, volumeTypeNone,      ledTypeNo,  moduleGroupRandom   },
+    {"RndClkB",      3, volumeTypeNone,      ledTypeNo,  moduleGroupRandom   },
+    {"Unknown",      0, volumeTypeNone,      ledTypeNo,  moduleGroupNone     },
+    {"RndPattern",   3, volumeTypeNone,      ledTypeYes, moduleGroupRandom   },
+    {"Sampler",      8, volumeTypeNone,      ledTypeNo,  moduleGroupOsc      }, };
+
+// moduleType, paramType, position rectangle, anchor, label, range, defaultValue, string map, colour map
+const tParamLocation     paramLocationList[] = {
+    //  0 Unknown
+    //  1 Keyboard -- No params
+    //  2 Unknown
+    //  3 4-Out
+    {moduleType4toOut,     paramTypeMenu,           {{ 20,   0}, { 7,  7}}, anchorBottomLeft,  "Out to",         3,   0, outTo4OutStrMap,                       NULL          },                       // 3 4-Out
+    {moduleType4toOut,     paramTypeBypass,         {{ -3,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },
+    {moduleType4toOut,     paramTypeMenu,           {{  3,   0}, { 7,  7}}, anchorBottomLeft,  "Pad",            2,   0, padStrMap,                             NULL          },
+    // 4 2-Out
+    {moduleType2toOut,     paramTypeMenu,           {{ 20,   0}, { 7,  7}}, anchorBottomLeft,  "Out to",        12,   0, outToStrMap,                           NULL          },                       // 4 2-Out
+    {moduleType2toOut,     paramTypeBypass,         {{ -3,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },
+    {moduleType2toOut,     paramTypeMenu,           {{  3,   0}, { 7,  7}}, anchorBottomLeft,  "Pad",            2,   0, padStrMap,                             NULL          },
+    //  5 Invert -- No params
+    //  6 Unknown
+    //  7 OscB
+    {moduleTypeOscB,       paramTypeOscFreq,        {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },           // 7 Tune
+    {moduleTypeOscB,       paramTypeFine,           {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },           // 7 Cent
+    {moduleTypeOscB,       paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},           // 7 Kbt
+    {moduleTypeOscB,       paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },           // 7 Pitch M
+    {moduleTypeOscB,       paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },           // 7 Pitch Type
+    {moduleTypeOscB,       paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "FM",           128,   0, NULL,                                  NULL          },           // FM M
+    {moduleTypeOscB,       paramTypeShape,          {{ 55,  10}, { 7,  7}}, anchorTopLeft,     "Shape",        128,   0, NULL,                                  NULL          },           // 7 Shape 50% to 99%, not decimals
+    {moduleTypeOscB,       paramTypeCommonDial,     {{ 76,  -3}, { 7,  7}}, anchorBottomLeft,  "ShpM",         128,   0, NULL,                                  NULL          },           // 7 Shape M
+    {moduleTypeOscB,       paramTypeMenu,           {{ 39,  12}, { 7,  7}}, anchorTopLeft,     "Wave",           5,   2, shapeTypeStrMap,                       NULL          },           // 7 Waveform
+    {moduleTypeOscB,       paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },           // 7 Bypass
+    {moduleTypeOscB,       paramTypeMenu,           {{ 60, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, fmTypeStrMap,                          NULL          },           // 7 FM Type
+    // 8 OscShpB
+    {moduleTypeOscShpB,    paramTypeOscFreq,        {{ 29,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },           // 8 Tune  (nudged left so wide Freq/Factor value clears Cent)
+    {moduleTypeOscShpB,    paramTypeFine,           {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },           // 8 Cent
+    {moduleTypeOscShpB,    paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},           // 8 Kbt
+    {moduleTypeOscShpB,    paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },           // 8 Pitch M
+    {moduleTypeOscShpB,    paramTypeMenu,           {{ 29, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },           // 8 Pitch Type  (moved left to stay above the Tune dial)
+    {moduleTypeOscShpB,    paramTypeCommonDial,     {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  "FM",           128,   0, NULL,                                  NULL          },           // FM M
+    {moduleTypeOscShpB,    paramTypeShape,          {{ 56,  13}, { 7,  7}}, anchorTopLeft,     "Shape",        128,   0, NULL,                                  NULL          },           // 8 Shape 50% to 99%, not decimals
+    {moduleTypeOscShpB,    paramTypeCommonDial,     {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  "ShpCtrl",      128,   0, NULL,                                  NULL          },           // 8 Shape M
+    {moduleTypeOscShpB,    paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },           // 8 Bypass
+    {moduleTypeOscShpB,    paramTypeMenu,           {{ 62, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, fmTypeStrMap,                          NULL          },           // 8 FM Type
+    //  9 OscC
+    {moduleTypeOscC,       paramTypeOscFreq,        {{ 25,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },           // 9 Coarse  (nudged left so wide Freq/Factor value clears Cent)
+    {moduleTypeOscC,       paramTypeFine,           {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },           // 9 Fine
+    {moduleTypeOscC,       paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},           // 9 Kbt
+    {moduleTypeOscC,       paramTypeMenu,           {{ 25, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },           // 9 Tune Mode  (was y15 over the Tune label; moved up + left to sit above the Tune dial)
+    {moduleTypeOscC,       paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "FM",           128,   0, NULL,                                  NULL          },           // FM
+    {moduleTypeOscC,       paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },           // 9 Bypass
+    {moduleTypeOscC,       paramTypeMenu,           {{ 60, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, fmTypeStrMap,                          NULL          },           // 9 FM Type
+    {moduleTypeOscC,       paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },           // Pitch Mode
+    // 10 Unknown
+    // 11 Unknown
+    // 12 Reverb
+    {moduleTypeReverb,     paramTypeCommonDial,     {{ 26,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,  64, NULL,                                  NULL          },             // 12 Time. Needs to check range
+    {moduleTypeReverb,     paramTypeCommonDial,     {{ 46,  -3}, { 7,  7}}, anchorBottomLeft,  "Brightness",   128,  64, NULL,                                  NULL          },             // 12 Brightness
+    {moduleTypeReverb,     paramTypeCommonDial,     {{ 66,  -3}, { 7,  7}}, anchorBottomLeft,  "DryWet",       128,  64, NULL,                                  NULL          },             // 12 DryWet
+    {moduleTypeReverb,     paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },             // 12 Bypass
+    // 13 OscString
+    {moduleTypeOscString,  paramTypeOscFreq,        {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },             // 13 OscString Tune
+    {moduleTypeOscString,  paramTypeFine,           {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },             // 13 OscString Fine
+    {moduleTypeOscString,  paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},             // 13 OscString Kbt
+    {moduleTypeOscString,  paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },             // 13 OscString Pitch modulation
+    {moduleTypeOscString,  paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },             // 13 OscString Pitch mode
+    {moduleTypeOscString,  paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "Decay",        128,  80, NULL,                                  NULL          },             // 13 OscString Decay
+    {moduleTypeOscString,  paramTypeCommonDial,     {{ 76,  -3}, { 7,  7}}, anchorBottomLeft,  "Damp",         128,   0, NULL,                                  NULL          },             // 13 OscString Damp
+    {moduleTypeOscString,  paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },             // 13 OscString Bypass
+    // 14 Unknown
+    // 15 Sw8-1 *** Needs more resources
+    {moduleTypeSw8to1,     paramTypeRadioEdit,      {{ 30, -30}, { 7,  7}}, anchorBottomLeft,  NULL,             8,   0, in8StrMap,                             NULL          },                     // 15 Sel
+    // 16 Unknown
+    // 17 ValSw1-2
+    {moduleTypeValSw1to2,  paramTypeUniPolShort,    {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,            64,   0, NULL,                                  NULL          },                      // 17 Val
+    // 18 X-Fade
+    {moduleTypeXtoFade,    paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 18 Mod
+    {moduleTypeXtoFade,    paramTypePan,            {{ 55,   4}, { 7, 14}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },                      // 18 X-fade
+    {moduleTypeXtoFade,    paramTypeMenu,           {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, logStrMap,                             NULL          },
+    // 19 Mix4-1B
+    {moduleTypeMix4to1B,   paramTypeCommonDial,     {{ 26,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                      // 19 Lev1
+    {moduleTypeMix4to1B,   paramTypeCommonDial,     {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                      // 19 Lev2
+    {moduleTypeMix4to1B,   paramTypeCommonDial,     {{ 58,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                      // 19 Lev3
+    {moduleTypeMix4to1B,   paramTypeCommonDial,     {{ 74,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                      // 19 Lev4
+    {moduleTypeMix4to1B,   paramTypeMenu,           {{  3,   6}, { 7,  7}}, anchorTopLeft,     NULL,             3,   0, expStrMap,                             NULL          },                      // 19 ExpLinDB  (top-left, above Chain)
+    // 20 EnvvADSR
+    {moduleTypeEnvADSR,    paramTypeMenu,           {{-24,  -3}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, envShapeStrMap,                        NULL          },                      // 20 Env Shape
+    {moduleTypeEnvADSR,    paramTypeADRTime,        {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "Attack",       128,   0, NULL,                                  NULL          },                      // 20 A
+    {moduleTypeEnvADSR,    paramTypeADRTime,        {{ 32,  -3}, { 7,  7}}, anchorBottomLeft,  "Decay",        128,  54, NULL,                                  NULL          },                      // 20 D  (was mislabelled "Delay")
+    {moduleTypeEnvADSR,    paramTypeUniPol,         {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Sus",          128, 100, NULL,                                  NULL          },                      // 20 S  (0-64 units, not 0-100%)
+    {moduleTypeEnvADSR,    paramTypeADRTime,        {{ 56,  -3}, { 7,  7}}, anchorBottomLeft,  "Rel",          128,  14, NULL,                                  NULL          },                      // 20 R
+    {moduleTypeEnvADSR,    paramTypeMenu,           {{-24, -10}, { 7,  7}}, anchorBottomRight, NULL,             6,   0, posStrMap,                             NULL          },                      // 20 Output Type
+    {moduleTypeEnvADSR,    paramTypeToggle,         {{ 10,   8}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, kbStrMap,                              offOnColourMap},                      // 20 KB Active
+    {moduleTypeEnvADSR,    paramTypeMenu,           {{  3, -10}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, normalResetStrMap,                     NULL          },                      // 20 Normal/Reset
+    // 21 Mux1-8 -- No params
+    // 22 PartQuant
+    {moduleTypePartQuant,  paramTypePartials,       {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "Range",        128, 127, NULL,                                  NULL          },          // 22 Range  (bipolar partials -64..+63; default 64 = 0/centre)
+    // 23 ModADSR
+    {moduleTypeModADSR,    paramTypeADRTime,        {{ 22, -17}, { 7,  7}}, anchorBottomLeft,  "A",            128,   0, NULL,                                  NULL          },          // 22 A
+    {moduleTypeModADSR,    paramTypeADRTime,        {{ 37, -17}, { 7,  7}}, anchorBottomLeft,  "D",            128,  54, NULL,                                  NULL          },          // 22 D
+    {moduleTypeModADSR,    paramTypeUniPol,         {{ 52, -17}, { 7,  7}}, anchorBottomLeft,  "S",            128, 100, NULL,                                  NULL          },          // 22 S
+    {moduleTypeModADSR,    paramTypeADRTime,        {{ 67, -17}, { 7,  7}}, anchorBottomLeft,  "R",            128,  14, NULL,                                  NULL          },          // 22 R
+    {moduleTypeModADSR,    paramTypeCommonDial,     {{ 27,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 22 Attack M
+    {moduleTypeModADSR,    paramTypeCommonDial,     {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 22 Decay M
+    {moduleTypeModADSR,    paramTypeCommonDial,     {{ 57,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 22 Sustain M
+    {moduleTypeModADSR,    paramTypeCommonDial,     {{ 72,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 22 Release M
+    {moduleTypeModADSR,    paramTypeMenu,           {{-15, -17}, { 7,  7}}, anchorBottomRight, NULL,             6,   0, posStrMap,                             NULL          },          // 22 Output Type
+    {moduleTypeModADSR,    paramTypeToggle,         {{  3, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},          // 22 KB
+    // 24 LfoC
+    {moduleTypeLfoC,       paramTypeLFORate,        {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 24 Rate  *** Could have Freq but tied to Range
+    {moduleTypeLfoC,       paramTypeMenu,           {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, polyMonoStrMap,                        NULL          },          // 24 Mode
+    {moduleTypeLfoC,       paramTypeMenu,           {{ 76,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             6,   4, posStrMap,                             NULL          },          // 24 OutType
+    {moduleTypeLfoC,       paramTypeMenu,           {{ 30,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   1, rangeLfoCStrMap,                       NULL          },          // 24 Range  (default 1 = Rate Lo; was 0 which is now Sub after strMap re-order)
+    {moduleTypeLfoC,       paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },          // 24 Bypass
+    // 25 LfoShpA
+    {moduleTypeLfoShpA,    paramTypeLFORate,        {{ 36,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 25 Rate
+    {moduleTypeLfoShpA,    paramTypeMenu,           {{ 36, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             5,   1, rangeLfoStrMap,                        NULL          },          // 25 Range  (default 1 = Rate Lo)
+    {moduleTypeLfoShpA,    paramTypeMenu,           {{ 25, -25}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },          // 25 Kbt
+    {moduleTypeLfoShpA,    paramTypeCommonDial,     {{ 25,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 25 Rate M
+    {moduleTypeLfoShpA,    paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },          // 25 Bypass
+    {moduleTypeLfoShpA,    paramTypeLfoShape,       {{ 57, -17}, { 7,  7}}, anchorBottomLeft,  "Shape",        128,  64, NULL,                                  NULL          },          // 25 Shape  (1%..99%, neutral at 64 — NOT the oscillators' 50%..99% paramTypeShape)
+    {moduleTypeLfoShpA,    paramTypeCommonDial,     {{ 74,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 25 Phase M
+    {moduleTypeLfoShpA,    paramTypePhase,          {{ 74, -17}, { 7,  7}}, anchorBottomLeft,  "Phase",        128,   0, NULL,                                  NULL          },          // 25 Phase
+    {moduleTypeLfoShpA,    paramTypeCommonDial,     {{ 57,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 25 Shape M
+    {moduleTypeLfoShpA,    paramTypeMenu,           {{ 25, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, polyMonoStrMap,                        NULL          },          // 25 Mode
+    {moduleTypeLfoShpA,    paramTypeMenu,           {{-10, -10}, { 7,  7}}, anchorBottomRight, NULL,             6,   4, posStrMap,                             NULL          },          // 25 OutType
+    {moduleTypeLfoShpA,    paramTypeMenu,           {{ 57, -32}, { 7,  7}}, anchorBottomLeft,  NULL,             6,   0, lfoShpAWaveStrMap,                     NULL          },          // 25 Wave
+    // 26 LfoA
+    {moduleTypeLfoA,       paramTypeLFORate,        {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 26 Rate
+    {moduleTypeLfoA,       paramTypeMenu,           {{ 20,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, polyMonoStrMap,                        NULL          },          // 26 Mode
+    {moduleTypeLfoA,       paramTypeMenu,           {{ 65,  -1}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },          // 26 Kbt
+    {moduleTypeLfoA,       paramTypeCommonDial,     {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 26 Rate M
+    {moduleTypeLfoA,       paramTypeMenu,           {{-15,   0}, { 7,  7}}, anchorMiddleRight, NULL,             6,   0, lfoWaveStrMap,                         NULL          },          // 26 Wave
+    {moduleTypeLfoA,       paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },          // 26 Bypass
+    {moduleTypeLfoA,       paramTypeMenu,           {{-15,  -1}, { 7,  7}}, anchorBottomRight, NULL,             6,   4, posStrMap,                             NULL          },          // 26 OutType
+    {moduleTypeLfoA,       paramTypeMenu,           {{ 36, -12}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   1, rangeLfoCStrMap,                       NULL          },          // 26 Range  (LfoA has no Clk; default 1 = Rate Lo)
+    // 27 OscMaster
+    {moduleTypeOscMaster,  paramTypeOscFreq,        {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,  64, NULL,                                  NULL          },          // 27 Pitch
+    {moduleTypeOscMaster,  paramTypeFine,           {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },          // 27 Fine
+    {moduleTypeOscMaster,  paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},          // 27 Kbt
+    {moduleTypeOscMaster,  paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, pitchTypeStrMap,                       NULL          },          // 27 Tune mode
+    {moduleTypeOscMaster,  paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch M",      128,   0, NULL,                                  NULL          },          // 27 Pitch M
+    // 28 Saturate
+    {moduleTypeSaturate,   paramTypeCommonDial,     {{ 54,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 28 Amount
+    {moduleTypeSaturate,   paramTypeCommonDial,     {{ 41,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 28 AmountMod
+    {moduleTypeSaturate,   paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },          // 28 Bypass
+    {moduleTypeSaturate,   paramTypeMenu,           {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Curve",          4,   0, saturateCurveStrMap,                   NULL          },          // 28 Curve
+    // 29 MetNoise
+    {moduleTypeMetNoise,   paramTypeCommonDial,     {{ 75,  -3}, { 7,  7}}, anchorBottomLeft,  "Colour",       128,  64, NULL,                                  NULL          },          // 29 Colour
+    {moduleTypeMetNoise,   paramTypeCommonDial,     {{ 25,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  64, NULL,                                  NULL          },          // 29 Freq
+    {moduleTypeMetNoise,   paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },          // 28 Bypass
+    {moduleTypeMetNoise,   paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 29 Freq M
+    {moduleTypeMetNoise,   paramTypeCommonDial,     {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 29 Colour M
+    // 30 Device - No controls
+    // 31 Noise
+    {moduleTypeNoise,      paramTypeCommonDial,     {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Colour",       128,   0, NULL,                                  NULL          },           // 31 Colour  *** Or special dial
+    {moduleTypeNoise,      paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },           // 31 Bypass
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Level",        128,  64, NULL,                                  NULL          },           // 209 Level
+    {moduleTypeSampler,    paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },           // 209 Bypass
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 54,  -3}, { 7,  7}}, anchorBottomLeft,  "Vel",          128,   0, NULL,                                  NULL          },           // 209 Vel
+    {moduleTypeSampler,    paramTypeADRTime,        {{ 76, -18}, { 7,  7}}, anchorBottomLeft,  "Rel",          128,  49, NULL,                                  NULL          },           // 209 Rel
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },           // 209 Pitch Mod
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 28, -33}, { 7,  7}}, anchorBottomLeft,  "Start",        128,   0, NULL,                                  NULL          },           // 209 Start
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 12, -33}, { 7,  7}}, anchorBottomLeft,  "StrtM",        128,   0, NULL,                                  NULL          },           // 209 Start Mod
+    {moduleTypeSampler,    paramTypeADRTime,        {{ 76, -33}, { 7,  7}}, anchorBottomLeft,  "Delay",        128,   0, NULL,                                  NULL          },           // 209 Delay
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 60, -33}, { 7,  7}}, anchorBottomLeft,  "DlyM",         128,   0, NULL,                                  NULL          },           // 209 Delay Mod
+    {moduleTypeSampler,    paramTypeADRTime,        {{ 28, -18}, { 7,  7}}, anchorBottomLeft,  "Atk",          128,   0, NULL,                                  NULL          },           // 209 Attack
+    {moduleTypeSampler,    paramTypeSamplerSpeed,   {{ 28, -63}, { 7,  7}}, anchorBottomLeft,  "Speed",        128,  96, NULL,                                  NULL          },           // 209 Speed
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 12, -63}, { 7,  7}}, anchorBottomLeft,  "SpdM",         128,   0, NULL,                                  NULL          },           // 209 Speed Mod
+    {moduleTypeSampler,    paramTypeADRTime,        {{ 44, -18}, { 7,  7}}, anchorBottomLeft,  "Dcy",          128,  54, NULL,                                  NULL          },           // 209 Decay
+    {moduleTypeSampler,    paramTypeUniPol,         {{ 60, -18}, { 7,  7}}, anchorBottomLeft,  "Sus",          128, 127, NULL,                                  NULL          },           // 209 Sustain
+    {moduleTypeSampler,    paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},           // 209 Kbt
+    {moduleTypeSampler,    paramTypeSamplerGrain,   {{ 76, -63}, { 7,  7}}, anchorBottomLeft,  "Grain",        128,  69, NULL,                                  NULL          },           // 209 Grain
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 60, -63}, { 7,  7}}, anchorBottomLeft,  "GrnM",         128,   0, NULL,                                  NULL          },           // 209 Grain Mod
+    {moduleTypeSampler,    paramTypeSamplerSpray,   {{ 28, -48}, { 7,  7}}, anchorBottomLeft,  "Spray",        128,   0, NULL,                                  NULL          },           // 209 Spray
+    {moduleTypeSampler,    paramTypeCommonDial,     {{ 12, -48}, { 7,  7}}, anchorBottomLeft,  "SpryM",        128,   0, NULL,                                  NULL          },           // 209 Spray Mod
+    // 32 Eq2Band
+    {moduleTypeEq2Band,    paramTypedB,             {{ 25,  -3}, { 7,  7}}, anchorBottomLeft,  "Lo (80Hz)",    128,  64, NULL,                                  NULL          },           // 32 Lo Gain
+    {moduleTypeEq2Band,    paramTypedB,             {{ 43,  -3}, { 7,  7}}, anchorBottomLeft,  "Hi (12kHz)",   128,  64, NULL,                                  NULL          },           // 32 Hi Gain
+    {moduleTypeEq2Band,    paramTypeCommonDial,     {{  5,  -3}, { 7,  7}}, anchorBottomLeft,  "Level",        128, 127, NULL,                                  NULL          },           // 32 Level
+    {moduleTypeEq2Band,    paramTypeBypass,         {{ -3,   1}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },           // 32 Bypass
+    {moduleTypeEq2Band,    paramTypeMenu,           {{ 25, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, eq2BandLoStrMap,                       NULL          },           // 32 Lo Freq
+    {moduleTypeEq2Band,    paramTypeMenu,           {{ 43, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   2, eq2BandHiStrMap,                       NULL          },           // 32 Hi Freq
+    // 33 Eq3Band
+    {moduleTypeEq3band,    paramTypedB,             {{  4,  -3}, { 7,  7}}, anchorBottomLeft,  "Lo",           128,  64, NULL,                                  NULL          },           // 33 Lo Gain
+    {moduleTypeEq3band,    paramTypedB,             {{ 22,  -3}, { 7,  7}}, anchorBottomLeft,  "MidGn",        128,  64, NULL,                                  NULL          },           // 33 Mid Gain
+    {moduleTypeEq3band,    paramTypeGeneralFreq,    {{ 39,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  93, NULL,                                  NULL          },           // 33 Mid Freq
+    {moduleTypeEq3band,    paramTypedB,             {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  "Hi",           128,  64, NULL,                                  NULL          },           // 33 Hi Gain
+    {moduleTypeEq3band,    paramTypeCommonDial,     {{-20,  -3}, { 7,  7}}, anchorBottomRight, "Level",        128, 127, NULL,                                  NULL          },           // 33 Level
+    {moduleTypeEq3band,    paramTypeBypass,         {{ -3,  23}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },           // 33 Bypass
+    {moduleTypeEq3band,    paramTypeMenu,           {{  4, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, eq2BandLoStrMap,                       NULL          },           // 33 Lo Freq
+    {moduleTypeEq3band,    paramTypeMenu,           {{ 55, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   2, eq2BandHiStrMap,                       NULL          },           // 33 Hi Freq
+    // 34 ShpExp
+    {moduleTypeShpExp,     paramTypeCommonDial,     {{ 54,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },           // 34 Amount
+    {moduleTypeShpExp,     paramTypeCommonDial,     {{ 41,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },           // 34 AmountMod
+    {moduleTypeShpExp,     paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },           // 34 Bypass
+    {moduleTypeShpExp,     paramTypeMenu,           {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Curve",          4,   0, shpExpCurveStrMap,                     NULL          },           // 34 Curve
+    // 35 Driver (hidden module)
+    {moduleTypeDriver,     paramTypeCommonDial,     {{ 54,  -3}, { 7,  7}}, anchorBottomLeft,  "Stiffness",    128,   0, NULL,                                  NULL          },           // 35 Embouchure
+    {moduleTypeDriver,     paramTypeCommonDial,     {{ 75,  -3}, { 7,  7}}, anchorBottomLeft,  "Embouchure",   128,   0, NULL,                                  NULL          },           // 35 Stiffness
+    // 36 SwOnOffM
+    {moduleTypeSwOnOffM,   paramTypeMenu,           {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, offOnStrMap,                           NULL          },           // 36 On
+    // 37 Unknown
+    // 38 Pulse
+    {moduleTypePulse,      paramTypePulseTime,      {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,   1, NULL,                                  NULL          },                      // 38 Time
+    {moduleTypePulse,      paramTypeCommonDial,     {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 38 TimeMod
+    {moduleTypePulse,      paramTypeMenu,           {{ 52,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, pulseRangeStrMap,                      NULL          },                      // 38 Range
+    // 39 Unknown
+    // 40 Mix8-1B
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 16,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In1
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 25,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In2
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 34,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In3
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 43,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In4
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 52,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In5
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 61,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In6
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In7
+    {moduleTypeMix8to1B,   paramTypeMixLevel,       {{ 79,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },             // 40 In8
+    {moduleTypeMix8to1B,   paramTypeMenu,           {{  3,   9}, { 7,  7}}, anchorTopLeft,     "Curve",          3,   0, expStrMap,                             NULL          },             // 40 ExpLinDB
+    {moduleTypeMix8to1B,   paramTypeMenu,           {{ 16,   9}, { 7,  7}}, anchorTopLeft,     "Pad",            3,   0, db12BPadStrMap,                        NULL          },             // 40 Pad
+    // 41 EnvH
+    {moduleTypeEnvH,       paramTypeADRTime,        {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  32, NULL,                                  NULL          },             // 41 Hold
+    {moduleTypeEnvH,       paramTypeMenu,           {{-32,  -3}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, posNegInvStrMap,                       NULL          },             // 41 Pos
+    // 42 Delay (Logic Delay)
+    {moduleTypeDelay,      paramTypePulseTime,      {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,  64, NULL,                                  NULL          },             // 42 Time
+    {moduleTypeDelay,      paramTypeCommonDial,     {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },             // 42 TimeMod
+    {moduleTypeDelay,      paramTypeMenu,           {{ 52,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   1, pulseRangeStrMap,                      NULL          },             // 42 Range
+
+    // 43 Constant
+    {moduleTypeConstant,   paramTypeBipLevel,       {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 43 Value
+    {moduleTypeConstant,   paramTypeMenu,           {{  0,   0}, { 7,  7}}, anchorMiddle,      NULL,             2,   0, bipUniStrMap,                          NULL          },    // 43 Bip/Uni
+    // 44 LevMult  - No Controls
+    // 45 FltVoice
+    {moduleTypeFltVoice,   paramTypeMenu,           {{ 40, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             9,   0, vowelStrMap,                           NULL          },                      // 45 Vowel1
+    {moduleTypeFltVoice,   paramTypeMenu,           {{ 50, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             9,   1, vowelStrMap,                           NULL          },                      // 45 Vowel2
+    {moduleTypeFltVoice,   paramTypeMenu,           {{ 60, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             9,   2, vowelStrMap,                           NULL          },                      // 45 Vowel3
+    {moduleTypeFltVoice,   paramTypeCommonDial,     {{-15, -17}, { 7,  7}}, anchorBottomRight, NULL,           128, 100, NULL,                                  NULL          },                      // 45 Level
+    {moduleTypeFltVoice,   paramTypeBipLevel,       {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },                      // 45 Vowel
+    {moduleTypeFltVoice,   paramTypeBipolar,        {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 45 VowelMod
+    {moduleTypeFltVoice,   paramTypeBipLevel,       {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  64, NULL,                                  NULL          },                      // 45 Freq
+    {moduleTypeFltVoice,   paramTypeBipolar,        {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 45 FreqMod
+    {moduleTypeFltVoice,   paramTypeBipLevel,       {{ 30,  -3}, { 7,  7}}, anchorBottomLeft,  "Res",          128,  64, NULL,                                  NULL          },                      // 45 Res
+    {moduleTypeFltVoice,   paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },                      // 45 Bypass
+    // 46 EnvAHD
+    {moduleTypeEnvAHD,     paramTypeMenu,           {{-26,  -3}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, envShapeStrMap,                        NULL          },                      // 46 Shape
+    {moduleTypeEnvAHD,     paramTypeADRTime,        {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "Attack",       128,   0, NULL,                                  NULL          },                      // 46 Attack
+    {moduleTypeEnvAHD,     paramTypeADRTime,        {{ 32,  -3}, { 7,  7}}, anchorBottomLeft,  "Hold",         128,  32, NULL,                                  NULL          },                      // 46 Hold
+    {moduleTypeEnvAHD,     paramTypeMenu,           {{  5, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, normalResetStrMap,                     NULL          },                      // 46 Reset
+    {moduleTypeEnvAHD,     paramTypeADRTime,        {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Release",      128,  14, NULL,                                  NULL          },                      // 46 Release
+    {moduleTypeEnvAHD,     paramTypeMenu,           {{-26, -10}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, posNegInvStrMap,                       NULL          },                      // 46 OutType
+    {moduleTypeEnvAHD,     paramTypeToggle,         {{ 10,   8}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, kbStrMap,                              offOnColourMap},
+    // 47 Pan
+    {moduleTypePan,        paramTypeCommonDial,     {{ 32,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },          // 47 PanMod
+    {moduleTypePan,        paramTypeLRDial,         {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 47 Pan
+    {moduleTypePan,        paramTypeMenu,           {{ 10,  -5}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, logStrMap,                             NULL          },          // 47 LogLin
+    // 48 MixStereo
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 48 Lvl1
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ 22,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 48 Lvl2
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ 34,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 48 Lvl3
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ 46,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 48 Lvl4  (aligned to Pan4/In4)
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ 58,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 48 Lvl5  (aligned to Pan5/In5)
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 48 Lvl6  (aligned to Pan6/In6)
+    {moduleTypeMixStereo,  paramTypeLRDial,         {{ 10, -17}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 48 Pan1
+    {moduleTypeMixStereo,  paramTypeLRDial,         {{ 22, -17}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 48 Pan2
+    {moduleTypeMixStereo,  paramTypeLRDial,         {{ 34, -17}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 48 Pan3
+    {moduleTypeMixStereo,  paramTypeLRDial,         {{ 46, -17}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 48 Pan4
+    {moduleTypeMixStereo,  paramTypeLRDial,         {{ 58, -17}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 48 Pan5
+    {moduleTypeMixStereo,  paramTypeLRDial,         {{ 70, -17}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 48 Pan6
+    {moduleTypeMixStereo,  paramTypeCommonDial,     {{ -4, -25}, { 7,  7}}, anchorBottomRight, NULL,           128, 100, NULL,                                  NULL          },          // 48 LvlMaster  (moved right so its value label clears the stereo meter)
+    // 49 FltMulti
+    {moduleTypeFltMulti,   paramTypeFreq,           {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  75, NULL,                                  NULL          },          // 49 Freq
+    {moduleTypeFltMulti,   paramTypePitch,          {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },          // 49 Pitch M
+    {moduleTypeFltMulti,   paramTypeMenu,           {{ 25,  -7}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },          // 49 Kbt
+    {moduleTypeFltMulti,   paramTypeToggle,         {{ 55,   5}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, gcStrMap,                              offOnColourMap},          // 49 GC
+    {moduleTypeFltMulti,   paramTypeResonanceQ,     {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  "Res",          128,   0, NULL,                                  NULL          },          // 49 Res
+    {moduleTypeFltMulti,   paramTypeMenu,           {{ 70, -10}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, fltMultiDbStrMap,                      NULL          },          // 49 dB
+    {moduleTypeFltMulti,   paramTypeBypass,         {{-17,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },          // 49 Bypass
+    // 50 ConstSwT
+    {moduleTypeConstSwT,   paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },          // 50 Value
+    {moduleTypeConstSwT,   paramTypeToggle,         {{ 28,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, offOnStrMap,                           offOnColourMap},          // 50 Switch
+    {moduleTypeConstSwT,   paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, bipUniStrMap,                          NULL          },          // 50 Bip/Uni
+    // 51 FltNord
+    {moduleTypeFltNord,    paramTypeFreq,           {{ 30, -25}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  75, NULL,                                  NULL          },          // 51 Freq
+    {moduleTypeFltNord,    paramTypePitch,          {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },          // 51 Pitch M
+    {moduleTypeFltNord,    paramTypeMenu,           {{ 15, -22}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },          // 51 Kbt
+    {moduleTypeFltNord,    paramTypeToggle,         {{ 40, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, gcStrMap,                              offOnColourMap},          // 51 GC
+    {moduleTypeFltNord,    paramTypeResonanceQ,     {{ 55, -25}, { 7,  7}}, anchorBottomLeft,  "Res",          128,   0, NULL,                                  NULL          },          // 51 Res
+    {moduleTypeFltNord,    paramTypeMenu,           {{ 70, -10}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, fltNordDbStrMap,                       NULL          },          // 51 dB/Oct
+    {moduleTypeFltNord,    paramTypeBypass,         {{-17,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },          // 51 Bypass
+    {moduleTypeFltNord,    paramTypeCommonDial,     {{ 31,  -3}, { 7,  7}}, anchorBottomLeft,  "Fm Lin",       128,   0, NULL,                                  NULL          },          // 51 Fm Lin
+    {moduleTypeFltNord,    paramTypeMenu,           {{ 70, -20}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, nordFilterTypeStrMap,                  NULL          },          // 51 FilterType
+    {moduleTypeFltNord,    paramTypeCommonDial,     {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  "Res M",        128,   0, NULL,                                  NULL          },          // 51 Res M
+    // 52 EnvMulti
+    {moduleTypeEnvMulti,   paramTypeUniPol,         {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "L1",           128, 127, NULL,                                  NULL          },          // 52 Lvl1
+    {moduleTypeEnvMulti,   paramTypeUniPol,         {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "L2",           128,  45, NULL,                                  NULL          },          // 52 Lvl2
+    {moduleTypeEnvMulti,   paramTypeUniPol,         {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "L3",           128,  64, NULL,                                  NULL          },          // 52 Lvl3
+    {moduleTypeEnvMulti,   paramTypeUniPol,         {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  "L4",           128,   0, NULL,                                  NULL          },          // 52 Lvl4
+    {moduleTypeEnvMulti,   paramTypeADRTime,        {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  "T1",           128,   0, NULL,                                  NULL          },          // 52 Time1
+    {moduleTypeEnvMulti,   paramTypeADRTime,        {{ 30,  -3}, { 7,  7}}, anchorBottomLeft,  "T2",           128,  30, NULL,                                  NULL          },          // 52 Time2
+    {moduleTypeEnvMulti,   paramTypeADRTime,        {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  "T3",           128,  30, NULL,                                  NULL          },          // 52 Time3
+    {moduleTypeEnvMulti,   paramTypeADRTime,        {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "T4",           128,  14, NULL,                                  NULL          },          // 52 Time4
+    {moduleTypeEnvMulti,   paramTypeMenu,           {{  3, -22}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, normalResetStrMap,                     NULL          },          // 52 Reset
+    {moduleTypeEnvMulti,   paramTypeMenu,           {{ 30, -19}, { 7,  7}}, anchorBottomLeft,  "Sust",           4,   2, multiEnvSustainStrMap,                 NULL          },          // 52 SustainPlacement
+    {moduleTypeEnvMulti,   paramTypeMenu,           {{-17, -29}, { 7,  7}}, anchorBottomRight, NULL,             5,   0, posNegInvBipStrMap,                    NULL          },          // 52 OutType
+    {moduleTypeEnvMulti,   paramTypeToggle,         {{ 10,  17}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, kbStrMap,                              offOnColourMap},          // 52 Kbt
+    {moduleTypeEnvMulti,   paramTypeMenu,           {{-26, -17}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, envShapeStrMap,                        NULL          },          // 52 Shape
+    // 53 SandH -- No parameters
+    // 54 FltStatic
+    {moduleTypeFltStatic,  paramTypeFreq,           {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  75, NULL,                                  NULL          },             // 54 Freq
+    {moduleTypeFltStatic,  paramTypeResonanceQ,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Res",          128,   0, NULL,                                  NULL          },             // 54 Res
+    {moduleTypeFltStatic,  paramTypeMenu,           {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, staticFilterTypeStrMap,                NULL          },             // 54 FilterType
+    {moduleTypeFltStatic,  paramTypeBypass,         {{ -3,   2}, { 5,  5}}, anchorMiddleRight, NULL,             2,   1, NULL,                                  NULL          },             // 54 Bypass
+    {moduleTypeFltStatic,  paramTypeToggle,         {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, gcStrMap,                              offOnColourMap},             // 54 GC
+    // 55 EnvD
+    {moduleTypeEnvD,       paramTypeADRTime,        {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Decay",        128,  54, NULL,                                  NULL          },             // 55 Decay
+    {moduleTypeEnvD,       paramTypeMenu,           {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, posNegInvStrMap,                       NULL          },             // 55 OutType
+    // 56 Resonator (hidden module)
+    {moduleTypeResonator,  paramTypeOscFreq,        {{ 32,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },             // 56 Tune
+    {moduleTypeResonator,  paramTypeFine,           {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },             // 56 Cent
+    {moduleTypeResonator,  paramTypeToggle,         {{ 15, -20}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},             // 56 Kbt
+    {moduleTypeResonator,  paramTypeCommonDial,     {{ 17,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },             // 56 Pitch M
+    {moduleTypeResonator,  paramTypeMenu,           {{ 30,  12}, { 7,  7}}, anchorTopLeft,     NULL,             4,   0, pitchTypeStrMap,                       NULL          },             // 56 Pitch Type
+    {moduleTypeResonator,  paramTypeUniPol,         {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  "Decay",        128,   0, NULL,                                  NULL          },             // 56 Decay
+    {moduleTypeResonator,  paramTypeUniPol,         {{ 62, -17}, { 7,  7}}, anchorBottomLeft,  "Damp",         128,   0, NULL,                                  NULL          },             // 56 Damp
+    {moduleTypeResonator,  paramTypeBypass,         {{ -3,  -3}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },             // 56 Bypass
+    {moduleTypeResonator,  paramTypeUniPol,         {{ 75, -17}, { 7,  7}}, anchorBottomLeft,  "Pos",          128,   0, NULL,                                  NULL          },             // 56 Pos
+    {moduleTypeResonator,  paramTypeMenu,           {{ 30,  23}, { 7,  7}}, anchorTopLeft,     "Alg",            5,   0, resonAlgStrMap,                        NULL          },             // 56 Algorithm
+    // 57 Automate *** We lack an UI element for the CTRL selector
+    {moduleTypeAutomate,   paramTypeInt,            {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Ctrl",         128,   7, NULL,                                  NULL          },             // 57 Ctrl CC
+    {moduleTypeAutomate,   paramTypeInt,            {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  "Val",          128,  64, NULL,                                  NULL          },             // 57 Val
+    {moduleTypeAutomate,   paramTypeMenu,           {{ 20,   0}, { 7,  7}}, anchorBottomLeft,  "Ch",            17,   0, midiChanAutomateStrMap,                NULL          },             // 57 Channel
+    {moduleTypeAutomate,   paramTypeMenu,           {{ 33,   0}, { 7,  7}}, anchorBottomLeft,  "Echo",           2,   0, offOnStrMap,                           NULL          },             // 57 Echo
+    // 58 Drumsynth — 4 rows: MasterOsc(y=17) | NoiseFilter(y=33) | SlaveOsc(y=49) | Bend/Click/Noise(y=65)
+    {moduleTypeDrumSynth,  paramTypeFreqDrum,       {{ 15, -60}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  42, NULL,                                  NULL          },             // 58 Master Freq
+    {moduleTypeDrumSynth,  paramTypeDrumSlaveRatio, {{ 15, -41}, { 7,  7}}, anchorBottomLeft,  "Ratio",        128,  15, NULL,                                  NULL          },             // 58 Slave Ratio
+    {moduleTypeDrumSynth,  paramTypeADRTime,        {{ 30, -60}, { 7,  7}}, anchorBottomLeft,  "Dcy",          128,  46, NULL,                                  NULL          },             // 58 MasterDecay
+    {moduleTypeDrumSynth,  paramTypeADRTime,        {{ 30, -41}, { 7,  7}}, anchorBottomLeft,  "Dcy",          128,  50, NULL,                                  NULL          },             // 58 Slave Decay
+    {moduleTypeDrumSynth,  paramTypeCommonDial,     {{ 45, -60}, { 7,  7}}, anchorBottomLeft,  "Lev",          128, 120, NULL,                                  NULL          },             // 58 Master Level
+    {moduleTypeDrumSynth,  paramTypeCommonDial,     {{ 45, -41}, { 7,  7}}, anchorBottomLeft,  "Lev",          128, 102, NULL,                                  NULL          },             // 58 Slave Level
+    {moduleTypeDrumSynth,  paramTypeFreq,           {{ 15, -22}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  57, NULL,                                  NULL          },             // 58 Noise Filter Freq
+    {moduleTypeDrumSynth,  paramTypeResonance,      {{ 30, -22}, { 7,  7}}, anchorBottomLeft,  "Res",          128,  32, NULL,                                  NULL          },             // 58 Noise Filter Res
+    {moduleTypeDrumSynth,  paramTypeCommonDial,     {{ 45, -22}, { 7,  7}}, anchorBottomLeft,  "Swp",          128,  39, NULL,                                  NULL          },             // 58 Noise Filter Sweep
+    {moduleTypeDrumSynth,  paramTypeADRTime,        {{ 60, -22}, { 7,  7}}, anchorBottomLeft,  "Dcy",          128,  49, NULL,                                  NULL          },             // 58 Noise Filter Decay
+    {moduleTypeDrumSynth,  paramTypeMenu,           {{  3, -25}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   1, staticFilterTypeStrMap,                NULL          },             // 58 Noise FilterType
+    {moduleTypeDrumSynth,  paramTypeCommonDial,     {{ 15,  -3}, { 7,  7}}, anchorBottomLeft,  "Amt",          128,  68, NULL,                                  NULL          },             // 58 Bend Amount
+    {moduleTypeDrumSynth,  paramTypeADRTime,        {{ 30,  -3}, { 7,  7}}, anchorBottomLeft,  "Dcy",          128,  61, NULL,                                  NULL          },             // 58 BendDecay
+    {moduleTypeDrumSynth,  paramTypeCommonDial,     {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  "Click",        128,  79, NULL,                                  NULL          },             // 58 Click Amount
+    {moduleTypeDrumSynth,  paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "Noise",        128, 115, NULL,                                  NULL          },             // 58 Noise Amount
+    {moduleTypeDrumSynth,  paramTypeBypass,         {{ -3, -12}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },             // 58 On
+
+    // 59 CompLev
+    {moduleTypeCompLev,    paramTypeBipLevel,       {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "C",            128,  64, NULL,                                  NULL          },     // 59 Compare Level
+    // 60 Mux8-1X
+    {moduleTypeMux8to1X,   paramTypeCommonDial,     {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  "X-fade",       128,   0, NULL,                                  NULL          },     // 60 X-fade
+    // 61 Clip
+    {moduleTypeClip,       paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },     // 61 Clip level M
+    {moduleTypeClip,       paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },     // 61 Clip level
+    {moduleTypeClip,       paramTypeMenu,           {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, asymSymStrMap,                         NULL          },     // 61 Shape
+    {moduleTypeClip,       paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },     // 61 Bypass
+    // 62 OverDrive
+    {moduleTypeOverdrive,  paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },     // 62 Amount M
+    {moduleTypeOverdrive,  paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },     // 62 Amount
+    {moduleTypeOverdrive,  paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },     // 62 Bypass
+    {moduleTypeOverdrive,  paramTypeMenu,           {{ 15,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, odTypeStrMap,                          NULL          },     // 62 Type
+    {moduleTypeOverdrive,  paramTypeMenu,           {{  3,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, asymSymStrMap,                         NULL          },     // 62 Shape
+    // 63 Scratch
+    {moduleTypeScratch,    paramTypeScratchRatio,   {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Ratio",        128,  80, NULL,                                  NULL          },     // 63 Ratio
+    {moduleTypeScratch,    paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },     // 63 Ratio Mod
+    {moduleTypeScratch,    paramTypeMenu,           {{ 44,  -1}, { 7,  7}}, anchorBottomLeft,  "Delay",          4,   2, delayStrMap,                           NULL          },     // 63 Delay
+    {moduleTypeScratch,    paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, NULL,             2,   1, NULL,                                  NULL          },     // 63 Bypass
+    // 64 Gate (Logic Gate) -- no parameters, 2 modes
+    // 65 Unknown
+
+    // 66 Mix2-1B
+    {moduleTypeMix2to1B,   paramTypeMenu,           {{ 22,  16}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, invStrMap,                             NULL          },            // 66 Inv1
+    {moduleTypeMix2to1B,   paramTypeCommonDial,     {{ 39,  14}, { 7,  7}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },            // 66 Lvl1
+    {moduleTypeMix2to1B,   paramTypeMenu,           {{ 56,  16}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, invStrMap,                             NULL          },            // 66 Inv2
+    {moduleTypeMix2to1B,   paramTypeCommonDial,     {{ 74,  14}, { 7,  7}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },            // 66 Lvl2
+    {moduleTypeMix2to1B,   paramTypeMenu,           {{ 21,   6}, { 7,  7}}, anchorTopLeft,     NULL,             3,   0, expStrMap,                             NULL          },            // 66 ExpLinDB
+    // 67 Unknown
+    // 68 ClkGen
+    {moduleTypeClkGen,     paramTypeCommonDial,     {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },                 // 68 Tempo *** needs new dial 24-214 BPM
+    {moduleTypeClkGen,     paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    NULL,             2,   1, NULL,                                  NULL          },                 // 68 Bypass
+    {moduleTypeClkGen,     paramTypeMenu,           {{  3,   0}, { 7,  7}}, anchorBottomLeft,  "Source",         2,   0, clkSrcStrMap,                          NULL          },                 // 68 Clk Source
+    {moduleTypeClkGen,     paramTypeMenu,           {{ 60,   0}, { 7,  7}}, anchorBottomLeft,  "Sync every",     6,   2, clkGenBeatSyncStrMap,                  NULL          },                 // 68 BeatSync
+    {moduleTypeClkGen,     paramTypeSwing,          {{ 25,  -3}, { 7,  7}}, anchorBottomLeft,  "Swing",        128,   0, NULL,                                  NULL          },                 // 68 Swing
+    // 69 ClkDiv
+    {moduleTypeClkDiv,     paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                 // 69 Divider *** needs other UI element
+
+    // 70 Unknown
+    // 71 EnvFollow
+    {moduleTypeEnvFollow,  paramTypeStrMap,         {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Attack",       128,   0, env_follow_attackStrMap,               NULL          },             // 71 Attack
+    {moduleTypeEnvFollow,  paramTypeStrMap,         {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Release",      128,  20, env_follow_releaseStrMap,              NULL          },             // 71 Release
+    // 72 NoteScaler
+    {moduleTypeNoteScaler, paramTypePlusMinusUnits, {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Range",        128,   0, NULL,                                  NULL          },             // 72 Range *** needs UI element
+    // 73 Unknown
+    // 74 WaveWrap
+    {moduleTypeWaveWrap,   paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                 // 74 Amount Mod
+    {moduleTypeWaveWrap,   paramTypeCommonDial,     {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                 // 74 Amount
+    {moduleTypeWaveWrap,   paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },                 // 74 Bypass
+    // 75 NoteQuant
+    {moduleTypeNoteQuant,  paramTypePlusMinusUnits, {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Range",        128, 127, NULL,                                  NULL          },                 // 75 Range
+    {moduleTypeNoteQuant,  paramTypeOffNum,         {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Notes",        128,   0, NULL,                                  NULL          },                 // 75 Notes
+    // 76 SwOnOffT
+    {moduleTypeSwOnOffT,   paramTypeMenu,           {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, offOnStrMap,                           NULL          },                 // 76 On
+    // 77 Unknown
+    // 78 Sw1-8
+    {moduleTypeSw1to8,     paramTypeRadioEdit,      {{ 40, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             8,   0, out8StrMap,                            NULL          },                           // 78 Selector
+    // 79 Sw4-1
+    {moduleTypeSw4to1,     paramTypeRadioEdit,      {{ 40, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, in8StrMap,                             NULL          },                           // 79 Selector
+    // 80 Unknown
+    // 81 LevAmp
+    {moduleTypeLevAmp,     paramTypeLevAmpDial,     {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 81 Gain
+    {moduleTypeLevAmp,     paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, levAmpTypeStrMap,                      NULL          },    // 81 Type
+    // 82 Rect
+    {moduleTypeRect,       paramTypeMenu,           {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, rectStrMap,                            NULL          },    // 82 Mode
+    {moduleTypeRect,       paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },    // 82 Bypass
+    // 83 ShpStatic
+    {moduleTypeShpStatic,  paramTypeMenu,           {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   1, shpStaticStrMap,                       NULL          },    // 83 Mode
+    {moduleTypeShpStatic,  paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },    // 83 Bypass
+    // 84 EnvADR
+    {moduleTypeEnvADR,     paramTypeMenu,           {{-24,  -3}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, envShapeStrMap,                        NULL          },    // 84 Shape
+    {moduleTypeEnvADR,     paramTypeADRTime,        {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "Attack",       128,   0, NULL,                                  NULL          },    // 84 Attack
+    {moduleTypeEnvADR,     paramTypeMenu,           {{-24, -17}, { 7,  7}}, anchorBottomRight, NULL,             2,   0, normalResetStrMap,                     NULL          },    // 84 Reset
+    {moduleTypeEnvADR,     paramTypeADRTime,        {{ 32,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  54, NULL,                                  NULL          },    // 84 Release/Decay time
+    {moduleTypeEnvADR,     paramTypeMenu,           {{  9,  13}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, trigGateStrMap,                        NULL          },    // 84 Trig/Gate
+    {moduleTypeEnvADR,     paramTypeMenu,           {{-24, -10}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, posNegInvStrMap,                       NULL          },    // 84 OutType
+    {moduleTypeEnvADR,     paramTypeToggle,         {{ 10,   8}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, kbStrMap,                              offOnColourMap},
+    {moduleTypeEnvADR,     paramTypeMenu,           {{ 44,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, decayReleaseStrMap,                    NULL          },    // 84 Decay/Release toggle
+    // 85 WindSw
+    {moduleTypeWindSw,     paramTypeUniPol,         {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "From",         128,  40, NULL,                                  NULL          },    // 85 From
+    {moduleTypeWindSw,     paramTypeUniPol,         {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "To",           128,  80, NULL,                                  NULL          },    // 85 To
+    // 86 8Counter -- No controls
+    // 87 FltLP
+    {moduleTypeFltLP,      paramTypeFreq,           {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  75, NULL,                                  NULL          },                      // 87 Freq
+    {moduleTypeFltLP,      paramTypeCommonDial,     {{ 35,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 87 FreqMod
+    {moduleTypeFltLP,      paramTypeMenu,           {{ 10,   0}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },
+    // Slope (6/12/18/24/30/36 dB/Oct per the manual's own FltLP section) —
+    // already correctly formed (max=6 matches fltLPSlopeStrMap's 6 entries
+    // exactly), just needed uncommenting: Freq+FreqMod+Kbt+Slope+Bypass = 5,
+    // matching the G2's own reported count.
+    {moduleTypeFltLP,      paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },                      // 87 Bypass
+    // 88 Sw1-4
+    {moduleTypeSw1to4,     paramTypeRadioEdit,      {{ 30, -14}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, out8StrMap,                            NULL          },                      // 88 Selector
+    // 89 Flanger
+    {moduleTypeFlanger,    paramTypeFlangerRate,    {{ 35,  -3}, { 7,  7}}, anchorBottomLeft,  "Rate",         128,  64, NULL,                                  NULL          },                      // 89 Rate
+    {moduleTypeFlanger,    paramTypeCommonDial,     {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  "Range",        128,  64, NULL,                                  NULL          },                      // 89 Range
+    {moduleTypeFlanger,    paramTypeCommonDial,     {{ 75,  -3}, { 7,  7}}, anchorBottomLeft,  "Feedback",     128,  64, NULL,                                  NULL          },                      // 89 Feedback
+    {moduleTypeFlanger,    paramTypeBypass,         {{ -3,  -8}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },                      // 89 Bypass
+    // 90 Sw1-2
+    {moduleTypeSw1to2,     paramTypeRadioEdit,      {{ 25,  -8}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, out8StrMap,                            NULL          },                      // 90 Selector
+    // 91 FlipFlop
+    // 92 FltClassic
+    {moduleTypeFltClassic, paramTypeFreq,           {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  75, NULL,                                  NULL          },                        // 92
+    {moduleTypeFltClassic, paramTypePitch,          {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  "Env",          128,   0, NULL,                                  NULL          },
+    {moduleTypeFltClassic, paramTypeMenu,           {{ 25,  -7}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },
+    {moduleTypeFltClassic, paramTypeResonanceQ,     {{ 55,  -3}, { 7,  7}}, anchorBottomLeft,  "Res",          128,   0, NULL,                                  NULL          },
+    {moduleTypeFltClassic, paramTypeMenu,           {{ 70, -10}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   2, fltClassicDbStrMap,                    NULL          },
+    {moduleTypeFltClassic, paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, NULL,             2,   1, NULL,                                  NULL          },
+    // 93 Unknown
+    // 94 StChorus
+    {moduleTypeStChorus,   paramTypeCommonDial,     {{ 33,  -3}, { 7,  7}}, anchorBottomLeft,  "Detune",       128,  20, NULL,                                  NULL          },                        // 94
+    {moduleTypeStChorus,   paramTypeCommonDial,     {{ 51,  -3}, { 7,  7}}, anchorBottomLeft,  "Amount",       128, 127, NULL,                                  NULL          },
+    {moduleTypeStChorus,   paramTypeBypass,         {{ -3,   1}, { 5,  5}}, anchorMiddleRight, NULL,             2,   1, NULL,                                  NULL          },
+    // 95 Unknown
+    // 96 OscD
+    {moduleTypeOscD,       paramTypeFreq,           {{ 35,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },        // 96 Tune
+    {moduleTypeOscD,       paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },        // 96 Fine
+    {moduleTypeOscD,       paramTypeToggle,         {{  3,   7}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, kbStrMap,                              offOnColourMap},        // 96 Kbt
+    {moduleTypeOscD,       paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },        // 96 Pitch M
+    {moduleTypeOscD,       paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },        // 96 Bypass
+    // 97 OscA
+    {moduleTypeOscA,       paramTypeOscFreq,        {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },        // 97 Tune
+    {moduleTypeOscA,       paramTypeFine,           {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },        // 97 Fine
+    {moduleTypeOscA,       paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},        // 97 Kbt
+    {moduleTypeOscA,       paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },        // 97 Pitch M
+    {moduleTypeOscA,       paramTypeMenu,           {{ 51,  10}, { 7,  7}}, anchorTopLeft,     "Wave",           6,   2, shapeOscATypeStrMap,                   NULL          },        // 97 Waveform
+    {moduleTypeOscA,       paramTypeBypass,         {{ -3,   4}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },        // 97 Bypass  (moved off middle-right to clear the wave graph — CT, 2026-08-24. NOT to the bottom corner: the audio output already sits at {-3,-3}, and the two drew on top of each other)
+    {moduleTypeOscA,       paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },        // 97 Pitch Type
+
+    // 98 FreqShift
+    {moduleTypeFreqShift,  paramTypeFreqShift,      {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "FreqShift",    128,   0, NULL,                                  NULL          },               // 98 FreqShift
+    {moduleTypeFreqShift,  paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },               // 98 Mod
+    {moduleTypeFreqShift,  paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   2, freqShiftRangeStrMap,                  NULL          },               // 98 Range
+    {moduleTypeFreqShift,  paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },               // 98 Bypass
+    // 99 Unknown
+    // 100 Sw2-1
+    {moduleTypeSw2to1,     paramTypeRadioEdit,      {{ 40,  -9}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, in8StrMap,                             NULL          },                           // 100 Selector
+    // 101 Unknown
+    // 102 FltPhase
+    {moduleTypeFltPhase,   paramTypeCommonDial,     {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },                      // 102 Pitch M
+    {moduleTypeFltPhase,   paramTypeFreq,           {{ 22, -10}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  64, NULL,                                  NULL          },                      // 102 Freq
+    {moduleTypeFltPhase,   paramTypeCommonDial,     {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 102 Spread M
+    {moduleTypeFltPhase,   paramTypeBipolar,        {{ 57, -17}, { 7,  7}}, anchorBottomLeft,  "FB",           128,  64, NULL,                                  NULL          },                      // 102 FB
+    {moduleTypeFltPhase,   paramTypeMenu,           {{ 70,   0}, { 7,  7}}, anchorBottomLeft,  "Notch",          6,   2, int16StrMap,                           NULL          },                      // 102 Notch count
+    {moduleTypeFltPhase,   paramTypeCommonDial,     {{ 38, -17}, { 7,  7}}, anchorBottomLeft,  "Spread",       128,  64, NULL,                                  NULL          },                      // 102 Spread
+    {moduleTypeFltPhase,   paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },                      // 102 Bypass
+    {moduleTypeFltPhase,   paramTypeCommonDial,     {{ 83,  -3}, { 7,  7}}, anchorBottomLeft,  "Level",        128, 127, NULL,                                  NULL          },                      // 102 Level
+    {moduleTypeFltPhase,   paramTypeCommonDial,     {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 102 FB Mod
+    {moduleTypeFltPhase,   paramTypeMenu,           {{ 68, -12}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, fltPhaseTypeStrMap,                    NULL          },                      // 102 Type
+    {moduleTypeFltPhase,   paramTypeMenu,           {{  3, -19}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },                      // 102 Kbt
+    // 103 EqPeak
+    {moduleTypeEqPeak,     paramTypeFreq,           {{ 22,  -3}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  60, NULL,                                  NULL          },                      // 103 Freq
+    {moduleTypeEqPeak,     paramTypedB,             {{ 42,  -3}, { 7,  7}}, anchorBottomLeft,  "Gain",         128,  64, NULL,                                  NULL          },                      // 103 Gain
+    {moduleTypeEqPeak,     paramTypeBandwidth,      {{ 62, -10}, { 7,  7}}, anchorBottomLeft,  "BW",           128,  64, NULL,                                  NULL          },                      // 103 BW *** needs UI element
+    {moduleTypeEqPeak,     paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },                      // 103 Bypass
+    {moduleTypeEqPeak,     paramTypeCommonDial,     {{ 74,  -3}, { 7,  7}}, anchorBottomLeft,  "Level",        128, 127, NULL,                                  NULL          },                      // 103 Level  (was x83, overlapped the volume meter)
+
+    // 104 Unknown
+    // 105 ValSw2-1
+    {moduleTypeValSw2to1,  paramTypeUniPolShort,    {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,            64,   0, NULL,                                  NULL          },               // 105 Val
+    // 106 OscNoise
+    {moduleTypeOscNoise,   paramTypeOscFreq,        {{ 29,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },               // 106 Tune
+    {moduleTypeOscNoise,   paramTypeFine,           {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },               // 106 Fine
+    {moduleTypeOscNoise,   paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},               // 97 Kbt
+    {moduleTypeOscNoise,   paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },               // 97 Pitch M
+    {moduleTypeOscNoise,   paramTypeMenu,           {{ 29, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },               // 97 Pitch Type
+    // §8.1 - THE LABELS WERE THE WRONG WAY ROUND until 2026-09-19, though the positions were not:
+    // on the instrument parameter 5 is the modulation amount and 6 is Width itself, which is what
+    // the engine has always read (OSCNOISE_PARAM_WIDTH). Left to right is WidthM then
+    // Width.
+    {moduleTypeOscNoise,   paramTypeCommonDial,     {{ 61,  -3}, { 7,  7}}, anchorBottomLeft,  "WidthM",       128,   0, NULL,                                  NULL          },               // 106 Width Mod
+    {moduleTypeOscNoise,   paramTypeCommonDial,     {{ 77,  -3}, { 7,  7}}, anchorBottomLeft,  "Width",        128,   0, NULL,                                  NULL          },               // 106 Width
+    {moduleTypeOscNoise,   paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },               // 106 Bypass
+
+    // 107 Unknown
+    // 108 Vocoder
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 10,   0}, { 5,  7}}, anchorBottomLeft,  "1",             17,   1, vocoderStrMap,                         NULL          },                      // 108 BandSel 1
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 15,   0}, { 5,  7}}, anchorBottomLeft,  "2",             17,   2, vocoderStrMap,                         NULL          },                      // 108 BandSel 2
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 20,   0}, { 5,  7}}, anchorBottomLeft,  "3",             17,   3, vocoderStrMap,                         NULL          },                      // 108 BandSel 3
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 25,   0}, { 5,  7}}, anchorBottomLeft,  "4",             17,   4, vocoderStrMap,                         NULL          },                      // 108 BandSel 4
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 30,   0}, { 5,  7}}, anchorBottomLeft,  "5",             17,   5, vocoderStrMap,                         NULL          },                      // 108 BandSel 5
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 35,   0}, { 5,  7}}, anchorBottomLeft,  "6",             17,   6, vocoderStrMap,                         NULL          },                      // 108 BandSel 6
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 40,   0}, { 5,  7}}, anchorBottomLeft,  "7",             17,   7, vocoderStrMap,                         NULL          },                      // 108 BandSel 7
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 45,   0}, { 5,  7}}, anchorBottomLeft,  "8",             17,   8, vocoderStrMap,                         NULL          },                      // 108 BandSel 8
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 50,   0}, { 5,  7}}, anchorBottomLeft,  "9",             17,   9, vocoderStrMap,                         NULL          },                      // 108 BandSel 9
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 55,   0}, { 5,  7}}, anchorBottomLeft,  "10",            17,  10, vocoderStrMap,                         NULL          },                      // 108 BandSel 10
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 60,   0}, { 5,  7}}, anchorBottomLeft,  "11",            17,  11, vocoderStrMap,                         NULL          },                      // 108 BandSel 11
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 65,   0}, { 5,  7}}, anchorBottomLeft,  "12",            17,  12, vocoderStrMap,                         NULL          },                      // 108 BandSel 12
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 70,   0}, { 5,  7}}, anchorBottomLeft,  "13",            17,  13, vocoderStrMap,                         NULL          },                      // 108 BandSel 13
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 75,   0}, { 5,  7}}, anchorBottomLeft,  "14",            17,  14, vocoderStrMap,                         NULL          },                      // 108 BandSel 14
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 80,   0}, { 5,  7}}, anchorBottomLeft,  "15",            17,  15, vocoderStrMap,                         NULL          },                      // 108 BandSel 15
+    {moduleTypeVocoder,    paramTypeMenu,           {{ 85,   0}, { 5,  7}}, anchorBottomLeft,  "16",            17,  16, vocoderStrMap,                         NULL          },                      // 108 BandSel 16
+    {moduleTypeVocoder,    paramTypeMenu,           {{  3,  -9}, { 7,  7}}, anchorBottomLeft,  "Emp",            2,   0, offOnStrMap,                           NULL          },                      // 108 Emphasis
+    {moduleTypeVocoder,    paramTypeMenu,           {{  3, -21}, { 7,  7}}, anchorBottomLeft,  "Mon",            2,   0, offOnStrMap,                           NULL          },                      // 108 Monitor
+    // Preset buttons (-2/-1/-0/+1/+2/Inv/Rnd) deliberately excluded, not just
+    // pending: the manual describes them as one-shot actions that reroute
+    // all 16 BandSel values by N steps (or invert/randomize them) — there's
+    // nothing of their own to store, they just bulk-update the BandSel
+    // params above. Adding them as 7 more paramLocationList rows would bring
+    // this module to 25, well past the G2's own reported count of 18
+    // (16 BandSel + Emphasis + Monitor, already exactly matched above).
+    // Left here as reference/rows to reuse if these ever get wired up as
+    // real one-shot UI actions rather than persisted parameters.
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 10, -21}, { 7,  7}}, anchorBottomLeft,  "-2",             1,   0, presetStrMap,           NULL          }, // 108 Preset -2
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 17, -21}, { 7,  7}}, anchorBottomLeft,  "-1",             1,   0, presetStrMap,           NULL          }, // 108 Preset -1
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 24, -21}, { 7,  7}}, anchorBottomLeft,  "-0",             1,   0, presetStrMap,           NULL          }, // 108 Preset 0
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 31, -21}, { 7,  7}}, anchorBottomLeft,  "+1",             1,   0, presetStrMap,           NULL          }, // 108 Preset +1
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 38, -21}, { 7,  7}}, anchorBottomLeft,  "+2",             1,   0, presetStrMap,           NULL          }, // 108 Preset +2
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 45, -21}, { 7,  7}}, anchorBottomLeft,  "Inv",            1,   0, presetStrMap,           NULL          }, // 108 Preset Inv
+    //{moduleTypeVocoder,    paramTypeMenu, {{ 52, -21}, { 7,  7}}, anchorBottomLeft,  "Rnd",            1,   0, presetStrMap,           NULL          }, // 108 Preset Rnd
+    // 109 Unknown
+    // 110 Unknown
+    // 111 Unknown
+    // 112 LevAdd
+    {moduleTypeLevAdd,     paramTypeCommonDial,     {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },   // 112 Constant
+    {moduleTypeLevAdd,     paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, bipUniStrMap,                          NULL          },   // 112 Bip/Uni
+    // 113 Fade1-2
+    {moduleTypeFade1to2,   paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },   // 113 Mix
+    {moduleTypeFade1to2,   paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },   // 113 Mix M
+    // 114 Fade2-1
+    {moduleTypeFade2to1,   paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },   // 114 Mix
+    {moduleTypeFade2to1,   paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },   // 114 Mix M
+    // 115 LevScaler
+    {moduleTypeLevScaler,  paramTypedB,             {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "L",            128,  64, NULL,                                  NULL          },   // 115 Left slope +- 8 db/oct
+    {moduleTypeLevScaler,  paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "BP",           128,  64, NULL,                                  NULL          },   // 115 BreakPoint
+    {moduleTypeLevScaler,  paramTypedB,             {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "R",            128,  64, NULL,                                  NULL          },   // 115 Right slope +- 8 db/oct
+    {moduleTypeLevScaler,  paramTypeToggle,         {{  3, -15}, { 7,  7}}, anchorBottomLeft,  "Kbt",            2,   1, offOnStrMap,                           offOnColourMap},   // 115 Kbt
+    // 116 Mix8-1A
+    {moduleTypeMix8to1A,   paramTypeMenu,           {{  3,   0}, { 7,  7}}, anchorBottomLeft,  "Pad",            3,   0, db12BPadStrMap,                        NULL          },   // 116 Pad
+    // 117 LevMod
+    {moduleTypeLevMod,     paramTypeCommonDial,     {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Depth",        128,   0, NULL,                                  NULL          },   // 117 ModDepth
+    {moduleTypeLevMod,     paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Type",         128,  64, NULL,                                  NULL          },   // 117 ModType
+    // 118 Digitizer
+    {moduleTypeDigitizer,  paramTypeMenu,           {{ 44,  -1}, { 7,  7}}, anchorBottomLeft,  "Bits",          13,  11, bitsStrMap,                            NULL          },   // 118 Bits
+    {moduleTypeDigitizer,  paramTypeSampleRate,     {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Sample Rate",  128,  64, NULL,                                  NULL          },   // 118 Rate
+    {moduleTypeDigitizer,  paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Rate",         128,   0, NULL,                                  NULL          },   // 118 Rate M
+    {moduleTypeDigitizer,  paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },   // 106 Bypass
+    // 119 EnvADDSR
+    {moduleTypeEnvADDSR,   paramTypeToggle,         {{ 10,   8}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, kbStrMap,                              offOnColourMap},   // 119 Kb
+    {moduleTypeEnvADDSR,   paramTypeMenu,           {{-30, -31}, { 7,  7}}, anchorBottomRight, NULL,             4,   0, envShapeStrMap,                        NULL          },   // 119 Shape
+    {moduleTypeEnvADDSR,   paramTypeADRTime,        {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "A",            128,   0, NULL,                                  NULL          },   // 119 A
+    {moduleTypeEnvADDSR,   paramTypeADRTime,        {{ 32,  -3}, { 7,  7}}, anchorBottomLeft,  "D1",           128,  54, NULL,                                  NULL          },   // 119 D1
+    {moduleTypeEnvADDSR,   paramTypeUniPol,         {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "L1",           128, 100, NULL,                                  NULL          },   // 119 L1
+    {moduleTypeEnvADDSR,   paramTypeADRTime,        {{ 56,  -3}, { 7,  7}}, anchorBottomLeft,  "D2",           128,  54, NULL,                                  NULL          },   // 119 D2
+    {moduleTypeEnvADDSR,   paramTypeUniPol,         {{ 68,  -3}, { 7,  7}}, anchorBottomLeft,  "L2",           128,  70, NULL,                                  NULL          },   // 119 L2
+    {moduleTypeEnvADDSR,   paramTypeADRTime,        {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  "R",            128,  14, NULL,                                  NULL          },   // 119 R
+    {moduleTypeEnvADDSR,   paramTypeMenu,           {{ 20, -21}, { 7,  7}}, anchorBottomLeft,  "Sustain",        2,   1, sustainStrMap,                         NULL          },   // 119 Sustainmode
+    {moduleTypeEnvADDSR,   paramTypeMenu,           {{-30, -24}, { 7,  7}}, anchorBottomRight, NULL,             6,   0, posStrMap,                             NULL          },   // 119 Pos
+    {moduleTypeEnvADDSR,   paramTypeMenu,           {{  5,  -8}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, normalResetStrMap,                     NULL          },   // 119 Reset
+
+    // 120 Unknown
+    // 121 SeqNote - params 0-15: note sliders, 16-31: step enables, 32: Cycle, 33: Length, 34: T/G, 35: Rnd, 36: Clr
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 20, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step1
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 24, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step2
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 28, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step3
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 32, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step4
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 36, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step5
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 40, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step6
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 44, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step7
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 48, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step8
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 52, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step9
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 56, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step10
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 60, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step11
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 64, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step12
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 68, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step13
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 72, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step14
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 76, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step15
+    {moduleTypeSeqNote,    paramTypeSlider,         {{ 80, -12}, { 4, 68}}, anchorBottomLeft,  NULL,           128,  64, bip128StrMap,                          NULL          },                     // 121 Step16
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 20,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt1
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 24,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt2
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 28,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt3
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 32,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt4
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 36,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt5
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 40,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt6
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 44,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt7
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 48,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt8
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 52,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt9
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 56,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt10
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 60,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt11
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 64,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt12
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 68,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt13
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 72,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt14
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 76,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt15
+    {moduleTypeSeqNote,    paramTypeEnable,         {{ 80,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                     // 121 Evnt16
+    {moduleTypeSeqNote,    paramTypeToggle,         {{ 12,   9}, { 7,  7}}, anchorTopLeft,     "Cycle",          2,   1, offOnStrMap,                           offOnColourMap},                     // 121 Cycle
+    {moduleTypeSeqNote,    paramTypeMenu,           {{ 25,   9}, { 7,  7}}, anchorTopLeft,     "Length",        16,  15, int16StrMap,                           NULL          },                     // 121 Length
+    // x WAS +88, WHICH PUT THIS BOX ALMOST A WHOLE MODULE WIDTH TO THE RIGHT OF THE MODULE, floating
+    // in empty canvas. For a right anchor, adjust_rectangle() computes x as an inset from the module's
+    // RIGHT edge (module.x + module.w + x - w), so a positive x pushes it outside — every other
+    // right-anchored SeqNote entry uses a small negative inset, and -3 is the one the Note and Trig
+    // outputs use. That lands it in the right-hand column directly above the Trig output, which is
+    // also where it belongs semantically: this selector is what makes that output a trigger or a gate.
+    // A sweep of the whole table found no other right-anchored entry with a positive x.
+    {moduleTypeSeqNote,    paramTypeMenu,           {{ 88,  -7}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, trigGateStrMap,                        NULL          },                     // 121 T/G
+    {moduleTypeSeqNote,    paramTypePush,           {{  3,  34}, {10,  7}}, anchorTopLeft,     "Rnd",            2,   0, NULL,                                  NULL          },                     // 121 Randomize
+    {moduleTypeSeqNote,    paramTypePush,           {{  3,  40}, {10,  7}}, anchorTopLeft,     "Clr",            2,   0, NULL,                                  NULL          },                     // 121 Clear
+    {moduleTypeSeqNote,    paramTypeCustomData,     {{  3,  59}, {10,  7}}, anchorTopLeft,     "Mag",            3,   0, seqNoteMagStrMap,                      NULL          },                     // 121 Magnifier (custom data)
+    {moduleTypeSeqNote,    paramTypeCustomData,     {{  3,  49}, {15,  7}}, anchorTopLeft,     "Oct",            8,   0, octaveStrMap,                          NULL          },                     // 121 Octave (custom data)
+    //{moduleTypeSeqNote,    paramTypeCustomData,  {{ 20,   23}, {15,  7}}, anchorTopLeft,     "Oct",            8,   0, octaveStrMap,                          NULL          },                         // 121 Octave (custom data)
+    // 122 Unknown
+    // 123 Mix4-1C
+    {moduleTypeMix4to1C,   paramTypeCommonDial,     {{ 11, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                    // 123 L1
+    {moduleTypeMix4to1C,   paramTypeCommonDial,     {{ 31, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                    // 123 L2
+    {moduleTypeMix4to1C,   paramTypeCommonDial,     {{ 51, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                    // 123 L3
+    {moduleTypeMix4to1C,   paramTypeCommonDial,     {{ 71, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },                    // 123 L4
+    {moduleTypeMix4to1C,   paramTypeEnable,         {{  5,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},                    // 123 Enable1
+    {moduleTypeMix4to1C,   paramTypeEnable,         {{ 25,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},                    // 123 Enable2
+    {moduleTypeMix4to1C,   paramTypeEnable,         {{ 45,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},                    // 123 Enable3
+    {moduleTypeMix4to1C,   paramTypeEnable,         {{ 65,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},                    // 123 Enable4
+    {moduleTypeMix4to1C,   paramTypeMenu,           {{ 16,   9}, { 7,  7}}, anchorTopLeft,     "Pad",            3,   0, mixerPadStrMap,                        NULL          },                    // 123 Pad
+    {moduleTypeMix4to1C,   paramTypeMenu,           {{  3,   9}, { 7,  7}}, anchorTopLeft,     "Curve",          3,   0, expStrMap,                             NULL          },                    // 123 Exp
+    // 124 Mux8-1 -- No params
+    // 125 WahWah
+    {moduleTypeWahWah,     paramTypeFreq,           {{ 35,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                     // 125 Sweep M
+    {moduleTypeWahWah,     paramTypeCommonDial,     {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },                     // 125 Sweep
+    {moduleTypeWahWah,     paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },                     // 125 Bypass
+    // 126 Name
+    // 127 Fx-In
+    {moduleTypeFxtoIn,     paramTypeMenu,           {{ 20,  -4}, { 7,  3}}, anchorBottomLeft,  "In from",        2,   0, inFxStrMap,                            NULL          },                   // 127 In
+    {moduleTypeFxtoIn,     paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },                   // 127 Bypass
+    {moduleTypeFxtoIn,     paramTypeMenu,           {{  3,  -4}, { 7,  3}}, anchorBottomLeft,  "Pad",            4,   1, db12PadStrMap,                         NULL          },                   // 127 Pad
+    // 128 MinMax -- No params
+    // 128 Unknown
+    // 130 BinCounter -- No params
+    // 131 ADConv  -- No params
+    // 132 DAConv -- No params
+    // 133 Unknown
+    // 134 FltHP
+    {moduleTypeFltHP,      paramTypeFreq,           {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  60, NULL,                                  NULL          },                     // 134 Freq
+    {moduleTypeFltHP,      paramTypeCommonDial,     {{ 35,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                     // 134 FreqMod
+    {moduleTypeFltHP,      paramTypeMenu,           {{ 10,   0}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },                     // 134 Kbt
+    {moduleTypeFltHP,      paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },                     // 134 Bypass
+    // 135 Unknown
+    // 136 Unknown
+    // 137 Unknown
+    // 138 Unknown
+    // 139 T&H -- No params
+
+    // 140 Mix4-1S
+    {moduleTypeMix4to1S,   paramTypeCommonDial,     {{ 11, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 123 L1
+    {moduleTypeMix4to1S,   paramTypeCommonDial,     {{ 31, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 123 L2
+    {moduleTypeMix4to1S,   paramTypeCommonDial,     {{ 51, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 123 L3
+    {moduleTypeMix4to1S,   paramTypeCommonDial,     {{ 71, -10}, { 7,  7}}, anchorBottomLeft,  NULL,           128, 100, NULL,                                  NULL          },          // 123 L4
+    {moduleTypeMix4to1S,   paramTypeEnable,         {{  5,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},          // 123 Enable1
+    {moduleTypeMix4to1S,   paramTypeEnable,         {{ 25,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},          // 123 Enable2
+    {moduleTypeMix4to1S,   paramTypeEnable,         {{ 45,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},          // 123 Enable3
+    {moduleTypeMix4to1S,   paramTypeEnable,         {{ 65,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},          // 123 Enable4
+    {moduleTypeMix4to1S,   paramTypeMenu,           {{  3,   9}, { 7,  7}}, anchorTopLeft,     "Curve",          3,   0, expStrMap,                             NULL          },          // 123 Exp
+    // 141 CtrlSend
+    {moduleTypeCtrlSend,   paramTypeInt,            {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Ctrl",         128,   1, NULL,                                  NULL          },          // 141 Ctrl
+    {moduleTypeCtrlSend,   paramTypeInt,            {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Value",        128,   0, NULL,                                  NULL          },          // 141 Ctrl
+    {moduleTypeCtrlSend,   paramTypeMenu,           {{ 60,  -1}, { 7,  7}}, anchorBottomLeft,  "Chan",          21,   0, midiChanStrMap,                        NULL          },          // 141 Channel
+    // 142 PCSend
+    {moduleTypePCSend,     paramTypeInt,            {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Program",      128,   0, NULL,                                  NULL          },          // 142 Program
+    {moduleTypePCSend,     paramTypeMenu,           {{ 60,  -1}, { 7,  7}}, anchorBottomLeft,  "Chan",          21,   0, midiChanStrMap,                        NULL          },          // 142 Channel
+    // 143 NoteSend
+    {moduleTypeNoteSend,   paramTypeInt,            {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Vel",          128, 100, NULL,                                  NULL          },          // 143 Vel
+    {moduleTypeNoteSend,   paramTypeNoteDial,       {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Note",         128,  64, NULL,                                  NULL          },          // 143 Ctrl
+    {moduleTypeNoteSend,   paramTypeMenu,           {{ 60,  -1}, { 7,  7}}, anchorBottomLeft,  "Chan",          21,   0, midiChanStrMap,                        NULL          },          // 143 Channel
+    // 144 SeqEvent
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 20, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-1
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 24, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-2
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 28, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-3
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 32, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-4
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 36, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-5
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 40, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-6
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 44, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-7
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 48, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-8
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 52, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-9
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 56, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-10
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 60, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-11
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 64, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-12
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 68, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-13
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 72, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-14
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 76, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-15
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 80, -19}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step1-16
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 20,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-1
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 24,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-2
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 28,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-3
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 32,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-4
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 36,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-5
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 40,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-6
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 44,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-7
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 48,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-8
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 52,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-9
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 56,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-10
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 60,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-11
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 64,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-12
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 68,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-13
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 72,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-14
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 76,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-15
+    {moduleTypeSeqEvent,   paramTypeEnable,         {{ 80,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-16
+    {moduleTypeSeqEvent,   paramTypeToggle,         {{ 12,   9}, { 7,  7}}, anchorTopLeft,     "Cycle",          2,   1, offOnStrMap,                           offOnColourMap},          // 121 Cycle
+    {moduleTypeSeqEvent,   paramTypeMenu,           {{ 25,   9}, { 7,  7}}, anchorTopLeft,     "Length",        16,  15, int16StrMap,                           NULL          },          // 121 Length
+    {moduleTypeSeqEvent,   paramTypeMenu,           {{ 88, -21}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, trigGateStrMap,                        NULL          },          // 144 T up
+    {moduleTypeSeqEvent,   paramTypeMenu,           {{ 88,  -7}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, trigGateStrMap,                        NULL          },          // 144 T down
+    // 145 SeqVal
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 20, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-1
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 24, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-2
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 28, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-3
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 32, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-4
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 36, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-5
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 40, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-6
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 44, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-7
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 48, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1-8
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 52, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-1
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 56, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-2
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 60, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-3
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 64, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-4
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 68, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-5
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 72, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-6
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 76, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-7
+    {moduleTypeSeqVal,     paramTypeSlider,         {{ 80, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2-8
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 20,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-1
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 24,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-2
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 28,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-3
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 32,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-4
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 36,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-5
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 40,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-68
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 44,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-7
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 48,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-8
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 52,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-9
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 56,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-10
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 60,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-11
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 64,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-12
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 68,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-13
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 72,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-14
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 76,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-15
+    {moduleTypeSeqVal,     paramTypeEnable,         {{ 80,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // 144 Step2-16
+    {moduleTypeSeqVal,     paramTypeToggle,         {{ 12,   9}, { 7,  7}}, anchorTopLeft,     "Cycle",          2,   1, offOnStrMap,                           offOnColourMap},          // 144 Cycle
+    {moduleTypeSeqVal,     paramTypeMenu,           {{ 25,   9}, { 7,  7}}, anchorTopLeft,     "Length",        16,  15, int16StrMap,                           NULL          },          // 144 Length
+    {moduleTypeSeqVal,     paramTypeMenu,           {{  3,  18}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, bipUniStrMap,                          NULL          },          // 144 Cycle
+    {moduleTypeSeqVal,     paramTypeMenu,           {{ 88,  -7}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, trigGateStrMap,                        NULL          },          // 144 T down
+    {moduleTypeSeqVal,     paramTypePush,           {{  3,  34}, {10,  7}}, anchorTopLeft,     "Rnd",            2,   0, NULL,                                  NULL          },          // 145 Randomize
+    {moduleTypeSeqVal,     paramTypePush,           {{  3,  40}, {10,  7}}, anchorTopLeft,     "Clr",            2,   0, NULL,                                  NULL          },          // 145 Clear
+    // 146 SeqLev
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 20, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step1
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 24, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step2
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 28, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step3
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 32, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step4
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 36, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step5
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 40, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step6
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 44, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step7
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 48, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step8
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 52, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step9
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 56, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step10
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 60, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step11
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 64, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step12
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 68, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step13
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 72, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step14
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 76, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step15
+    {moduleTypeSeqLev,     paramTypeSlider,         {{ 80, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },          // Step16
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 20,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt1
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 24,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt2
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 28,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt3
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 32,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt4
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 36,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt5
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 40,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt6
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 44,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt7
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 48,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt8
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 52,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt9
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 56,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt10
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 60,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt11
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 64,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt12
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 68,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt13
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 72,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt14
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 76,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt15
+    {moduleTypeSeqLev,     paramTypeEnable,         {{ 80,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},          // Evnt16
+    {moduleTypeSeqLev,     paramTypeToggle,         {{ 12,   9}, { 7,  7}}, anchorTopLeft,     "Cycle",          2,   1, offOnStrMap,                           offOnColourMap},          // 144 Cycle
+    {moduleTypeSeqLev,     paramTypeMenu,           {{ 25,   9}, { 7,  7}}, anchorTopLeft,     "Length",        16,  15, int16StrMap,                           NULL          },          // 144 Length
+    {moduleTypeSeqLev,     paramTypeMenu,           {{  3,  18}, { 7,  7}}, anchorTopLeft,     NULL,             2,   1, bipUniStrMap,                          NULL          },          // 144 Cycle
+    {moduleTypeSeqLev,     paramTypeMenu,           {{ 88,  -7}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, trigGateStrMap,                        NULL          },          // 144 T down
+    {moduleTypeSeqLev,     paramTypePush,           {{  3,  34}, {10,  7}}, anchorTopLeft,     "Rnd",            2,   0, NULL,                                  NULL          },          // 146 Randomize
+    {moduleTypeSeqLev,     paramTypePush,           {{  3,  40}, {10,  7}}, anchorTopLeft,     "Clr",            2,   0, NULL,                                  NULL          },          // 146 Clear
+
+    // 147 CtrRcv
+    {moduleTypeCtrlRcv,    paramTypeInt,            {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Ctrl",         128,   7, NULL,                                  NULL          },                    // 147 Ctrl
+    {moduleTypeCtrlRcv,    paramTypeMenu,           {{ 60,   0}, { 7,  7}}, anchorBottomLeft,  "Chan",          18,   0, midiChanRcvStrMap,                     NULL          },                    // 147 Channel
+    // 148 NoteRcv
+    {moduleTypeNoteRcv,    paramTypeNoteDial,       {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Note",         128,  64, NULL,                                  NULL          },                    // 148 Note
+    {moduleTypeNoteRcv,    paramTypeMenu,           {{ 60,   0}, { 7,  7}}, anchorBottomLeft,  "Chan",          18,   0, midiChanRcvStrMap,                     NULL          },                    // 148 Channel
+    // 149 NoteZone
+    {moduleTypeNoteZone,   paramTypeMenu,           {{  3,   0}, { 7,  7}}, anchorBottomLeft,  "RChan",         18,   0, midiChanRcvStrMap,                     NULL          },                    // 149 Receive Channel
+    {moduleTypeNoteZone,   paramTypeNoteDial,       {{ 23,  -3}, { 7,  7}}, anchorBottomLeft,  "Min",          128,   0, NULL,                                  NULL          },                    // 149 Min note
+    {moduleTypeNoteZone,   paramTypeNoteDial,       {{ 43,  -3}, { 7,  7}}, anchorBottomLeft,  "Max",          128, 127, NULL,                                  NULL          },                    // 149 Max note
+    {moduleTypeNoteZone,   paramTypeBipolar,        {{ 63,  -3}, { 7,  7}}, anchorBottomLeft,  "Trans",        128,  64, NULL,                                  NULL          },                    // 149 Transpose
+    {moduleTypeNoteZone,   paramTypeMenu,           {{ 83,   0}, { 7,  7}}, anchorBottomLeft,  "SChan",         21,   0, midiChanStrMap,                        NULL          },                    // 149 Send Channel
+    {moduleTypeNoteZone,   paramTypeMenu,           {{ 60, -14}, { 7,  7}}, anchorBottomLeft,  "Thru",           2,   0, thruStrMap,                            NULL          },                    // 149 Thru mode
+    // 150 Compress
+    {moduleTypeCompress,   paramTypeCommonDial,     {{  5,  -3}, { 7,  7}}, anchorBottomLeft,  "Thr",           43,  18, NULL,                                  NULL          },                    // 150
+    {moduleTypeCompress,   paramTypeCommonDial,     {{ 20,  -3}, { 7,  7}}, anchorBottomLeft,  "Ratio",         67,  20, NULL,                                  NULL          },
+    {moduleTypeCompress,   paramTypeStrMap,         {{ 35,  -3}, { 7,  7}}, anchorBottomLeft,  "Att",          128,   1, compr_attack_timesStrMap,              NULL          },
+    {moduleTypeCompress,   paramTypeStrMap,         {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  "Rel",          128,  20, compr_release_timesStrMap,             NULL          },
+    {moduleTypeCompress,   paramTypeCommonDial,     {{ 65,  -3}, { 7,  7}}, anchorBottomLeft,  "RefLvl",        43,  30, NULL,                                  NULL          },
+    {moduleTypeCompress,   paramTypeToggle,         {{  3,  13}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, sideChainStrMap,                       offOnColourMap},
+    {moduleTypeCompress,   paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, NULL,             2,   1, NULL,                                  NULL          },
+    // 151 Unknown
+    // 152 KeyQuant
+    {moduleTypeKeyQuant,   paramTypePlusMinusUnits, {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Range",        128, 127, NULL,                                  NULL          },        // 152 Range
+    {moduleTypeKeyQuant,   paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  "Capture",        2,   0, captureStrMap,                         NULL          },
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 60,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note E
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 64,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note F
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 66,   3}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note F#
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 68,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note G
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 70,   3}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note G#
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 72,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note A
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 74,   3}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note A#
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 76,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note B
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 52,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note C
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 54,   3}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note C#
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 56,   8}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note D
+    {moduleTypeKeyQuant,   paramTypeEnable,         {{ 58,   3}, { 3,  3}}, anchorTopLeft,     NULL,             2,   0, NULL,                                  offOnColourMap},        // 152 Note D#
+    // 153 Unknown
+    // 154 SeqCtr
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 20, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step1
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 24, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step2
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 28, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step3
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 32, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step4
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 36, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step5
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 40, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step6
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 44, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step7
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 48, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step8
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 52, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step9
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 56, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step10
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 60, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step11
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 64, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step12
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 68, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step13
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 72, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step14
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 76, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step15
+    {moduleTypeSeqCtr,     paramTypeSlider,         {{ 80, -12}, { 4, 56}}, anchorBottomLeft,  NULL,           128,   0, bip128StrMap,                          NULL          },                      // 154 Step16
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 20,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt1
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 24,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt2
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 28,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt3
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 32,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt4
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 36,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt5
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 40,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt6
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 44,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt7
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 48,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt8
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 52,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt9
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 56,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt10
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 60,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt11
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 64,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt12
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 68,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt13
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 72,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt14
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 76,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt15
+    {moduleTypeSeqCtr,     paramTypeEnable,         {{ 80,  -5}, { 3,  3}}, anchorBottomLeft,  NULL,             2,   0, NULL,                                  offOnColourMap},                      // 154 Evnt16
+    {moduleTypeSeqCtr,     paramTypeMenu,           {{ 88,  -7}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, trigGateStrMap,                        NULL          },                      // 154 T/G
+    {moduleTypeSeqCtr,     paramTypeMenu,           {{  3,  18}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, bipUniStrMap,                          NULL          },                      // 154 Pol
+    {moduleTypeSeqCtr,     paramTypeMenu,           {{ -6, -57}, { 7,  7}}, anchorBottomRight, "XFade",          4,   0, seqXFadeStrMap,                        NULL          },                      // 154 XFade
+    {moduleTypeSeqCtr,     paramTypePush,           {{  3,  34}, {10,  7}}, anchorTopLeft,     "Rnd",            2,   0, NULL,                                  NULL          },                      // 154 Randomize
+    {moduleTypeSeqCtr,     paramTypePush,           {{  3,  40}, {10,  7}}, anchorTopLeft,     "Clr",            2,   0, NULL,                                  NULL          },                      // 154 Clear
+    // 155 Unknown
+    // 156 NoteDet
+    {moduleTypeNoteDet,    paramTypeNoteDial,       {{ 54,  -3}, { 7,  7}}, anchorBottomLeft,  "Note",         128,  64, NULL,                                  NULL          },        // 156 Note
+    // 157 LevConv
+    {moduleTypeLevConv,    paramTypeMenu,           {{ 44,  -1}, { 7,  7}}, anchorBottomLeft,  "Out",            6,   4, posStrMap,                             NULL          },        // 157 OutType
+    {moduleTypeLevConv,    paramTypeMenu,           {{ 28,  -1}, { 7,  7}}, anchorBottomLeft,  "In",             3,   0, levConvStrMap,                         NULL          },        // 157 In Signal Type
+    // 158 Glide
+    {moduleTypeGlide,      paramTypeStrMap,         {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,  64, glide_timeStrMap,                      NULL          },        // 158 Time
+    {moduleTypeGlide,      paramTypeMenu,           {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, offOnStrMap,                           NULL          },        // 158 Glide on/off
+    {moduleTypeGlide,      paramTypeMenu,           {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, logStrMap,                             NULL          },        // 158 Shape
+    // 159 CompSig -- no params
+    // 160 ZeroCnt -- no params
+    // 161 MixFader
+    {moduleTypeMixFader,   paramTypeSlider,         {{  8,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev1
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 18,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev2
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 28,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev3
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 38,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev4
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 48,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev5
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 58,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev6
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 68,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev7
+    {moduleTypeMixFader,   paramTypeSlider,         {{ 78,  28}, { 6, 65}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },               // 161 Lev8
+    {moduleTypeMixFader,   paramTypeEnable,         {{  2, -11}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On1
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 12,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On2
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 22, -11}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On3
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 32,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On4
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 42, -11}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On5
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 52,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On6
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 62, -11}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On7
+    {moduleTypeMixFader,   paramTypeEnable,         {{ 72,  -5}, {17,  3}}, anchorBottomLeft,  NULL,             2,   1, NULL,                                  offOnColourMap},               // 161 On8
+    {moduleTypeMixFader,   paramTypeMenu,           {{  3,   9}, { 7,  7}}, anchorTopLeft,     "Curve",          3,   0, expStrMap,                             NULL          },               // 161 ExpLin
+    {moduleTypeMixFader,   paramTypeMenu,           {{ 20,   9}, { 7,  7}}, anchorTopLeft,     "Pad",            3,   0, db12BPadStrMap,                        NULL          },               // 161 Pad
+    // 162 FltComb
+    {moduleTypeFltComb,    paramTypeFreq,           {{ 22, -10}, { 7,  7}}, anchorBottomLeft,  "Freq",         128,  64, NULL,                                  NULL          },               // 102 Freq
+    {moduleTypeFltComb,    paramTypeCommonDial,     {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },               // 102 Pitch M
+    {moduleTypeFltComb,    paramTypeMenu,           {{  3, -19}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },               // 102 Kbt
+    {moduleTypeFltComb,    paramTypeBipolar,        {{ 57, -17}, { 7,  7}}, anchorBottomLeft,  "FB",           128,  64, NULL,                                  NULL          },               // 102 FB
+    {moduleTypeFltComb,    paramTypeCommonDial,     {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },               // 102 FB Mod
+    {moduleTypeFltComb,    paramTypeMenu,           {{ 68, -12}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, fltPhaseTypeStrMap,                    NULL          },               // 102 Type
+    {moduleTypeFltComb,    paramTypeCommonDial,     {{ 83,  -3}, { 7,  7}}, anchorBottomLeft,  "Level",        128, 127, NULL,                                  NULL          },               // 162 Level
+    {moduleTypeFltComb,    paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, NULL,             2,   1, NULL,                                  NULL          },               // 102 Bypass
+    // 163 OscShpA
+    {moduleTypeOscShpA,    paramTypeOscFreq,        {{ 29,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,  64, NULL,                                  NULL          },               // 163 Coarse
+    {moduleTypeOscShpA,    paramTypeFine,           {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },               // 163 Fine
+    {moduleTypeOscShpA,    paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},               // 163 Kbt
+    {moduleTypeOscShpA,    paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },               // 163 Pitch M
+    {moduleTypeOscShpA,    paramTypeMenu,           {{ 29, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },               // 163 Tune M
+    {moduleTypeOscShpA,    paramTypeCommonDial,     {{ 62,  -3}, { 7,  7}}, anchorBottomLeft,  "FM",           128,   0, NULL,                                  NULL          },               // FM
+    {moduleTypeOscShpA,    paramTypeMenu,           {{ 62, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, fmTypeStrMap,                          NULL          },               // FM Pitch Track
+    {moduleTypeOscShpA,    paramTypeShape,          {{ 56,  13}, { 7,  7}}, anchorTopLeft,     "Shape",        128,   0, NULL,                                  NULL          },               // 50% to 99%, not decimals
+    {moduleTypeOscShpA,    paramTypeCommonDial,     {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  "ShpCtrl",      128,   0, NULL,                                  NULL          },               // 163 Shape M
+    {moduleTypeOscShpA,    paramTypeMenu,           {{ 38,  10}, { 7,  7}}, anchorTopLeft,     "Wave",           6,   0, oscShpAStrMap,                         NULL          },               // 163 Wave
+    {moduleTypeOscShpA,    paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },
+    // 164 OscDual
+    {moduleTypeOscDual,    paramTypeOscFreq,        {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },          // 164 Coarse
+    {moduleTypeOscDual,    paramTypeFine,           {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },          // 164 Fine
+    {moduleTypeOscDual,    paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},          // 164 Kbt
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },          // 164 Pitch M
+    {moduleTypeOscDual,    paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },          // 164 Tune M
+
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 72,  13}, { 7,  7}}, anchorTopLeft,     "SqrL",         128, 127, NULL,                                  NULL          },          // 164 SqrLvl
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 40,  13}, { 7,  7}}, anchorTopLeft,     "SqrM",         128,   0, NULL,                                  NULL          },          // 164 Sqr M (PW mod amount; reference §12.1)
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 72,  28}, { 7,  7}}, anchorTopLeft,     "SawL",         128,   0, NULL,                                  NULL          },          // 164 SawLvl
+    {moduleTypeOscDual,    paramTypePhase,          {{ 56,  28}, { 7,  7}}, anchorTopLeft,     "Phase",        128,   0, NULL,                                  NULL          },          // 164 Phase
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 88,  13}, { 7,  7}}, anchorTopLeft,     "SubL",         128,   0, NULL,                                  NULL          },          // 164 Suboct Lvl
+    {moduleTypeOscDual,    paramTypeBypass,         {{ -3, -12}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 56,  13}, { 7,  7}}, anchorTopLeft,     "PW",           128,   0, NULL,                                  NULL          },          // 164 PW (reference §12.1)
+    {moduleTypeOscDual,    paramTypeCommonDial,     {{ 40,  28}, { 7,  7}}, anchorTopLeft,     "SawM",         128,   0, NULL,                                  NULL          },          // 164 Saw M
+    {moduleTypeOscDual,    paramTypeMenu,           {{ -5,  25}, { 7,  7}}, anchorTopRight,    "Soft",           2,   0, offOnStrMap,                           NULL          },          // 164 Tune M
+
+    // 165 DXRouter
+    {moduleTypeDXRouter,   paramTypeMenu,           {{ 10, -17}, { 7,  7}}, anchorBottomLeft,  "Algorithm",     32,   0, dxAlgStrMap,                           NULL          },                    // 165 Algorithm
+    {moduleTypeDXRouter,   paramTypeMenu,           {{ 10,  -7}, { 7,  7}}, anchorBottomLeft,  "Feedback",       8,   0, dxFeedbackStrMap,                      NULL          },                    // 165 Feedback
+    // 166 Unknown
+    // 167 PShift
+    {moduleTypePShift,     paramTypePShiftSemi,     {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Semi",         128,  64, NULL,                                  NULL          },                  // 167 Semi
+    {moduleTypePShift,     paramTypeBipolarPinned,  {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Fine",         128,  64, NULL,                                  NULL          },                  // 167 Fine
+    {moduleTypePShift,     paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Shift",        128,   0, NULL,                                  NULL          },                  // 167 Shift M
+    {moduleTypePShift,     paramTypeMenu,           {{ 60,  -1}, { 7,  7}}, anchorBottomLeft,  "Delay",          4,   2, pShiftDelayStrMod,                     NULL          },                  // 167 Delay (four settings, 12.5/25/50/100 ms; was declared as five, one past the end of the name list)
+    {moduleTypePShift,     paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },                  // 167 On/Off
+    // 168 Unknown
+    // 169 ModAHD
+    {moduleTypeModAHD,     paramTypeADRTime,        {{ 20, -17}, { 7,  7}}, anchorBottomLeft,  "Attack",       128,   0, NULL,                                  NULL          },                      // 46 Attack
+    {moduleTypeModAHD,     paramTypeADRTime,        {{ 40, -17}, { 7,  7}}, anchorBottomLeft,  "Hold",         128,  32, NULL,                                  NULL          },                      // 46 Hold
+    {moduleTypeModAHD,     paramTypeADRTime,        {{ 60, -17}, { 7,  7}}, anchorBottomLeft,  "Decay",        128,  14, NULL,                                  NULL          },                      // 46 Decay
+    {moduleTypeModAHD,     paramTypeCommonDial,     {{ 27,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 167 Attack M
+    {moduleTypeModAHD,     paramTypeCommonDial,     {{ 47,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 167 Hold M
+    {moduleTypeModAHD,     paramTypeCommonDial,     {{ 67,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },                      // 167 Attack M
+    {moduleTypeModAHD,     paramTypeMenu,           {{-20, -10}, { 7,  7}}, anchorBottomRight, NULL,             6,   0, posStrMap,                             NULL          },
+    {moduleTypeModAHD,     paramTypeToggle,         {{  3, -17}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},
+    // 170 2-In
+    {moduleType2toIn,      paramTypeMenu,           {{ 20,  -4}, { 7,  3}}, anchorBottomLeft,  "In from",        4,   0, twoToInSourceStrMap,                   NULL          },
+    {moduleType2toIn,      paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },                 // 167 On/Off
+    {moduleType2toIn,      paramTypeMenu,           {{  3,  -4}, { 7,  3}}, anchorBottomLeft,  "Pad",            4,   1, db12PadStrMap,                         NULL          },
+    // 171 4-In
+    {moduleType4toIn,      paramTypeMenu,           {{ 20,  -4}, { 7,  3}}, anchorBottomLeft,  "In from",        2,   0, fourToInSourceStrMap,                  NULL          },    // 171 source
+    {moduleType4toIn,      paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },    // 171 On/Off
+    {moduleType4toIn,      paramTypeMenu,           {{  3,  -4}, { 7,  3}}, anchorBottomLeft,  "Pad",            4,   1, db12PadStrMap,                         NULL          },    // 171 pad
+    // 172 DlySingleA
+    {moduleTypeDlySingleA, paramTypeTime,           {{ 56,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,  64, NULL,                                  NULL          },    // 158 Time
+    // 173 DlySingleB
+    {moduleTypeDlySingleB, paramTypeTime,           {{ 56,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,  64, NULL,                                  NULL          },    // 158 Time
+    {moduleTypeDlySingleB, paramTypeCommonDial,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 173 Time M
+    // 174 DelayDual
+    {moduleTypeDelayDual,  paramTypeTime,           {{ 36,  -3}, { 7,  7}}, anchorBottomLeft,  "Time1",        128,  64, NULL,                                  NULL          },    // 174 Time
+    {moduleTypeDelayDual,  paramTypeCommonDial,     {{ 19,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 174 Time M
+    {moduleTypeDelayDual,  paramTypeTime,           {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Time2",        128,  64, NULL,                                  NULL          },    // 174 Time2
+    {moduleTypeDelayDual,  paramTypeCommonDial,     {{ 53,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 174 Time M
+    // 175 DelayQuad
+    {moduleTypeDelayQuad,  paramTypeTimeClk,        {{ 19,  24}, { 7,  7}}, anchorTopLeft,     "Time1",        128,  64, NULL,                                  NULL          },    // 175 Time1
+    {moduleTypeDelayQuad,  paramTypeCommonDial,     {{ 19,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 175 Time1 M
+    {moduleTypeDelayQuad,  paramTypeTimeClk,        {{ 36,  24}, { 7,  7}}, anchorTopLeft,     "Time2",        128,  64, NULL,                                  NULL          },    // 175 Time2
+    {moduleTypeDelayQuad,  paramTypeCommonDial,     {{ 36,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 175 Time2 M
+    {moduleTypeDelayQuad,  paramTypeTimeClk,        {{ 53,  24}, { 7,  7}}, anchorTopLeft,     "Time3",        128,  64, NULL,                                  NULL          },    // 175 Time3
+    {moduleTypeDelayQuad,  paramTypeCommonDial,     {{ 53,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 175 Time3 M
+    {moduleTypeDelayQuad,  paramTypeTimeClk,        {{ 70,  24}, { 7,  7}}, anchorTopLeft,     "Time4",        128,  64, NULL,                                  NULL          },    // 175 Time4
+    {moduleTypeDelayQuad,  paramTypeCommonDial,     {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 175 Time4 M
+    {moduleTypeDelayQuad,  paramTypeMenu,           {{ 19,  10}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, timeClkStrMap,                         NULL          },    // 175 Time/Clk
+    // 176 DelayA
+    {moduleTypeDelayA,     paramTypeTimeClk,        {{ 19,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,  64, NULL,                                  NULL          },    // 176 Time
+    {moduleTypeDelayA,     paramTypeCommonDial,     {{ 36,  -3}, { 7,  7}}, anchorBottomLeft,  "FB",           128,  64, NULL,                                  NULL          },    // 176 FB
+    {moduleTypeDelayA,     paramTypeCommonDial,     {{ 53,  -3}, { 7,  7}}, anchorBottomLeft,  "Filter",       128,  64, NULL,                                  NULL          },    // 176 Filter
+    {moduleTypeDelayA,     paramTypeCommonDial,     {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Dry/Wet",      128,  64, NULL,                                  NULL          },    // 176 Filter
+    {moduleTypeDelayA,     paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 176 On/Off
+    {moduleTypeDelayA,     paramTypeMenu,           {{ 19, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, timeClkStrMap,                         NULL          },    // 176 Time/Clk
+    // 177 DelayB
+    {moduleTypeDelayB,     paramTypeTimeClk,        {{ 19,  28}, { 7,  7}}, anchorTopLeft,     NULL,           128,  64, NULL,                                  NULL          },    // 176 Time
+    {moduleTypeDelayB,     paramTypeCommonDial,     {{ 36,  18}, { 7,  7}}, anchorTopLeft,     "FB",           128,  64, NULL,                                  NULL          },    // 176 FB
+    {moduleTypeDelayB,     paramTypeFreq,           {{ 53,  18}, { 7,  7}}, anchorTopLeft,     "LP",           128, 127, NULL,                                  NULL          },    // 176 Filter
+    {moduleTypeDelayB,     paramTypeCommonDial,     {{ 70,  18}, { 7,  7}}, anchorTopLeft,     "Dry/Wet",      128,  64, NULL,                                  NULL          },    // 176 Filter
+    {moduleTypeDelayB,     paramTypeMenu,           {{ 19,  19}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, timeClkStrMap,                         NULL          },    // 176 Time/Clk
+    {moduleTypeDelayB,     paramTypeCommonDial,     {{ 36,  -3}, { 7,  7}}, anchorBottomLeft,  "FB Mod",       128,   0, NULL,                                  NULL          },    // 176 FBmod
+    {moduleTypeDelayB,     paramTypeCommonDial,     {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "Dry/Wet Mod",  128,   0, NULL,                                  NULL          },    // 176 DryWet mod
+    {moduleTypeDelayB,     paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 176 On/Off
+    {moduleTypeDelayB,     paramTypeFreq,           {{ 53,  -3}, { 7,  7}}, anchorBottomLeft,  "HP",           128,   0, NULL,                                  NULL          },    // 176 Filter
+    // 178 DlyClock
+    {moduleTypeDlyClock,   paramTypeInt,            {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Sample delay", 128,   0, NULL,                                  NULL          },    // 176 Time
+    // 179 DlyShiftReg
+    // 180 Operator
+    {moduleTypeOperator,   paramTypeToggle,         {{ 12,  22}, { 7,  7}}, anchorTopLeft,     "Kbt",            2,   1, offOnStrMap,                           offOnColourMap},    // 180 Kbt
+    {moduleTypeOperator,   paramTypeMenu,           {{ 22,  22}, { 7,  7}}, anchorTopLeft,     "Sync",           2,   0, offOnStrMap,                           NULL          },    // 180 Sync *** Check values
+    {moduleTypeOperator,   paramTypeMenu,           {{ 36,   6}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, ratioFixedStrMap,                      NULL          },    // 180 RatioFixes
+    {moduleTypeOperator,   paramTypeFreq,           {{ 36,  19}, { 7,  7}}, anchorTopLeft,     "Coarse",       128,   1, NULL,                                  NULL          },    // 180 Freq
+    {moduleTypeOperator,   paramTypeInt,            {{ 52,  19}, { 7,  7}}, anchorTopLeft,     "Fine",         128,   0, NULL,                                  NULL          },    // 180 Freq
+    {moduleTypeOperator,   paramTypeMenu,           {{ 68,  22}, { 7,  7}}, anchorTopLeft,     "Detune",        15,   7, detuneStrMap,                          NULL          },    // 180 FreqDetune
+    {moduleTypeOperator,   paramTypeMenu,           {{ 80,  54}, { 7,  7}}, anchorTopLeft,     "Vel",            8,   0, operator07StrMap,                      NULL          },    // 180 Vel
+    {moduleTypeOperator,   paramTypeMenu,           {{ 80,  63}, { 7,  7}}, anchorTopLeft,     "RateScale",      8,   0, operator07StrMap,                      NULL          },    // 180 RateScale
+    {moduleTypeOperator,   paramTypeInt,            {{ 12,  75}, { 7,  7}}, anchorTopLeft,     "R1",           128,  90, NULL,                                  NULL          },    // 180 R1
+    {moduleTypeOperator,   paramTypeInt,            {{ 21,  75}, { 7,  7}}, anchorTopLeft,     "L1",           128,  99, NULL,                                  NULL          },    // 180 L1
+    {moduleTypeOperator,   paramTypeInt,            {{ 33,  75}, { 7,  7}}, anchorTopLeft,     "R2",           128,  80, NULL,                                  NULL          },    // 180 R2
+    {moduleTypeOperator,   paramTypeInt,            {{ 42,  75}, { 7,  7}}, anchorTopLeft,     "L2",           128,  99, NULL,                                  NULL          },    // 180 L2
+    {moduleTypeOperator,   paramTypeInt,            {{ 54,  75}, { 7,  7}}, anchorTopLeft,     "R3",           128,  70, NULL,                                  NULL          },    // 180 R3
+    {moduleTypeOperator,   paramTypeInt,            {{ 63,  75}, { 7,  7}}, anchorTopLeft,     "L3",           128,  99, NULL,                                  NULL          },    // 180 L3
+    {moduleTypeOperator,   paramTypeInt,            {{ 75,  75}, { 7,  7}}, anchorTopLeft,     "R4",           128,  70, NULL,                                  NULL          },    // 180 R4
+    {moduleTypeOperator,   paramTypeInt,            {{ 84,  75}, { 7,  7}}, anchorTopLeft,     "L4",           128,   0, NULL,                                  NULL          },    // 180 L4
+    {moduleTypeOperator,   paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  "AMod",           8,   0, operator07StrMap,                      NULL          },    // 180 AMod
+    {moduleTypeOperator,   paramTypeNoteDial,       {{ 36, 118}, { 7,  7}}, anchorTopLeft,     "BrPt",         128,  50, NULL,                                  NULL          },    // 180 BrPoint
+    {moduleTypeOperator,   paramTypeMenu,           {{ 12, 120}, { 7,  7}}, anchorTopLeft,     NULL,             4,   0, operatorDepthStrMap,                   NULL          },    // 180 LDepth Mode
+    {moduleTypeOperator,   paramTypeMenu,           {{ 22, 120}, { 7,  7}}, anchorTopLeft,     "Ldepth",         8,   0, operator07StrMap,                      NULL          },    // 180 LDepth
+    {moduleTypeOperator,   paramTypeMenu,           {{ 52, 120}, { 7,  7}}, anchorTopLeft,     NULL,             4,   0, operatorDepthStrMap,                   NULL          },    // 180 RDepth Mode
+    {moduleTypeOperator,   paramTypeMenu,           {{ 62, 120}, { 7,  7}}, anchorTopLeft,     "Rdepth",         8,   0, operator07StrMap,                      NULL          },    // 180 RDepth
+    {moduleTypeOperator,   paramTypeInt,            {{ 76,  -3}, { 7,  7}}, anchorBottomLeft,  "Level",        128,  99, NULL,                                  NULL          },    // 180 Level
+    {moduleTypeOperator,   paramTypeBypass,         {{ -3, -12}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 180 On/Off
+    {moduleTypeOperator,   paramTypeToggle,         {{ 80,  45}, { 7,  7}}, anchorTopLeft,     "KBEnv",          2,   1, offOnStrMap,                           offOnColourMap},    // 180 EnvLB
+    // 181 DlyEight
+    {moduleTypeDlyEight,   paramTypeTime,           {{ 19,  -3}, { 7,  7}}, anchorBottomLeft,  "Time",         128,   0, NULL,                                  NULL          },    // 181 Time
+    // 182 DlyStereo
+    {moduleTypeDlyStereo,  paramTypeTimeClk,        {{ 19,  35}, { 7,  7}}, anchorTopLeft,     "Left",         128,  64, NULL,                                  NULL          },    // 182 Time Left
+    {moduleTypeDlyStereo,  paramTypeTimeClk,        {{ 19,  -3}, { 7,  7}}, anchorBottomLeft,  "Right",        128,  64, NULL,                                  NULL          },    // 182 Time Right
+    {moduleTypeDlyStereo,  paramTypeCommonDial,     {{ 36,  35}, { 7,  7}}, anchorTopLeft,     "FB L",         128,  64, NULL,                                  NULL          },    // 182 FB L
+    {moduleTypeDlyStereo,  paramTypeCommonDial,     {{ 36,  -3}, { 7,  7}}, anchorBottomLeft,  "FB R",         128,  64, NULL,                                  NULL          },    // 182 FB R
+    {moduleTypeDlyStereo,  paramTypeCommonDial,     {{ 53,  35}, { 7,  7}}, anchorTopLeft,     "X-FB L",       128,   0, NULL,                                  NULL          },    // 182 X-FB L
+    {moduleTypeDlyStereo,  paramTypeCommonDial,     {{ 53,  -3}, { 7,  7}}, anchorBottomLeft,  "X-FB R",       128,   0, NULL,                                  NULL          },    // 180 X-FB R
+    {moduleTypeDlyStereo,  paramTypeMenu,           {{ 19,  22}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, timeClkStrMap,                         NULL          },    // 182 Time/Clk
+    {moduleTypeDlyStereo,  paramTypeFreq,           {{ 70,  35}, { 7,  7}}, anchorTopLeft,     "LP",           128, 127, NULL,                                  NULL          },    // 182 LP
+    {moduleTypeDlyStereo,  paramTypeCommonDial,     {{ 75,  13}, { 7,  7}}, anchorTopLeft,     "Dry/Wet",      128,  64, NULL,                                  NULL          },    // 182 Dry/Wet
+    {moduleTypeDlyStereo,  paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 182 On/Off
+    {moduleTypeDlyStereo,  paramTypeFreq,           {{ 70,  -3}, { 7,  7}}, anchorBottomLeft,  "HP",           128,   0, NULL,                                  NULL          },    // 180 HP
+    // 183 OscPM
+    {moduleTypeOscPM,      paramTypeOscFreq,        {{ 29,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },    // 9 Coarse
+    {moduleTypeOscPM,      paramTypeCommonDial,     {{ 45,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },    // 9 Fine
+    {moduleTypeOscPM,      paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, kbStrMap,                              offOnColourMap},    // 9 Kbt
+    {moduleTypeOscPM,      paramTypeMenu,           {{ 29, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },    // 9 Tune Mode
+    {moduleTypeOscPM,      paramTypeCommonDial,     {{ 77,  -3}, { 7,  7}}, anchorBottomLeft,  "PhM",          128,   0, NULL,                                  NULL          },    // FM
+    {moduleTypeOscPM,      paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 9 Bypass
+    {moduleTypeOscPM,      paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },    // Pitch Mode
+    // 184 Mix1-1A
+    {moduleTypeMix1to1A,   paramTypeCommonDial,     {{ 64,  14}, { 7,  7}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },    // 184 Level
+    {moduleTypeMix1to1A,   paramTypeEnable,         {{ 40,  16}, {17,  3}}, anchorTopLeft,     NULL,             2,   1, NULL,                                  offOnColourMap},    // 184 Enable1
+    {moduleTypeMix1to1A,   paramTypeMenu,           {{ 21,   6}, { 7,  7}}, anchorTopLeft,     NULL,             3,   0, expStrMap,                             NULL          },    // 184 Exp
+    // 185 Mix1-1S
+    {moduleTypeMix1to1S,   paramTypeCommonDial,     {{ 64,  14}, { 7,  7}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },    // 185 Level
+    {moduleTypeMix1to1S,   paramTypeEnable,         {{ 40,  16}, {17,  3}}, anchorTopLeft,     NULL,             2,   1, NULL,                                  offOnColourMap},    // 185 Enable1
+    {moduleTypeMix1to1S,   paramTypeMenu,           {{ 33,   6}, { 7,  7}}, anchorTopLeft,     NULL,             3,   0, expStrMap,                             NULL          },    // 185 Exp
+    // 186 Sw1-2M
+    {moduleTypeSw1to2M,    paramTypeMenu,           {{ 37,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, offOnStrMap,                           NULL          },    // 186 Selector *** Needs new UI element
+    // 187 Sw2-1M
+    {moduleTypeSw2to1M,    paramTypeMenu,           {{ 37,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, offOnStrMap,                           NULL          },    // 187 Selector *** Needs new UI element
+    // 188 ConstSwM
+    {moduleTypeConstSwM,   paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 188 Level
+    {moduleTypeConstSwM,   paramTypeMenu,           {{ 28,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, offOnStrMap,                           NULL          },    // 188 Selector *** needs new UI element
+    {moduleTypeConstSwM,   paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, bipUniStrMap,                          NULL          },    // 188 Bip/Uni
+    // 189 NoiseGate
+    {moduleTypeNoiseGate,  paramTypeStrMap,         {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Threshold",    128,  20, noisegate_pitchtrack_threshholdStrMap, NULL          },    // 189 Threshold
+    {moduleTypeNoiseGate,  paramTypeStrMap,         {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Attack",       128,   0, noise_gate_attackStrMap,               NULL          },    // 189 Attack
+    {moduleTypeNoiseGate,  paramTypeStrMap,         {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Release",      128,  64, noise_gate_releaseStrMap,              NULL          },    // 189 Release
+    {moduleTypeNoiseGate,  paramTypeBypass,         {{ -3,   0}, { 5,  5}}, anchorMiddleRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 9 Bypass
+    // 190 LfoB
+    {moduleTypeLfoB,       paramTypeLFORate,        {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },    // 26 Rate  *** Could have Freq but tied to Range
+    {moduleTypeLfoB,       paramTypeCommonDial,     {{ 30,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },    // 26 Rate M
+    {moduleTypeLfoB,       paramTypeMenu,           {{ 40, -20}, { 7,  7}}, anchorBottomLeft,  NULL,             5,   1, rangeLfoStrMap,                        NULL          },    // 26 Range  (default 1 = Rate Lo)
+    {moduleTypeLfoB,       paramTypeMenu,           {{ 50, -10}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },    // 26 Kbt
+    {moduleTypeLfoB,       paramTypeMenu,           {{ 60, -20}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, lfoWaveStrMap,                         NULL          },    // 26 Wave
+    {moduleTypeLfoB,       paramTypeMenu,           {{ 30, -20}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, polyMonoStrMap,                        NULL          },    // 26 Mode
+    {moduleTypeLfoB,       paramTypePhase,          {{ 77,  -3}, { 7,  7}}, anchorBottomLeft,  "Phase",        128,   0, NULL,                                  NULL          },    // 26 Phase
+    {moduleTypeLfoB,       paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },    // 26 Bypass
+    {moduleTypeLfoB,       paramTypeMenu,           {{-17, -17}, { 7,  7}}, anchorBottomRight, NULL,             6,   4, posStrMap,                             NULL          },    // 26 OutType
+    {moduleTypeLfoB,       paramTypeCommonDial,     {{ 67,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,   0, NULL,                                  NULL          },    // 26 Phase M
+    // 191 Unknown
+    // 192 Phaser
+    {moduleTypePhaser,     paramTypeMenu,           {{  3,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, phaserTypeStrMap,                      NULL          },                      // 192 Type
+    {moduleTypePhaser,     paramTypePhaserRate,     {{ 40,  -3}, { 7,  7}}, anchorBottomLeft,  "Rate",         128,  64, NULL,                                  NULL          },                      // 192 Rate
+    {moduleTypePhaser,     paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "FB",           128,   0, NULL,                                  NULL          },                      // 192 FB
+    {moduleTypePhaser,     paramTypeBypass,         {{-10,  -3}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },                      // 192 Bypass
+    // 193 Mix4-1A -- no params
+    // 194 Mix2-1A
+    {moduleTypeMix2to1A,   paramTypeCommonDial,     {{ 39,  14}, { 7,  7}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },    // 123 L1
+    {moduleTypeMix2to1A,   paramTypeEnable,         {{ 13,  16}, {17,  3}}, anchorTopLeft,     NULL,             2,   1, NULL,                                  offOnColourMap},    // 123 Enable1
+    {moduleTypeMix2to1A,   paramTypeCommonDial,     {{ 74,  14}, { 7,  7}}, anchorTopLeft,     NULL,           128, 100, NULL,                                  NULL          },    // 123 L2
+    {moduleTypeMix2to1A,   paramTypeEnable,         {{ 48,  16}, {17,  3}}, anchorTopLeft,     NULL,             2,   1, NULL,                                  offOnColourMap},    // 123 Enable2
+    {moduleTypeMix2to1A,   paramTypeMenu,           {{ 21,   6}, { 7,  7}}, anchorTopLeft,     NULL,             3,   0, expStrMap,                             NULL          },    // 123 Exp
+    // 195 ModAmt
+    {moduleTypeModAmt,     paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Depth",        128, 100, NULL,                                  NULL          },    // 195 Depth
+    {moduleTypeModAmt,     paramTypeToggle,         {{ 60,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   1, offOnStrMap,                           offOnColourMap},    // 195 Enable
+    {moduleTypeModAmt,     paramTypeMenu,           {{  3,   6}, { 7,  7}}, anchorTopLeft,     NULL,             2,   0, expStrMap,                             NULL          },    // 195 Exp/Lin
+    {moduleTypeModAmt,     paramTypeMenu,           {{ 12,  -1}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, invertStrMap,                          NULL          },    // 195 m/1-m
+    // 196 OscPerc
+    {moduleTypeOscPerc,    paramTypeOscFreq,        {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Tune",         128,  64, NULL,                                  NULL          },    // 196 Coarse
+    {moduleTypeOscPerc,    paramTypeFine,           {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Cent",         128,  64, NULL,                                  NULL          },    // 196 Fine
+    {moduleTypeOscPerc,    paramTypeMenu,           {{ 28, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             4,   0, pitchTypeStrMap,                       NULL          },    // 196 Tune Mode
+    {moduleTypeOscPerc,    paramTypeToggle,         {{ 12, -15}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, kbStrMap,                              offOnColourMap},    // 196  Kbt
+    {moduleTypeOscPerc,    paramTypeCommonDial,     {{ 12,  -3}, { 7,  7}}, anchorBottomLeft,  "Pitch",        128,   0, NULL,                                  NULL          },    // 196 Pitch M
+    {moduleTypeOscPerc,    paramTypeADRTime,        {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "Decay",        128,  64, NULL,                                  NULL          },    // 196 Decay
+    {moduleTypeOscPerc,    paramTypeCommonDial,     {{ 76,  -3}, { 7,  7}}, anchorBottomLeft,  "Click",        128,  64, NULL,                                  NULL          },    // 196 Click
+    {moduleTypeOscPerc,    paramTypeToggle,         {{ 76, -15}, { 7,  7}}, anchorBottomLeft,  "Punch",          2,   0, offOnStrMap,                           offOnColourMap},    // 196 Punch
+    {moduleTypeOscPerc,    paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    "Bypass",         2,   1, NULL,                                  NULL          },    // 196 Bypass
+    // 197 Status -- No params
+    // 198 PitchTrack
+    {moduleTypePitchTrack, paramTypeThresholdDb,    {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  "Threshold",    128,  20, NULL,                                  NULL          },                      // 198 Threshold
+    // 199 MonoKey
+    {moduleTypeMonoKey,    paramTypeMenu,           {{ 54,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, monoKeyStrMap,                         NULL          },                      // 199 Priority
+    // 200 RandomA
+    {moduleTypeRandomA,    paramTypeFreq,           {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },                      // 200 Rate
+    {moduleTypeRandomA,    paramTypeMenu,           {{ 30,   0}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, polyMonoStrMap,                        NULL          },                      // 200 Poly/Mono mode
+    {moduleTypeRandomA,    paramTypeMenu,           {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, bipPosNegStrMap,                       NULL          },                      // 200 OutType
+    {moduleTypeRandomA,    paramTypeMenu,           {{ 30,  -9}, { 7,  7}}, anchorBottomLeft,  NULL,             5,   1, rangeStrMap,                           NULL          },                      // 200 Range
+    {moduleTypeRandomA,    paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },                      // 26 Bypass
+    {moduleTypeRandomA,    paramTypeMenu,           {{ 65,   1}, { 7,  7}}, anchorBottomLeft,  "Edge",           5,   4, edgeStepStrMap,                        NULL          },                      // 200 edge
+    {moduleTypeRandomA,    paramTypeMenu,           {{ 65,  -7}, { 7,  7}}, anchorBottomLeft,  "Step",           4,   3, rndStepProbStrMap,                     NULL          },                      // 200 step
+    // 201 Red2Blue
+    // 202 RandomB
+    {moduleTypeRandomB,    paramTypeFreq,           {{ 50,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,           128,  64, NULL,                                  NULL          },                     // 202 Rate
+    {moduleTypeRandomB,    paramTypeMenu,           {{ 30,   0}, { 7,  7}}, anchorBottomLeft,  NULL,             2,   0, polyMonoStrMap,                        NULL          },                     // 202 Poly/Mono mode
+    {moduleTypeRandomB,    paramTypeMenu,           {{ 40,  -7}, { 7,  7}}, anchorBottomLeft,  "Kbt",            5,   0, offTo100KbStrMap,                      NULL          },                     // 202 Kbt (five-way keyboard tracking, as the LFOs have - was a two-state toggle that could not reach the other three)
+    {moduleTypeRandomB,    paramTypeCommonDial,     {{ 10,  -3}, { 7,  7}}, anchorBottomLeft,  "Rate",         128,   0, NULL,                                  NULL          },                     // 202 Rate M
+    {moduleTypeRandomB,    paramTypeCommonDial,     {{ 65, -10}, { 7,  7}}, anchorBottomLeft,  "Step",         128, 127, NULL,                                  NULL          },                     // 202 Rate M
+    {moduleTypeRandomB,    paramTypeBypass,         {{ -3, -10}, { 5,  5}}, anchorBottomRight, "Bypass",         2,   1, NULL,                                  NULL          },                     // 202 Bypass
+    {moduleTypeRandomB,    paramTypeMenu,           {{ 80,  -3}, { 7,  7}}, anchorBottomLeft,  NULL,             3,   0, bipPosNegStrMap,                       NULL          },                     // 202 OutType
+    {moduleTypeRandomB,    paramTypeMenu,           {{ 20, -14}, { 7,  7}}, anchorBottomLeft,  NULL,             5,   1, rangeStrMap,                           NULL          },                     // 202 Range
+    {moduleTypeRandomB,    paramTypeMenu,           {{ 65,   1}, { 7,  7}}, anchorBottomLeft,  "Edge",           5,   4, edgeStepStrMap,                        NULL          },                     // 202 edge
+    // 203 Blue2Red
+    // 204 RndClkA
+    {moduleTypeRndClkA,    paramTypeCommonDial,     {{ 48,  -3}, { 7,  7}}, anchorBottomLeft,  "Step",         128, 127, NULL,                                  NULL          },   // 204 Step
+    {moduleTypeRndClkA,    paramTypeMenu,           {{ 32,  -1}, { 7,  7}}, anchorBottomLeft,  "Mode",           4,   0, NULL,                                  NULL          },   // 204 Mode
+    {moduleTypeRndClkA,    paramTypeMenu,           {{ 20,  -1}, { 7,  7}}, anchorBottomLeft,  "Dice",           4,   0, NULL,                                  NULL          },   // 204 Dice
+    {moduleTypeRndClkA,    paramTypeMenu,           {{-14,  -8}, { 7,  7}}, anchorBottomRight, NULL,             3,   0, bipPosNegStrMap,                       NULL          },   // 204 OutType
+    {moduleTypeRndClkA,    paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    NULL,             2,   1, NULL,                                  NULL          },   // 204 On/Off
+    // 205 RndTrig
+    {moduleTypeRndTrig,    paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Step",         128,  64, NULL,                                  NULL          },   // 205 Step
+    {moduleTypeRndTrig,    paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "StepM",        128,   0, NULL,                                  NULL          },   // 205 Step M
+    {moduleTypeRndTrig,    paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    NULL,             2,   1, NULL,                                  NULL          },   // 205 On/Off
+    {moduleTypeRndTrig,    paramTypeMenu,           {{ 28,  -1}, { 7,  7}}, anchorBottomLeft,  "Mode",           4,   0, NULL,                                  NULL          },   // 205 Mode
+
+    // 206 RndClkB
+    {moduleTypeRndClkB,    paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Step",         128, 127, NULL,                                  NULL          },          // 206 Step
+    {moduleTypeRndClkB,    paramTypeMenu,           {{ -3, -10}, { 7,  7}}, anchorBottomRight, "Out",            3,   0, bipPosNegStrMap,                       NULL          },          // 206 OutType
+    {moduleTypeRndClkB,    paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    NULL,             2,   1, NULL,                                  NULL          },          // 206 On/Off
+    {moduleTypeRndClkB,    paramTypeMenu,           {{ 28,  -1}, { 7,  7}}, anchorBottomLeft,  "Mode",           4,   0, NULL,                                  NULL          },          // 206 Mode
+    {moduleTypeRndClkB,    paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "StepM",        128,   0, NULL,                                  NULL          },          // 206 Step M
+    // 207 Unknown
+    // 208 RndPattern
+    {moduleTypeRndPattern, paramTypeCommonDial,     {{ 60, -18}, { 7,  7}}, anchorBottomLeft,  "PatA",         128,  64, NULL,                                  NULL          },       // 208 PatternA
+    {moduleTypeRndPattern, paramTypeCommonDial,     {{ 76, -18}, { 7,  7}}, anchorBottomLeft,  "PatB",         128,  64, NULL,                                  NULL          },       // 208 PatternB
+    {moduleTypeRndPattern, paramTypeCommonDial,     {{ 44,  -3}, { 7,  7}}, anchorBottomLeft,  "Step",         128, 127, NULL,                                  NULL          },       // 208 Step
+    {moduleTypeRndPattern, paramTypeCommonDial,     {{ 28,  -3}, { 7,  7}}, anchorBottomLeft,  "Loop",          16,  15, NULL,                                  NULL          },       // 208 LoopCount
+    {moduleTypeRndPattern, paramTypeCommonDial,     {{ 60,  -3}, { 7,  7}}, anchorBottomLeft,  "StepM",        128,   0, NULL,                                  NULL          },       // 208 Step M
+    {moduleTypeRndPattern, paramTypeMenu,           {{ -3, -10}, { 7,  7}}, anchorBottomRight, "Out",            3,   0, bipPosNegStrMap,                       NULL          },       // 208 OutType
+    {moduleTypeRndPattern, paramTypeBypass,         {{ -3,   3}, { 5,  5}}, anchorTopRight,    NULL,             2,   1, NULL,                                  NULL          },       // 208 On/Off
+};
+
+// Note these need to be in same order of connectors which are referenced by the hardware
+const tConnectorLocation connectorLocationList[] = {
+    //  0 Unknown
+    //  1 Keyboard
+    {moduleTypeKeyboard,    connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Pitch",         labelLocUp   },     // 1
+    {moduleTypeKeyboard,    connectorDirOut, connectorTypeLogic,   {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Gate",          labelLocUp   },
+    {moduleTypeKeyboard,    connectorDirOut, connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Lin",           labelLocUp   },
+    {moduleTypeKeyboard,    connectorDirOut, connectorTypeControl, {{ 54,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Release",       labelLocUp   },
+    {moduleTypeKeyboard,    connectorDirOut, connectorTypeControl, {{ 71,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Note",          labelLocUp   },
+    {moduleTypeKeyboard,    connectorDirOut, connectorTypeControl, {{ 88,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Exp",           labelLocUp   },
+    // 2 Unknown
+    // 3 4-Out
+    {moduleType4toOut,      connectorDirIn,  connectorTypeAudio,   {{-24,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "1",             labelLocDown },         // 3 4-out
+    {moduleType4toOut,      connectorDirIn,  connectorTypeAudio,   {{-17,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "2",             labelLocDown },
+    {moduleType4toOut,      connectorDirIn,  connectorTypeAudio,   {{-10,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "3",             labelLocDown },
+    {moduleType4toOut,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "4",             labelLocDown },
+    //  4 2-Out
+    {moduleType2toOut,      connectorDirIn,  connectorTypeAudio,   {{-10,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },       // 4
+    {moduleType2toOut,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },
+    //  5 Invert
+    {moduleTypeInvert,      connectorDirIn,  connectorTypeLogic,   {{ 20,    1}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorMiddleLeft,  NULL,            labelLocLeft },        // 5 In 1
+    {moduleTypeInvert,      connectorDirOut, connectorTypeLogic,   {{ 36,    1}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorMiddleLeft,  NULL,            labelLocLeft },        // 5 Out 1
+    {moduleTypeInvert,      connectorDirIn,  connectorTypeLogic,   {{ 60,    1}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorMiddleLeft,  NULL,            labelLocLeft },        // 5 In 2
+    {moduleTypeInvert,      connectorDirOut, connectorTypeLogic,   {{ 76,    1}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorMiddleLeft,  NULL,            labelLocLeft },        // 5 Out 2
+    //  6 Unknown
+    //  7 OscB
+    {moduleTypeOscB,        connectorDirIn,  connectorTypeControl, {{  3,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 7 OscB Pitch
+    {moduleTypeOscB,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // PitchVar
+    {moduleTypeOscB,        connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Sync",          labelLocRight},    // Sync
+    {moduleTypeOscB,        connectorDirIn,  connectorTypeAudio,   {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // FmMod
+    {moduleTypeOscB,        connectorDirIn,  connectorTypeAudio,   {{ 69,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // Shape Mod
+    {moduleTypeOscB,        connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // Out
+    //  8 OscShpB
+    {moduleTypeOscShpB,     connectorDirIn,  connectorTypeControl, {{  3,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 8 OscShpB
+    {moduleTypeOscShpB,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},
+    {moduleTypeOscShpB,     connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Sync",          labelLocRight},
+    {moduleTypeOscShpB,     connectorDirIn,  connectorTypeAudio,   {{ 55,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},
+    {moduleTypeOscShpB,     connectorDirIn,  connectorTypeAudio,   {{ 73,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},
+    {moduleTypeOscShpB,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 8 Out
+    //  9 OscC
+    {moduleTypeOscC,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 9 OscC PitchVar
+    {moduleTypeOscC,        connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Sync",          labelLocRight},    // Sync
+    {moduleTypeOscC,        connectorDirIn,  connectorTypeAudio,   {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // FmMod
+    {moduleTypeOscC,        connectorDirIn,  connectorTypeControl, {{  3,  -13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // Pitch
+    {moduleTypeOscC,        connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // Out
+    // 10 Unknown
+    // 11 Unknown
+    // 12 Reverb
+    {moduleTypeReverb,      connectorDirIn,  connectorTypeAudio,   {{-10,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocDown },     // 12 Reberb InL
+    {moduleTypeReverb,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocDown },     // 12 Reberb InR
+    {moduleTypeReverb,      connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },     // 12 Reberb OutL
+    {moduleTypeReverb,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },     // 12 Reberb InL
+    // 13 OscString
+    {moduleTypeOscString,   connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocLeft },     // 13 OscString Audio In
+    {moduleTypeOscString,   connectorDirIn,  connectorTypeControl, {{  3,  -15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },     // 13 OscString Pitch
+    {moduleTypeOscString,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },     // 13 OscString Pitch Var
+    {moduleTypeOscString,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },     // 13 OscString Audio Out
+    // 14 Unknown
+    // 15 Sw8-1
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 30,  -20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },    // 15 In 1
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 35,  -15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },    // 15 In 2
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 45,  -20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocLeft },    // 15 In 3
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 50,  -15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocLeft },    // 15 In 4
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 60,  -20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocLeft },    // 15 In 5
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 65,  -15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocLeft },    // 15 In 6
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 75,  -20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocLeft },    // 15 In 7
+    {moduleTypeSw8to1,      connectorDirIn,  connectorTypeControl, {{ 80,  -15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocLeft },    // 15 In 8
+    {moduleTypeSw8to1,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 13 Out
+    {moduleTypeSw8to1,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 13 Control
+    // 16 Unknown
+    // 17 ValSw1-2
+    {moduleTypeValSw1to2,   connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },     // 17 In
+    {moduleTypeValSw1to2,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },     // 17 Ctrl
+    {moduleTypeValSw1to2,   connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 17 Out1
+    {moduleTypeValSw1to2,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 17 Out2
+    // 18 X-Fade
+    {moduleTypeXtoFade,     connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },     // 18 In1
+    {moduleTypeXtoFade,     connectorDirIn,  connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },     // 18 In2
+    {moduleTypeXtoFade,     connectorDirIn,  connectorTypeControl, {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 18 Mod
+    {moduleTypeXtoFade,     connectorDirOut, connectorTypeControl, {{ 92,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 18 Out
+    // 19 Mix4-1B
+    {moduleTypeMix4to1B,    connectorDirIn,  connectorTypeControl, {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },     // 19 In 1
+    {moduleTypeMix4to1B,    connectorDirIn,  connectorTypeControl, {{ 36,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },     // 19 In 2
+    {moduleTypeMix4to1B,    connectorDirIn,  connectorTypeControl, {{ 52,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },     // 19 In 3
+    {moduleTypeMix4to1B,    connectorDirIn,  connectorTypeControl, {{ 68,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },     // 19 In 4
+    {moduleTypeMix4to1B,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Chain",         labelLocRight},     // 19 Chain
+    {moduleTypeMix4to1B,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },     // 19 Out
+    // 20 EnvADSR
+    {moduleTypeEnvADSR,     connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },     // 20
+    {moduleTypeEnvADSR,     connectorDirIn,  connectorTypeLogic,   {{  3,   15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Gate",          labelLocRight},
+    {moduleTypeEnvADSR,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},
+    {moduleTypeEnvADSR,     connectorDirOut, connectorTypeControl, {{ -3,  -12}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocLeft },
+    {moduleTypeEnvADSR,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    // 21 Mux1-8
+    {moduleTypeMux1to8,     connectorDirIn,  connectorTypeControl, {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 21 In
+    {moduleTypeMux1to8,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },     // 21 Ctrl
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },     // 21 Out1
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 38,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },     // 21 Out2
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 46,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },     // 21 Out3
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 54,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },     // 21 Out4
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 62,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocUp   },     // 21 Out5
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocUp   },     // 21 Out6
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 78,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocUp   },     // 21 Out7
+    {moduleTypeMux1to8,     connectorDirOut, connectorTypeControl, {{ 86,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocUp   },     // 21 Out8
+    // 22 PartQuant
+    {moduleTypePartQuant,   connectorDirIn,  connectorTypeControl, {{ 85,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 22 In
+    {moduleTypePartQuant,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },     // 22 Out
+    // 23 ModADSR
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Gate",          labelLocRight},     // 169 Gate
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeControl, {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 169 Attack M
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeControl, {{ 35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 169 Decay M
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 169 Sustain M
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeControl, {{ 65,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 169 Release M
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeControl, {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 169 In
+    {moduleTypeModADSR,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},     // 169 AM
+    {moduleTypeModADSR,     connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocUp   },     // 169 Env
+    {moduleTypeModADSR,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 169 Out
+    // 24 LfoC
+    {moduleTypeLfoC,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rate",          labelLocRight},
+    {moduleTypeLfoC,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    // 25 LfoShpA
+    {moduleTypeLfoShpA,     connectorDirIn,  connectorTypeControl, {{ 10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // Rate
+    {moduleTypeLfoShpA,     connectorDirIn,  connectorTypeControl, {{ 17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // RateVar
+    {moduleTypeLfoShpA,     connectorDirIn,  connectorTypeControl, {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocUp   }, // Rst
+    {moduleTypeLfoShpA,     connectorDirIn,  connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // Shape M
+    {moduleTypeLfoShpA,     connectorDirIn,  connectorTypeControl, {{ 67,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // Phase M
+    {moduleTypeLfoShpA,     connectorDirIn,  connectorTypeControl, {{ 10,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Dir",           labelLocUp   }, // Dir
+    {moduleTypeLfoShpA,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // Out
+    {moduleTypeLfoShpA,     connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Snc",           labelLocUp   }, // Snc
+    // 26 LfoA
+    {moduleTypeLfoA,        connectorDirIn,  connectorTypeControl, {{  3,  -14}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rate",          labelLocUp   }, // Rate
+    {moduleTypeLfoA,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // Rate
+    {moduleTypeLfoA,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // Out
+    // 27 OscMaster
+    {moduleTypeOscMaster,   connectorDirIn,  connectorTypeControl, {{  3,  -14}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 9 Pitch
+    {moduleTypeOscMaster,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 9 PitchVar
+    {moduleTypeOscMaster,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // Out
+    // 28 Saturate
+    {moduleTypeSaturate,    connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 28 In
+    {moduleTypeSaturate,    connectorDirIn,  connectorTypeControl, {{ 35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // 28 Mod
+    {moduleTypeSaturate,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 28 Out
+    // 29 MetNoise
+    {moduleTypeMetNoise,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 29 FreqMod
+    {moduleTypeMetNoise,    connectorDirIn,  connectorTypeControl, {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 29 ColourMod
+    {moduleTypeMetNoise,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 29 Out
+    // 30 Device
+    {moduleTypeDevice,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Wheel",         labelLocUp   }, // 30 Wheel
+    {moduleTypeDevice,      connectorDirOut, connectorTypeControl, {{ 17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "ATouch",        labelLocUp   }, // 30 AfterTouch
+    {moduleTypeDevice,      connectorDirOut, connectorTypeControl, {{ 31,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "CPedal",        labelLocUp   }, // 30 ControlPedal
+    {moduleTypeDevice,      connectorDirOut, connectorTypeLogic,   {{ 45,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Sustain",       labelLocUp   }, // 30 SustainPedal
+    {moduleTypeDevice,      connectorDirOut, connectorTypeControl, {{ 59,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Stick",         labelLocUp   }, // 30 PitchStick
+    {moduleTypeDevice,      connectorDirOut, connectorTypeControl, {{ 73,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "GWh1",          labelLocUp   }, // 30 Global Wheel 1
+    {moduleTypeDevice,      connectorDirOut, connectorTypeControl, {{ 87,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "GWh2",          labelLocUp   }, // 30 Global Wheel 2
+    // 31 Noise
+    {moduleTypeNoise,       connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 31 Out
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{ 28,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Amp",           labelLocRight}, // 209 Amp
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{  3,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 209 Pitch
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 209 PitchVar
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{  3,  -33}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 209 StartMod
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{ 53,  -33}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 209 DelayMod
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{  3,  -63}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 209 SpeedMod
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{ 53,  -63}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 209 GrainMod
+    {moduleTypeSampler,     connectorDirIn,  connectorTypeControl, {{  3,  -48}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 209 SprayMod
+    {moduleTypeSampler,     connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "L",             labelLocUp   }, // 209 OutL
+    {moduleTypeSampler,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "R",             labelLocUp   }, // 209 OutR
+    // 32 Eq2Band
+    {moduleTypeEq2Band,     connectorDirIn,  connectorTypeAudio,   {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   }, // 32 In
+    {moduleTypeEq2Band,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 32 Out
+    // 33 Eq3Band
+    {moduleTypeEq3band,     connectorDirIn,  connectorTypeAudio,   {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   }, // 33 In
+    {moduleTypeEq3band,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 33 Out
+    // 34 ShpExp
+    {moduleTypeShpExp,      connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 34 In
+    {moduleTypeShpExp,      connectorDirIn,  connectorTypeControl, {{ 35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // 34 Mod
+    {moduleTypeShpExp,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 34 Out
+    // 35 Driver
+    {moduleTypeDriver,      connectorDirIn,  connectorTypeAudio,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 35 In1
+    {moduleTypeDriver,      connectorDirIn,  connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 35 In2
+    {moduleTypeDriver,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 35 Out
+    // 36 SwOnOffM
+    {moduleTypeSwOnOffM,    connectorDirIn,  connectorTypeControl, {{-20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 36 In
+    {moduleTypeSwOnOffM,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 36 Out
+    {moduleTypeSwOnOffM,    connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 36 Ctrl
+    // 37 Unknown
+    // 38 Pulse
+    {moduleTypePulse,       connectorDirIn,  connectorTypeLogic,   {{-21,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 38 In
+    {moduleTypePulse,       connectorDirIn,  connectorTypeControl, {{ 35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },        // 38 TimeM
+    {moduleTypePulse,       connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 38 Out
+    // 39 Unknown
+    // 40 Mix8-1B
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 17,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },    // 40 In1
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 26,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },    // 40 In2
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 35,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },    // 40 In3
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 44,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },    // 40 In4
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 53,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocUp   },    // 40 In5
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 62,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocUp   },    // 40 In6
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 71,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocUp   },    // 40 In7
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ 80,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocUp   },    // 40 In8
+    {moduleTypeMix8to1B,    connectorDirIn,  connectorTypeControl, {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Chain",         labelLocLeft },    // 40 Chain  (top-right corner, above meter)
+    {moduleTypeMix8to1B,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 40 Out
+    // 41 EnvH
+    {moduleTypeEnvH,        connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Trig",          labelLocRight},    // 41 Trig
+    {moduleTypeEnvH,        connectorDirIn,  connectorTypeControl, {{ 25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},
+    {moduleTypeEnvH,        connectorDirIn,  connectorTypeControl, {{-12,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 41 In
+    {moduleTypeEnvH,        connectorDirOut, connectorTypeControl, {{-20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocUp   },    // 41 Env
+    {moduleTypeEnvH,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 41 Out
+    // 42 Delay
+    {moduleTypeDelay,       connectorDirIn,  connectorTypeLogic,   {{-21,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 42 In
+    {moduleTypeDelay,       connectorDirIn,  connectorTypeControl, {{ 35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 42 TimeM
+    {moduleTypeDelay,       connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 42 Out
+    // 43 Constant
+    {moduleTypeConstant,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 43 Out
+    // 44 LevMult
+    {moduleTypeLevMult,     connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 44 In
+    {moduleTypeLevMult,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Mod",           labelLocRight},    // 44 Mod
+    {moduleTypeLevMult,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 43 Out
+    // 45 FltVoice
+    {moduleTypeFltVoice,    connectorDirIn,  connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 45 In
+    {moduleTypeFltVoice,    connectorDirIn,  connectorTypeControl, {{ 38,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 45 Vowel
+    {moduleTypeFltVoice,    connectorDirIn,  connectorTypeAudio,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 45 FreqMod
+    {moduleTypeFltVoice,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 45 Out
+    // 46 EnvAHD
+    {moduleTypeEnvAHD,      connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Trig",          labelLocRight},    // 46 Trig
+    {moduleTypeEnvAHD,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},    // 46 AM
+    {moduleTypeEnvAHD,      connectorDirIn,  connectorTypeControl, {{ -3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 46 In
+    {moduleTypeEnvAHD,      connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocUp   },    // 46 Env
+    {moduleTypeEnvAHD,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 46 Out
+    // 47 Pan
+    {moduleTypePan,         connectorDirIn,  connectorTypeControl, {{-25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 47 In
+    {moduleTypePan,         connectorDirIn,  connectorTypeControl, {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 47 Mod
+    {moduleTypePan,         connectorDirOut, connectorTypeControl, {{-15,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "L",             labelLocLeft },    // 47 OutL
+    {moduleTypePan,         connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "R",             labelLocLeft },    // 46 OutR
+    // 48 MixStereo
+    {moduleTypeMixStereo,   connectorDirIn,  connectorTypeControl, {{ 10,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 48 In1
+    {moduleTypeMixStereo,   connectorDirIn,  connectorTypeControl, {{ 22,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 48 In2
+    {moduleTypeMixStereo,   connectorDirIn,  connectorTypeControl, {{ 34,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 48 In3
+    {moduleTypeMixStereo,   connectorDirIn,  connectorTypeControl, {{ 46,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 48 In4
+    {moduleTypeMixStereo,   connectorDirIn,  connectorTypeControl, {{ 58,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 48 In5
+    {moduleTypeMixStereo,   connectorDirIn,  connectorTypeControl, {{ 70,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 48 In6
+    {moduleTypeMixStereo,   connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "L",             labelLocUp   },    // 48 OutL
+    {moduleTypeMixStereo,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "R",             labelLocUp   },    // 48 OutR
+    // 49 FltMulti
+    {moduleTypeFltMulti,    connectorDirIn,  connectorTypeAudio,   {{ -3,    5}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 49 In
+    {moduleTypeFltMulti,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "LP",            labelLocLeft },
+    {moduleTypeFltMulti,    connectorDirOut, connectorTypeAudio,   {{ -3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "BP",            labelLocLeft },
+    {moduleTypeFltMulti,    connectorDirOut, connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "HP",            labelLocLeft },
+    {moduleTypeFltMulti,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // PitchVar
+    {moduleTypeFltMulti,    connectorDirIn,  connectorTypeControl, {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // Pitch
+    // 50 ConstSwT
+    {moduleTypeConstSwT,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 50 Out
+    // 51 FltNord
+    {moduleTypeFltNord,     connectorDirIn,  connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 51 In
+    {moduleTypeFltNord,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // Out
+    {moduleTypeFltNord,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // PitchVar
+    {moduleTypeFltNord,     connectorDirIn,  connectorTypeControl, {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // Pitch
+    {moduleTypeFltNord,     connectorDirIn,  connectorTypeControl, {{ 25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // FMLin
+    {moduleTypeFltNord,     connectorDirIn,  connectorTypeControl, {{ 47,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // Res
+    // 52 EnvMulti
+    {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeLogic,   {{  3,   10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Gate",          labelLocRight},    // 52 Gate
+    {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeControl, {{ 17,   10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "AM",            labelLocRight},    // 52 AM
+    {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeControl, {{-10,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},    // 52 In
+    {moduleTypeEnvMulti,    connectorDirOut, connectorTypeControl, {{ -3,   14}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Env",           labelLocLeft },    // 52 Env
+    {moduleTypeEnvMulti,    connectorDirOut, connectorTypeControl, {{ -3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 52 Out
+    // 53 SandH
+    {moduleTypeSandH,       connectorDirIn,  connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 53 In
+    {moduleTypeSandH,       connectorDirIn,  connectorTypeLogic,   {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocLeft },    // 53 Ctrl
+    {moduleTypeSandH,       connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 53 Out
+    // 54 FltStatic
+    {moduleTypeFltStatic,   connectorDirIn,  connectorTypeAudio,   {{ -3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 54 In
+    {moduleTypeFltStatic,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 54 Out
+    // 55 EnvD
+    {moduleTypeEnvD,        connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Trig",          labelLocRight},    // 55 Trig
+    {moduleTypeEnvD,        connectorDirIn,  connectorTypeControl, {{ 17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},    // 55 AM
+    {moduleTypeEnvD,        connectorDirIn,  connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 55 In
+    {moduleTypeEnvD,        connectorDirOut, connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocLeft },    // 55 Env
+    {moduleTypeEnvD,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 55 Out
+    // 56 Resonator
+    {moduleTypeResonator,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 56 In1
+    {moduleTypeResonator,   connectorDirIn,  connectorTypeControl, {{ 10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 56 In2
+    {moduleTypeResonator,   connectorDirIn,  connectorTypeControl, {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 56 In3
+    {moduleTypeResonator,   connectorDirOut, connectorTypeControl, {{-10,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 56 Out1
+    {moduleTypeResonator,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 56 Out2
+    // 57 Automate
+    // 58 Drumsynth
+    {moduleTypeDrumSynth,   connectorDirIn,  connectorTypeLogic,   {{  3,   15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Trig",          labelLocUp   }, // 58 Trig
+    {moduleTypeDrumSynth,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Vel",           labelLocUp   }, // 58 Velocity - input 1, the bottom one
+    {moduleTypeDrumSynth,   connectorDirIn,  connectorTypeControl, {{  3,  -14}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Pitch",         labelLocUp   }, // 58 Pitch M - input 2
+    {moduleTypeDrumSynth,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 58 Out
+    // 59 CompLev
+    {moduleTypeCompLev,     connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "A",             labelLocLeft }, // 59 A
+    {moduleTypeCompLev,     connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "A>=C",          labelLocLeft }, // 59 Out
+    // 57
+    {moduleTypeAutomate,    connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "In",            labelLocUp   }, // 57 In
+    {moduleTypeAutomate,    connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Out",           labelLocUp   }, // 57 Out
+    // 60 Mux8-1X
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   }, // 60 In1
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 18,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   }, // 60 In2
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 26,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   }, // 60 In3
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 34,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   }, // 60 In4
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 42,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocUp   }, // 60 In5
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocUp   }, // 60 In6
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 58,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocUp   }, // 60 In7
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{ 66,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocUp   }, // 60 In8
+    {moduleTypeMux8to1X,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   }, // 60 Ctrl
+    {moduleTypeMux8to1X,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 60 Out
+    // 61 Clip
+    {moduleTypeClip,        connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 61 In
+    {moduleTypeClip,        connectorDirIn,  connectorTypeControl, {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // 61 Mod
+    {moduleTypeClip,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 61 Out
+    // 62 OverDrive
+    {moduleTypeOverdrive,   connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 62 In
+    {moduleTypeOverdrive,   connectorDirIn,  connectorTypeControl, {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // 62 Mod
+    {moduleTypeOverdrive,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 62 Out
+    // 63 Scratch
+    {moduleTypeScratch,     connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   }, // 63 In
+    {moduleTypeScratch,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight}, // 63 Mod
+    {moduleTypeScratch,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 63 Out
+    // 64 Gate
+    {moduleTypeGate,        connectorDirIn,  connectorTypeLogic,   {{ 16,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 64 In1_1
+    {moduleTypeGate,        connectorDirIn,  connectorTypeLogic,   {{ 16,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 64 In1_2
+    {moduleTypeGate,        connectorDirIn,  connectorTypeLogic,   {{ 66,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 64 In2_1
+    {moduleTypeGate,        connectorDirIn,  connectorTypeLogic,   {{ 66,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 64 In2_2
+    {moduleTypeGate,        connectorDirOut, connectorTypeLogic,   {{ 40,    2}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorMiddleLeft,  NULL,            labelLocLeft }, // 64 Out1
+    {moduleTypeGate,        connectorDirOut, connectorTypeLogic,   {{ 90,    2}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorMiddleLeft,  NULL,            labelLocLeft }, // 64 Out2
+    // 65 Unknown
+
+    // 66 Mix2-1B
+    {moduleTypeMix2to1B,    connectorDirIn,  connectorTypeControl, {{ 32,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },    // 66 In1
+    {moduleTypeMix2to1B,    connectorDirIn,  connectorTypeControl, {{ 67,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },    // 66 In2
+    {moduleTypeMix2to1B,    connectorDirIn,  connectorTypeControl, {{  3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Chain",         labelLocRight},    // 66 Chain
+    {moduleTypeMix2to1B,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 66 Out
+    // 67 Unknown
+    // 68 ClkGen
+    {moduleTypeClkGen,      connectorDirIn,  connectorTypeLogic,   {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Reset",         labelLocRight},        // 68 Reset
+    {moduleTypeClkGen,      connectorDirOut, connectorTypeLogic,   {{ -3,  -21}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "1/96",          labelLocLeft },        // 68 1/96
+    {moduleTypeClkGen,      connectorDirOut, connectorTypeLogic,   {{ -3,  -12}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "1/16",          labelLocLeft },        // 68 1/16
+    {moduleTypeClkGen,      connectorDirOut, connectorTypeLogic,   {{ -3,  -30}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "ClkActive",     labelLocLeft },        // 68 ClkActive
+    {moduleTypeClkGen,      connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Sync",          labelLocLeft },        // 68 Sync
+    // 69 ClkDiv
+    {moduleTypeClkDiv,      connectorDirIn,  connectorTypeLogic,   {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clock",         labelLocRight},        // 69 Clock
+    {moduleTypeClkDiv,      connectorDirIn,  connectorTypeLogic,   {{ 40,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Reset",         labelLocRight},        // 69 Reset
+    {moduleTypeClkDiv,      connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },        // 69 Out
+    // 70 Unknown
+    // 71 EnvFollow
+    {moduleTypeEnvFollow,   connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},    // 71 In
+    {moduleTypeEnvFollow,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 71 Out
+    // 72 NoteScaler
+    {moduleTypeNoteScaler,  connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 72 In
+    {moduleTypeNoteScaler,  connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 72 Out
+    // 73 Unknown
+    // 74 WaveWrap
+    {moduleTypeWaveWrap,    connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 74 In - connector 0 (2026-09-27)
+    {moduleTypeWaveWrap,    connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 74 Mod
+    {moduleTypeWaveWrap,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 74 Out
+    // 75 NoteQuant
+    {moduleTypeNoteQuant,   connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},    // 75 In
+    {moduleTypeNoteQuant,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 75 Out
+    // 76 SwOnOffT
+    {moduleTypeSwOnOffT,    connectorDirIn,  connectorTypeControl, {{-20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 76 In
+    {moduleTypeSwOnOffT,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 76 Out
+    {moduleTypeSwOnOffT,    connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 76 Ctrl
+    // 77 Unknown
+    // 78 Sw1-8
+    {moduleTypeSw1to8,      connectorDirIn,  connectorTypeControl, {{ 15,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },     // 78 In
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 28,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },     // 78 Out1
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 36,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },     // 78 Out2
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 44,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocLeft },     // 78 Out3
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 52,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocLeft },     // 78 Out4
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocLeft },     // 78 Out5
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 68,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocLeft },     // 78 Out6
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 76,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocLeft },     // 78 Out7
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{ 84,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocLeft },     // 78 Out8
+    {moduleTypeSw1to8,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },     // 78 Ctrl
+    // 79 Sw4-1
+    {moduleTypeSw4to1,      connectorDirIn,  connectorTypeControl, {{ 25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },     // 79 In1
+    {moduleTypeSw4to1,      connectorDirIn,  connectorTypeControl, {{ 40,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },     // 79 In2
+    {moduleTypeSw4to1,      connectorDirIn,  connectorTypeControl, {{ 55,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocLeft },     // 79 In3
+    {moduleTypeSw4to1,      connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocLeft },     // 79 In4
+    {moduleTypeSw4to1,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 79 Out
+    {moduleTypeSw4to1,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },     // 79 Ctrl
+    // 80 Unknown
+    // 81 LevAmp
+    {moduleTypeLevAmp,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 81 In
+    {moduleTypeLevAmp,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 81 Out
+    // 82 Rect
+    {moduleTypeRect,        connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 82 In
+    {moduleTypeRect,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 82 Out
+    // 83 ShpStatic
+    {moduleTypeShpStatic,   connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 82 In
+    {moduleTypeShpStatic,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 82 Out
+    // 84 EnvADR
+    {moduleTypeEnvADR,      connectorDirIn,  connectorTypeLogic,   {{  3,   13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocRight},    // 84 Trig/Gate
+    {moduleTypeEnvADR,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},    // 84 In
+    {moduleTypeEnvADR,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},    // 84 AM
+    {moduleTypeEnvADR,      connectorDirOut, connectorTypeControl, {{ -3,  -12}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocLeft },    // 84 Env
+    {moduleTypeEnvADR,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 84 Out
+    {moduleTypeEnvADR,      connectorDirOut, connectorTypeLogic,   {{ -3,  -21}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "End",           labelLocLeft },    // 84 End
+    // 85 WindSw
+    {moduleTypeWindSw,      connectorDirIn,  connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},    // 85 In
+    {moduleTypeWindSw,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 85 In
+    {moduleTypeWindSw,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 85 Out
+    {moduleTypeWindSw,      connectorDirOut, connectorTypeLogic,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 85 Gate
+    // 86 8Counter
+    {moduleType8Counter,    connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight},    // 86 Clock
+    {moduleType8Counter,    connectorDirIn,  connectorTypeLogic,   {{ 10,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocRight},    // 86 Reset
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },    // 86 Out1
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },    // 86 Out2
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 40,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },    // 86 Out3
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },    // 86 Out4
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocUp   },    // 86 Out5
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocUp   },    // 86 Out6
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocUp   },    // 86 Out7
+    {moduleType8Counter,    connectorDirOut, connectorTypeLogic,   {{ 90,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocUp   },    // 86 Out8
+    // 87 FltLP
+    {moduleTypeFltLP,       connectorDirIn,  connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 87 In
+    {moduleTypeFltLP,       connectorDirIn,  connectorTypeControl, {{ 28,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 87 Mod
+    {moduleTypeFltLP,       connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 87 Out
+    // 88 Sw1-4
+    {moduleTypeSw1to4,      connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 88 In
+    {moduleTypeSw1to4,      connectorDirOut, connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },    // 88 Out1
+    {moduleTypeSw1to4,      connectorDirOut, connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },    // 88 Out2
+    {moduleTypeSw1to4,      connectorDirOut, connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocLeft },    // 88 Out3
+    {moduleTypeSw1to4,      connectorDirOut, connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocLeft },    // 88 Out4
+    {moduleTypeSw1to4,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 88 Ctrl
+    // 89 Flanger
+    {moduleTypeFlanger,     connectorDirIn,  connectorTypeAudio,   {{ -3,  -13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 89 In
+    {moduleTypeFlanger,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 89 Out
+    // 90 Sw1-2
+    {moduleTypeSw1to2,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 88 In
+    {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 88 Out1
+    {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 88 Out2
+    {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 88 Ctrl
+    // 91 FlipFlop
+    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocLeft },    // 91 Clock
+    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 15,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocLeft },    // 91 Reset
+    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 35,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "In",            labelLocLeft },    // 91 In
+    {moduleTypeFlipFlop,    connectorDirOut, connectorTypeLogic,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "NotQ",          labelLocRight},    // 91 NotQ
+    {moduleTypeFlipFlop,    connectorDirOut, connectorTypeLogic,   {{ 80,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Q",             labelLocRight},    // 91 Q
+    // 92 FltClassic
+    {moduleTypeFltClassic,  connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 92
+    {moduleTypeFltClassic,  connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    {moduleTypeFltClassic,  connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },
+    {moduleTypeFltClassic,  connectorDirIn,  connectorTypeControl, {{  3,   15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocUp   },
+    // 93 Unknown
+    // 94 StChorus
+    {moduleTypeStChorus,    connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },        // 94
+    {moduleTypeStChorus,    connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },
+    {moduleTypeStChorus,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },
+    // 95 Unknown
+    // 96 OscD
+    {moduleTypeOscD,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 96 Pitch
+    {moduleTypeOscD,        connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 96 Out
+    // 97 OscA
+    {moduleTypeOscA,        connectorDirIn,  connectorTypeControl, {{  3,  -13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 97 Pitch
+    {moduleTypeOscA,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 97  PitchVar
+    {moduleTypeOscA,        connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 97 Out
+    // 98 FreqShift
+    {moduleTypeFreqShift,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 98 Mod
+    {moduleTypeFreqShift,   connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 98 In
+    {moduleTypeFreqShift,   connectorDirOut, connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Down",          labelLocLeft },    //98 Down
+    {moduleTypeFreqShift,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Up",            labelLocLeft },    // 98 Up
+    // 99 Unknown
+    // 100 Sw2-1
+    {moduleTypeSw2to1,      connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },  // 100 In1
+    {moduleTypeSw2to1,      connectorDirIn,  connectorTypeControl, {{ 40,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },  // 100 In2
+    {moduleTypeSw2to1,      connectorDirOut, connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },  // 100 Out
+    {moduleTypeSw2to1,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },  // 100 Ctrl
+    // 101 Unknown
+    // 102 FltPhase
+    {moduleTypeFltPhase,    connectorDirIn,  connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 102 In
+    {moduleTypeFltPhase,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },        // 102 PitchVar
+    {moduleTypeFltPhase,    connectorDirIn,  connectorTypeControl, {{ 35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },        // 102 Spr
+    {moduleTypeFltPhase,    connectorDirIn,  connectorTypeControl, {{ 55,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },        // 102 FM
+    {moduleTypeFltPhase,    connectorDirIn,  connectorTypeControl, {{  3,  -12}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },        // 102 Pitch
+    {moduleTypeFltPhase,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 102 Out
+    // 103 EqPeak
+    {moduleTypeEqPeak,      connectorDirIn,  connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 103 In
+    {moduleTypeEqPeak,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 103 Out
+    // 104 Unknown
+    // 105 ValSw2-1
+    {moduleTypeValSw2to1,   connectorDirIn,  connectorTypeControl, {{-24,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 105 In1
+    {moduleTypeValSw2to1,   connectorDirIn,  connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "On",            labelLocLeft },    // 105 In2
+    {moduleTypeValSw2to1,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 105 Ctrl
+    {moduleTypeValSw2to1,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 105 Out
+    // 106 OscNoise
+    {moduleTypeOscNoise,    connectorDirIn,  connectorTypeControl, {{  3,  -13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 1106 Pitch
+    {moduleTypeOscNoise,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 106  PitchVar
+    // §8.1 - the jack pairs with the ATTENUATOR, as the PitchVar jack above pairs with Pitch. It sat
+    // at 70, linking right to the dial at 77 - which was labelled WidthM and is really Width. With the
+    // labels put right (2026-09-19) it moves left of the dial at 61, the modulation amount it feeds.
+    {moduleTypeOscNoise,    connectorDirIn,  connectorTypeControl, {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 106  Width
+    {moduleTypeOscNoise,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 106 Out
+    // 107 Unknown
+    // 108 Vocoder
+    {moduleTypeVocoder,     connectorDirIn,  connectorTypeAudio,   {{  3,  -35}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocRight},        // 108 Ctrl
+    {moduleTypeVocoder,     connectorDirIn,  connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 108 In
+    {moduleTypeVocoder,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 108 Out
+    // 109 Unknown
+    // 110 Unknown
+    // 111 Unknown
+    // 112 LevAdd
+    {moduleTypeLevAdd,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 112 In
+    {moduleTypeLevAdd,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 112 Out
+    // 113 Fade1-2
+    {moduleTypeFade1to2,    connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 113 In
+    {moduleTypeFade1to2,    connectorDirIn,  connectorTypeControl, {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },  // 113 Ctrl
+    {moduleTypeFade1to2,    connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 113 Out1
+    {moduleTypeFade1to2,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 113 Out2
+    // 114 Fade2-1
+    {moduleTypeFade2to1,    connectorDirIn,  connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 114 In1
+    {moduleTypeFade2to1,    connectorDirIn,  connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 114 In2
+    {moduleTypeFade2to1,    connectorDirIn,  connectorTypeControl, {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },  // 114 Ctrl
+    {moduleTypeFade2to1,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 114 Out
+    // 115 LevScaler
+    {moduleTypeLevScaler,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Note",          labelLocRight},  // 115 Note
+    {moduleTypeLevScaler,   connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 115 In
+    {moduleTypeLevScaler,   connectorDirOut, connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Level",         labelLocUp   },  // 115 Level
+    {moduleTypeLevScaler,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 115 Out
+    // 116 Mix8-1A
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 16,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },  // 116 In1
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },  // 116 In2
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 34,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },  // 116 In3
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 43,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },  // 116 In4
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 52,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocUp   },  // 116 In5
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 61,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocUp   },  // 116 In6
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocUp   },  // 116 In7
+    {moduleTypeMix8to1A,    connectorDirIn,  connectorTypeControl, {{ 79,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocUp   },  // 116 In8
+    {moduleTypeMix8to1A,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 116 Out
+    // 117 LevMod
+    {moduleTypeLevMod,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},  // 117 In
+    {moduleTypeLevMod,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Mod",           labelLocUp   },  // 117 Mod
+    {moduleTypeLevMod,      connectorDirIn,  connectorTypeControl, {{ 21,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},  // 117 ModDepth
+    {moduleTypeLevMod,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 115 Out
+    // 118 Digitizer
+    {moduleTypeDigitizer,   connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},  // 118 In
+    {moduleTypeDigitizer,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},  // 118 Rate M
+    {moduleTypeDigitizer,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 118 Out
+    // 119 EnvADDSR
+    {moduleTypeEnvADDSR,    connectorDirIn,  connectorTypeLogic,   {{  3,   15}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Gate",          labelLocRight},  // 119 Gate
+    {moduleTypeEnvADDSR,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "AM",            labelLocRight},  // 119 AM
+    {moduleTypeEnvADDSR,    connectorDirIn,  connectorTypeControl, {{-17,   10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 119 In
+    {moduleTypeEnvADDSR,    connectorDirOut, connectorTypeControl, {{ -3,   24}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Env",           labelLocLeft },  // 119 Env
+    {moduleTypeEnvADDSR,    connectorDirOut, connectorTypeControl, {{ -3,   10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 119 Out
+    // 120 Unknown
+    // 121 SeqNote
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeLogic,   {{  3,  -31}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clock",         labelLocUp   },    // 121 Clk
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeLogic,   {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Reset",         labelLocUp   },    // 121 Rst
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Loop",          labelLocUp   },    // 121 Loop
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeLogic,   {{-14,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Park",          labelLocRight},    // 121 Park
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeControl, {{ 14,  -38}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },    // 121 Note
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeLogic,   {{ 14,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },    // 121 Trig
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeControl, {{ 42,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "RecVal",        labelLocDown },    // 121 RecVal
+    {moduleTypeSeqNote,     connectorDirIn,  connectorTypeLogic,   {{ 58,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "RecEnable",     labelLocDown },    // 121 RecEnable
+    {moduleTypeSeqNote,     connectorDirOut, connectorTypeLogic,   {{ -3,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Link",          labelLocUp   },    // 121 Link
+    {moduleTypeSeqNote,     connectorDirOut, connectorTypeControl, {{ -3,  -38}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 121 Note
+    {moduleTypeSeqNote,     connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 121 Trig
+
+    // 122 Unknown
+    // 123 Mix4-1C
+    {moduleTypeMix4to1C,    connectorDirIn,  connectorTypeControl, {{ 12,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "1",             labelLocUp   },    // 123 In1
+    {moduleTypeMix4to1C,    connectorDirIn,  connectorTypeControl, {{ 32,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "2",             labelLocUp   },    // 123 In2
+    {moduleTypeMix4to1C,    connectorDirIn,  connectorTypeControl, {{ 52,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "3",             labelLocUp   },    // 123 In3
+    {moduleTypeMix4to1C,    connectorDirIn,  connectorTypeControl, {{ 72,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "4",             labelLocUp   },    // 123 In4
+    {moduleTypeMix4to1C,    connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Chain",         labelLocLeft },    // 123 Chain
+    {moduleTypeMix4to1C,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 123 Out
+    // 124 Mux8-1
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 22,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },    // 60 In1
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 29,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },    // 60 In2
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 36,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },    // 60 In3
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 43,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },    // 60 In4
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocUp   },    // 60 In5
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 57,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocUp   },    // 60 In6
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 64,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "7",             labelLocUp   },    // 60 In7
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{ 71,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "8",             labelLocUp   },    // 60 In8
+    {moduleTypeMux8to1,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 60 Ctrl
+    {moduleTypeMux8to1,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 60 Out
+    // 125 WahWah
+    {moduleTypeWahWah,      connectorDirIn,  connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 112 In
+    {moduleTypeWahWah,      connectorDirIn,  connectorTypeControl, {{ 28,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 112 Sweep
+    {moduleTypeWahWah,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 112 Out
+    // 126 Name
+    // 127 Fx-In
+    {moduleTypeFxtoIn,      connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 127
+    {moduleTypeFxtoIn,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    // 128 MinMax
+    {moduleTypeMinMax,      connectorDirIn,  connectorTypeControl, {{-17,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "A",             labelLocLeft },    // 128 In A
+    {moduleTypeMinMax,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "B",             labelLocLeft },    // 128 In B
+    {moduleTypeMinMax,      connectorDirOut, connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Min",           labelLocLeft },    // 128 Min Out
+    {moduleTypeMinMax,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Max",           labelLocLeft },    // 128 Max Out
+    // 128 Unknown
+    // 130 BinCounter
+    {moduleTypeBinCounter,  connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight},        // 130 Clk
+    {moduleTypeBinCounter,  connectorDirIn,  connectorTypeLogic,   {{ 17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocRight},        // 130 Rst
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "001",           labelLocUp   },        // 130 Out 001
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 38,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "002",           labelLocUp   },        // 130 Out 002
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 46,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "004",           labelLocUp   },        // 130 Out 004
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 54,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "008",           labelLocUp   },        // 130 Out 008
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 62,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "016",           labelLocUp   },        // 130 Out 016
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "032",           labelLocUp   },        // 130 Out 032
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 78,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "064",           labelLocUp   },        // 130 Out 064
+    {moduleTypeBinCounter,  connectorDirOut, connectorTypeLogic,   {{ 86,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "128",           labelLocUp   },        // 130 Out 128
+    // 131 ADConv
+    {moduleTypeADConv,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Input",         labelLocRight},        // 131 Input
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D0",            labelLocUp   },        // 131 Out D0
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 38,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D1",            labelLocUp   },        // 131 Out D1
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 46,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D2",            labelLocUp   },        // 131 Out D2
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 54,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D3",            labelLocUp   },        // 131 Out D3
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 62,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D4",            labelLocUp   },        // 131 Out D4
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D5",            labelLocUp   },        // 131 Out D5
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 78,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D6",            labelLocUp   },        // 131 Out D6
+    {moduleTypeADConv,      connectorDirOut, connectorTypeLogic,   {{ 86,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D7",            labelLocUp   },        // 131 Out D7
+    // 132 DAConv
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D0",            labelLocUp   },        // 132 In D0
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 38,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D1",            labelLocUp   },        // 132 In D1
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 46,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D2",            labelLocUp   },        // 132 In D2
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 54,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D3",            labelLocUp   },        // 132 In D3
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 62,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D4",            labelLocUp   },        // 132 In D4
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D5",            labelLocUp   },        // 132 In D5
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 78,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D6",            labelLocUp   },        // 132 In D6
+    {moduleTypeDAConv,      connectorDirIn,  connectorTypeLogic,   {{ 86,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "D7",            labelLocUp   },        // 132 In D7
+    {moduleTypeDAConv,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Out",           labelLocUp   },        // 132 Output
+    // 133 Unknown
+    // 134 FltHP
+    {moduleTypeFltHP,       connectorDirIn,  connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 134 In
+    {moduleTypeFltHP,       connectorDirIn,  connectorTypeControl, {{ 28,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },        // 134 Mod
+    {moduleTypeFltHP,       connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },        // 134 Out
+    // 135 Unknown
+    // 136 Unknown
+    // 137 Unknown
+    // 138 Unknown
+    // 139 T&H
+    {moduleTypeTandH,       connectorDirIn,  connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // 139 In
+    {moduleTypeTandH,       connectorDirIn,  connectorTypeLogic,   {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocLeft }, // 139 Ctrl
+    {moduleTypeTandH,       connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 139 Out
+    // 140 Mix4-1S
+    {moduleTypeMix4to1S,    connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 140 OutL
+    {moduleTypeMix4to1S,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 140 OutR
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{  9,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "L",             labelLocUp   }, // 140 In1L
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 16,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "R",             labelLocUp   }, // 140 In1R
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 29,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "L",             labelLocUp   }, // 140 In2L
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 36,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "R",             labelLocUp   }, // 140 In2R
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 49,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "L",             labelLocUp   }, // 140 In3L
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 56,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "R",             labelLocUp   }, // 140 In3R
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 69,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "L",             labelLocUp   }, // 140 In4L
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ 76,   20}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "R",             labelLocUp   }, // 140 In4R
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{-10,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Chain",         labelLocLeft }, // 140 ChainL
+    {moduleTypeMix4to1S,    connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   }, // 140 ChainR
+    // 141 CtrlSend
+    {moduleTypeCtrlSend,    connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Send",          labelLocRight}, // 141 Send In
+    {moduleTypeCtrlSend,    connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight}, // 141 Send Out
+    {moduleTypeCtrlSend,    connectorDirIn,  connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 141 Value
+    // 142 PCSend
+    {moduleTypePCSend,      connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Send",          labelLocRight}, // 142 Send In
+    {moduleTypePCSend,      connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight}, // 142 Send Out
+    {moduleTypePCSend,      connectorDirIn,  connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 142 Program
+    // 143 NoteSend
+    {moduleTypeNoteSend,    connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Gate",          labelLocRight}, // 143 Gate
+    {moduleTypeNoteSend,    connectorDirIn,  connectorTypeControl, {{ 21,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 143 Velocity
+    {moduleTypeNoteSend,    connectorDirIn,  connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 143 Note
+    // 144 SeqEvent
+    {moduleTypeSeqEvent,    connectorDirIn,  connectorTypeLogic,   {{  3,  -31}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clock",         labelLocUp   }, // 144 Clk
+    {moduleTypeSeqEvent,    connectorDirIn,  connectorTypeLogic,   {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Reset",         labelLocUp   }, // 144 Rst
+    {moduleTypeSeqEvent,    connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Loop",          labelLocUp   }, // 144 Lp
+    {moduleTypeSeqEvent,    connectorDirIn,  connectorTypeLogic,   {{-14,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Park",          labelLocRight}, // 144 Park
+    {moduleTypeSeqEvent,    connectorDirIn,  connectorTypeLogic,   {{ 14,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 144 Trig1
+    {moduleTypeSeqEvent,    connectorDirIn,  connectorTypeLogic,   {{ 14,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 144 Trig1
+    {moduleTypeSeqEvent,    connectorDirOut, connectorTypeLogic,   {{ -3,  -31}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Link",          labelLocUp   }, // 144 Link
+    {moduleTypeSeqEvent,    connectorDirOut, connectorTypeLogic,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 144 Out1
+    {moduleTypeSeqEvent,    connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 144 Out2
+    // 145 SeqVal
+    {moduleTypeSeqVal,      connectorDirIn,  connectorTypeLogic,   {{  3,  -31}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clock",         labelLocUp   }, // 145 Clk
+    {moduleTypeSeqVal,      connectorDirIn,  connectorTypeLogic,   {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Reset",         labelLocUp   }, // 145 Rst
+    {moduleTypeSeqVal,      connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Loop",          labelLocUp   }, // 145 Lp
+    {moduleTypeSeqVal,      connectorDirIn,  connectorTypeLogic,   {{-14,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Park",          labelLocRight}, // 145 Park
+    {moduleTypeSeqVal,      connectorDirIn,  connectorTypeControl, {{ 14,  -38}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 145 Val
+    {moduleTypeSeqVal,      connectorDirIn,  connectorTypeLogic,   {{ 14,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 145 Trig1
+    {moduleTypeSeqVal,      connectorDirOut, connectorTypeLogic,   {{ -3,  -60}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Link",          labelLocUp   }, // 145 Link
+    {moduleTypeSeqVal,      connectorDirOut, connectorTypeControl, {{ -3,  -38}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 145 Val
+    {moduleTypeSeqVal,      connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft }, // 145 Trig
+
+    // 146 SeqLev
+    {moduleTypeSeqLev,      connectorDirIn,  connectorTypeLogic,   {{  3,  -31}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clock",         labelLocUp   },    // 145 Clk
+    {moduleTypeSeqLev,      connectorDirIn,  connectorTypeLogic,   {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Reset",         labelLocUp   },    // 145 Rst
+    {moduleTypeSeqLev,      connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Loop",          labelLocUp   },    // 145 Lp
+    {moduleTypeSeqLev,      connectorDirIn,  connectorTypeLogic,   {{-14,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Park",          labelLocRight},    // 145 Park
+    {moduleTypeSeqLev,      connectorDirIn,  connectorTypeControl, {{ 14,  -38}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 145 Val
+    {moduleTypeSeqLev,      connectorDirIn,  connectorTypeLogic,   {{ 14,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 145 Trig1
+    {moduleTypeSeqLev,      connectorDirOut, connectorTypeLogic,   {{ -3,  -60}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Link",          labelLocUp   },    // 145 Link
+    {moduleTypeSeqLev,      connectorDirOut, connectorTypeControl, {{ -3,  -38}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 145 Val
+    {moduleTypeSeqLev,      connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 145 Trig
+
+    // 147 CtrRcv
+    {moduleTypeCtrlRcv,     connectorDirOut, connectorTypeLogic,   {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rcv",           labelLocUp   },        // 147 Rcv
+    {moduleTypeCtrlRcv,     connectorDirOut, connectorTypeControl, {{ 92,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Val",           labelLocUp   },        // 147 Value
+    // 148 NoteRcv
+    {moduleTypeNoteRcv,     connectorDirOut, connectorTypeLogic,   {{ 74,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rcv",           labelLocUp   },        // 148 Rcv
+    {moduleTypeNoteRcv,     connectorDirOut, connectorTypeControl, {{ 81,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Vel",           labelLocUp   },        // 148 Vel
+    {moduleTypeNoteRcv,     connectorDirOut, connectorTypeControl, {{ 88,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "RVel",          labelLocUp   },        // 148 Release vel
+    // 149 NoteZone
+    // 150 Compress
+    {moduleTypeCompress,    connectorDirIn,  connectorTypeAudio,   {{-10,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },        // 150
+    {moduleTypeCompress,    connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },
+    {moduleTypeCompress,    connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocUp   },
+    {moduleTypeCompress,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    {moduleTypeCompress,    connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+
+    // 151 Unknown
+    // 152 KeyQuant
+    {moduleTypeKeyQuant,    connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},        // 152 In
+    {moduleTypeKeyQuant,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},        // 152 Out
+    // 153 Unknown
+    // 154 SeqCtr
+    {moduleTypeSeqCtr,      connectorDirIn,  connectorTypeControl, {{  3,  -40}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 154 Ctrl
+    {moduleTypeSeqCtr,      connectorDirIn,  connectorTypeControl, {{ 14,  -40}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 154 Val
+    {moduleTypeSeqCtr,      connectorDirIn,  connectorTypeLogic,   {{ 14,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},    // 154 Trig
+    {moduleTypeSeqCtr,      connectorDirOut, connectorTypeControl, {{ -3,  -40}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 154 Val
+    {moduleTypeSeqCtr,      connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },    // 154 Trig
+    // 155 Unknown
+    // 156 NoteDet
+    {moduleTypeNoteDet,     connectorDirOut, connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Gate",          labelLocUp   },   // 156 Gate
+    {moduleTypeNoteDet,     connectorDirOut, connectorTypeControl, {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Vel",           labelLocUp   },   // 156 Vel
+    {moduleTypeNoteDet,     connectorDirOut, connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "RVel",          labelLocUp   },   // 156 Release vel
+    // 157 LevConv
+    {moduleTypeLevConv,     connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },   // 157 In
+    {moduleTypeLevConv,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 157 Out
+    // 158 Glide
+    {moduleTypeGlide,       connectorDirIn,  connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },   // 139 In
+    {moduleTypeGlide,       connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Glide on",      labelLocRight},   // 158 Glide On
+    {moduleTypeGlide,       connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 139 Out
+    // 159 CompSig
+    {moduleTypeCompSig,     connectorDirIn,  connectorTypeControl, {{-17,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "A",             labelLocLeft },   // 159 A
+    {moduleTypeCompSig,     connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "B",             labelLocLeft },   // 159 B
+    {moduleTypeCompSig,     connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "A>=B",          labelLocLeft },   // 159 Cmp
+    // 160 ZeroCnt
+    {moduleTypeZeroCnt,     connectorDirIn,  connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },   // 160 In
+    {moduleTypeZeroCnt,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 160 Out
+    // 161 MixFader
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{  8,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "1",             labelLocUp   },   // 161 In1
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 18,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "2",             labelLocUp   },   // 161 In2
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 28,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "3",             labelLocUp   },   // 161 In3
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 38,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "4",             labelLocUp   },   // 161 In4
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 48,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "5",             labelLocUp   },   // 161 In5
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 58,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "6",             labelLocUp   },   // 161 In6
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 68,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "7",             labelLocUp   },   // 161 In7
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ 78,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "8",             labelLocUp   },   // 161 In8
+    {moduleTypeMixFader,    connectorDirIn,  connectorTypeAudio,   {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Chain",         labelLocLeft },   // 161 Chain
+    {moduleTypeMixFader,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 161 Out
+    // 162 FltComb
+    {moduleTypeFltComb,     connectorDirIn,  connectorTypeAudio,   {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 162 In
+    {moduleTypeFltComb,     connectorDirIn,  connectorTypeControl, {{  3,  -12}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },   // 162 Pitch
+    {moduleTypeFltComb,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },   // 162 PitchVar
+    {moduleTypeFltComb,     connectorDirIn,  connectorTypeControl, {{ 55,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },   // 162 FM
+    {moduleTypeFltComb,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 162 Out
+    // 163 OscShpA
+    {moduleTypeOscShpA,     connectorDirIn,  connectorTypeControl, {{  3,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },   // 163 Pitch
+    {moduleTypeOscShpA,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},   // 163 PitchVar
+    {moduleTypeOscShpA,     connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Sync",          labelLocRight},   // 163 Sync
+    {moduleTypeOscShpA,     connectorDirIn,  connectorTypeAudio,   {{ 55,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},   // FM
+    {moduleTypeOscShpA,     connectorDirIn,  connectorTypeAudio,   {{ 73,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},   // 163 Shape
+    {moduleTypeOscShpA,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // Out
+    // 164 OscDual
+    {moduleTypeOscDual,     connectorDirIn,  connectorTypeControl, {{  3,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},   // 164 Pitch
+    {moduleTypeOscDual,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},   // 164 PitchVar
+    {moduleTypeOscDual,     connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Sync",          labelLocRight},   // 164 Sync
+    {moduleTypeOscDual,     connectorDirIn,  connectorTypeAudio,   {{ 33, 15.5}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "-",             labelLocRight},   // 164 PW
+    {moduleTypeOscDual,     connectorDirIn,  connectorTypeAudio,   {{ 33, 30.5}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "-",             labelLocRight},   // 164 Phase
+    {moduleTypeOscDual,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 164 Out
+    // 165 DXRouter
+    {moduleTypeDXRouter,    connectorDirIn,  connectorTypeAudio,   {{  5,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },   // 164 In1
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ 11,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },   // 164 Out1
+    {moduleTypeDXRouter,    connectorDirIn,  connectorTypeAudio,   {{ 19,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },   // 164 In2
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ 25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },   // 164 Out2
+    {moduleTypeDXRouter,    connectorDirIn,  connectorTypeAudio,   {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocLeft },   // 164 In3
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ 39,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },   // 164 Out3
+    {moduleTypeDXRouter,    connectorDirIn,  connectorTypeAudio,   {{ 47,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocLeft },   // 164 In4
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },   // 164 Out4
+    {moduleTypeDXRouter,    connectorDirIn,  connectorTypeAudio,   {{ 61,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "5",             labelLocLeft },   // 164 In5
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ 67,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },   // 164 Out5
+    {moduleTypeDXRouter,    connectorDirIn,  connectorTypeAudio,   {{ 75,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "6",             labelLocLeft },   // 164 In6
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ 81,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },   // 164 Out6
+    {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 164 Out
+    // 166 Unknown
+    // 167 PShift
+    {moduleTypePShift,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 167 PitchVar
+    {moduleTypePShift,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 167 In
+    {moduleTypePShift,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 167 Out
+    // 168 Unknown
+    // 169 ModAHD
+    {moduleTypeModAHD,      connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Trig",          labelLocUp   },    // 169 Trig
+    {moduleTypeModAHD,      connectorDirIn,  connectorTypeControl, {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 169 Attack M
+    {moduleTypeModAHD,      connectorDirIn,  connectorTypeControl, {{ 40,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 169 Hold M
+    {moduleTypeModAHD,      connectorDirIn,  connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 169 Delay M
+    {moduleTypeModAHD,      connectorDirIn,  connectorTypeControl, {{ -3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 169 In
+    {moduleTypeModAHD,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 169 AM
+    {moduleTypeModAHD,      connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocLeft },    // 169 Env
+    {moduleTypeModAHD,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 169 Out
+    // 170 2-In
+    {moduleType2toIn,       connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 170 OutL
+    {moduleType2toIn,       connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 170 OutR
+    // 171 4-In
+    {moduleType4toIn,       connectorDirOut, connectorTypeAudio,   {{-24,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "1",             labelLocUp   },    // 170 Out1
+    {moduleType4toIn,       connectorDirOut, connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "2",             labelLocUp   },    // 170 Out2
+    {moduleType4toIn,       connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "3",             labelLocUp   },    // 170 Out3
+    {moduleType4toIn,       connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "4",             labelLocUp   },    // 170 Out4
+    // 172 DlySingleA
+    {moduleTypeDlySingleA,  connectorDirIn,  connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 172 In
+    {moduleTypeDlySingleA,  connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 172 Out
+    // 173 DlySingleB
+    {moduleTypeDlySingleB,  connectorDirIn,  connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 173 In
+    {moduleTypeDlySingleB,  connectorDirIn,  connectorTypeAudio,   {{ 33,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // 173 Mod
+    {moduleTypeDlySingleB,  connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 173 Out
+    // 174 DelayDual
+    {moduleTypeDelayDual,   connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 174 In
+    {moduleTypeDelayDual,   connectorDirIn,  connectorTypeAudio,   {{ 12,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 174 Time Mod 1
+    {moduleTypeDelayDual,   connectorDirIn,  connectorTypeAudio,   {{ 46,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 174 Time Mod 2
+    {moduleTypeDelayDual,   connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 174 Out1
+    {moduleTypeDelayDual,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 174 Out2
+    // 175 DelayQuad
+    {moduleTypeDelayQuad,   connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL /* In */,   labelLocLeft },    // 174 In
+    {moduleTypeDelayQuad,   connectorDirIn,  connectorTypeAudio,   {{ 12,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 175 Time1
+    {moduleTypeDelayQuad,   connectorDirIn,  connectorTypeAudio,   {{ 29,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 175 Time2
+    {moduleTypeDelayQuad,   connectorDirIn,  connectorTypeAudio,   {{ 46,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 175 Time3
+    {moduleTypeDelayQuad,   connectorDirIn,  connectorTypeAudio,   {{ 63,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 175 Time4
+    {moduleTypeDelayQuad,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL /* Main */, labelLocUp   },    // 175 Out Main
+    {moduleTypeDelayQuad,   connectorDirOut, connectorTypeAudio,   {{ 28,   26}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocUp   },    // 175 Out1
+    {moduleTypeDelayQuad,   connectorDirOut, connectorTypeAudio,   {{ 45,   26}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocUp   },    // 175 Out2
+    {moduleTypeDelayQuad,   connectorDirOut, connectorTypeAudio,   {{ 62,   26}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocUp   },    // 175 Out3
+    {moduleTypeDelayQuad,   connectorDirOut, connectorTypeAudio,   {{ 79,   26}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     NULL,            labelLocUp   },    // 175 Out4
+    // 176 DelayA
+    {moduleTypeDelayA,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 177
+    {moduleTypeDelayA,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    // 177 DelayB
+    {moduleTypeDelayB,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 177
+    {moduleTypeDelayB,      connectorDirIn,  connectorTypeControl, {{ 29,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 169 E
+    {moduleTypeDelayB,      connectorDirIn,  connectorTypeControl, {{ 63,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 169 E
+    {moduleTypeDelayB,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },
+    // 178 DlyClock
+    {moduleTypeDlyClock,    connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocLeft },  // 178 In
+    {moduleTypeDlyClock,    connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight},  // 178 Clk
+    {moduleTypeDlyClock,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 178 Out
+    // 179 DlyShiftReg
+    {moduleTypeDlyShiftReg, connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocLeft },  // 179 In
+    {moduleTypeDlyShiftReg, connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight},  // 179 Clk
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-59,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "1",             labelLocUp   },  // 179 Out1
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-51,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "2",             labelLocUp   },  // 179 Out2
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-43,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "3",             labelLocUp   },  // 179 Out3
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "4",             labelLocUp   },  // 179 Out4
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-27,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "5",             labelLocUp   },  // 179 Out5
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-19,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "6",             labelLocUp   },  // 179 Out6
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{-11,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "7",             labelLocUp   },  // 179 Out7
+    {moduleTypeDlyShiftReg, connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "8",             labelLocUp   },  // 179 Out8
+    // 180 Operator
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeControl, {{  3,   31}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Freq",          labelLocUp   },  // 180 Freq
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 180 FM
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeLogic,   {{  3,   45}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Gate",          labelLocUp   },  // 180 Gate
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeControl, {{  3,   57}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Note",          labelLocUp   },  // 180 Note
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},  // 180 Amod
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeControl, {{  3,   69}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Vel",           labelLocUp   },  // 180 Vel
+    {moduleTypeOperator,    connectorDirIn,  connectorTypeControl, {{  3,   19}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Pitch",         labelLocUp   },  // 180 Pitch
+    {moduleTypeOperator,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 180 Out
+    // 181 DlyEight
+    {moduleTypeDlyEight,    connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 181 In
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-59,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "1",             labelLocUp   },  // 181 Out1
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-51,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "2",             labelLocUp   },  // 181 Out2
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-43,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "3",             labelLocUp   },  // 181 Out3
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-35,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "4",             labelLocUp   },  // 181 Out4
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-27,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "5",             labelLocUp   },  // 181 Out5
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-19,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "6",             labelLocUp   },  // 181 Out6
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{-11,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "7",             labelLocUp   },  // 181 Out7
+    {moduleTypeDlyEight,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "8",             labelLocUp   },  // 181 Out8
+    // 182 DlyStereo
+    {moduleTypeDlyStereo,   connectorDirIn,  connectorTypeAudio,   {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 181 In
+    {moduleTypeDlyStereo,   connectorDirOut, connectorTypeAudio,   {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },  // 181 Out1
+    {moduleTypeDlyStereo,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },  // 181 Out2
+    // 183 OscPM
+    {moduleTypeOscPM,       connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},  // 9 OscC PitchVar
+    {moduleTypeOscPM,       connectorDirIn,  connectorTypeAudio,   {{ 59,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Sync",          labelLocUp   },  // Sync
+    {moduleTypeOscPM,       connectorDirIn,  connectorTypeAudio,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},  // Phase M
+    {moduleTypeOscPM,       connectorDirIn,  connectorTypeControl, {{  3,  -13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},  // Pitch
+    {moduleTypeOscPM,       connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // Out
+    // 184 Mix1-1A
+    {moduleTypeMix1to1A,    connectorDirIn,  connectorTypeControl, {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},  // 184 In
+    {moduleTypeMix1to1A,    connectorDirIn,  connectorTypeControl, {{  3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Chain",         labelLocRight},  // 184 Chain
+    {moduleTypeMix1to1A,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocRight},  // 184 Out
+    // 185 Mix1-1S
+    {moduleTypeMix1to1S,    connectorDirIn,  connectorTypeControl, {{-12,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "L",             labelLocLeft },  // 185 InL
+    {moduleTypeMix1to1S,    connectorDirIn,  connectorTypeControl, {{ -3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "R",             labelLocLeft },  // 185 InR
+    {moduleTypeMix1to1S,    connectorDirIn,  connectorTypeControl, {{  3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "L",             labelLocRight},  // 185 Chain L
+    {moduleTypeMix1to1S,    connectorDirIn,  connectorTypeControl, {{ 12,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "R Chain",       labelLocRight},  // 185 Chain R
+    {moduleTypeMix1to1S,    connectorDirOut, connectorTypeControl, {{-12,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "L",             labelLocLeft },  // 185 Out L
+    {moduleTypeMix1to1S,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "R",             labelLocLeft },  // 185 Out R
+    // 186 Sw1-2M
+    {moduleTypeSw1to2M,     connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },  // 186 In
+    {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },  // 186 Out1
+    {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },  // 186 Out2
+    {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },  // 186 Ctrl
+    // 187 Sw2-1M
+    {moduleTypeSw2to1M,     connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },  // 187 InOff
+    {moduleTypeSw2to1M,     connectorDirIn,  connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },  // 187 InOn
+    {moduleTypeSw2to1M,     connectorDirOut, connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },  // 187 Out
+    {moduleTypeSw2to1M,     connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },  // 187 Ctrl
+    // 188 ConstSwM
+    {moduleTypeConstSwM,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocLeft },  // 188 Out
+    // 189 NoiseGate
+    {moduleTypeNoiseGate,   connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },  // 189 In
+    {moduleTypeNoiseGate,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 189 In
+    {moduleTypeNoiseGate,   connectorDirOut, connectorTypeControl, {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Env",           labelLocLeft },  // 189 Env
+    // 190 LfoB
+    {moduleTypeLfoB,        connectorDirIn,  connectorTypeControl, {{ 15,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rate",          labelLocUp   },  // 190 Rate
+    {moduleTypeLfoB,        connectorDirIn,  connectorTypeControl, {{ 22,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },  // 190 Ratevar
+    {moduleTypeLfoB,        connectorDirIn,  connectorTypeControl, {{  3,  -17}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocUp   },  // 190 Reset
+    {moduleTypeLfoB,        connectorDirIn,  connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rate",          labelLocUp   },  // 190 PhaseM
+    {moduleTypeLfoB,        connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 190 Out
+    {moduleTypeLfoB,        connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },  // 190 Sync
+    // 191 Unknown
+    // 192 Phaser
+    {moduleTypePhaser,      connectorDirIn,  connectorTypeAudio,   {{-18,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 192 In
+    {moduleTypePhaser,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 192 Out
+    // 193 Mix4-1A
+    {moduleTypeMix4to1A,    connectorDirIn,  connectorTypeControl, {{ 25,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },    // 193 In1
+    {moduleTypeMix4to1A,    connectorDirIn,  connectorTypeControl, {{ 40,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },    // 193 In2
+    {moduleTypeMix4to1A,    connectorDirIn,  connectorTypeControl, {{ 55,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "3",             labelLocUp   },    // 193 In3
+    {moduleTypeMix4to1A,    connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "4",             labelLocUp   },    // 193 In4
+    {moduleTypeMix4to1A,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 193 Out
+    // 194 Mix2-1A
+    {moduleTypeMix2to1A,    connectorDirIn,  connectorTypeControl, {{ 32,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocUp   },    // 194 In1
+    {moduleTypeMix2to1A,    connectorDirIn,  connectorTypeControl, {{ 67,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocUp   },    // 194 In2
+    {moduleTypeMix2to1A,    connectorDirIn,  connectorTypeControl, {{  3,    6}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Chain",         labelLocRight},    // 185 Chain L
+    {moduleTypeMix2to1A,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 194 Out
+    // 195 ModAmt
+    {moduleTypeModAmt,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 194 In1
+    {moduleTypeModAmt,      connectorDirIn,  connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},    // 194 In2
+    {moduleTypeModAmt,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 194 Out
+
+    // 196 OscPerc
+    {moduleTypeOscPerc,     connectorDirIn,  connectorTypeControl, {{  3,  -13}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},      // 196 Pitch
+    {moduleTypeOscPerc,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight},      // 196  PitchVar
+    {moduleTypeOscPerc,     connectorDirIn,  connectorTypeAudio,   {{  3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Trig",          labelLocRight},      // 196 Trig
+    {moduleTypeOscPerc,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },      // 196 Out
+
+    // 197 Status
+    {moduleTypeStatus,      connectorDirOut, connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Patch Active",  labelLocUp   }, // 197 Patch Active
+    {moduleTypeStatus,      connectorDirOut, connectorTypeLogic,   {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Var. Active",   labelLocUp   }, // 197 Var Active
+    {moduleTypeStatus,      connectorDirOut, connectorTypeControl, {{ 71,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Voice No.",     labelLocUp   }, // 197 Voice No.
+    // 198 PitchTrack
+    {moduleTypePitchTrack,  connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Input",         labelLocRight}, // 198 Input
+    {moduleTypePitchTrack,  connectorDirOut, connectorTypeLogic,   {{-30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Period",        labelLocUp   }, // 198 Period
+    {moduleTypePitchTrack,  connectorDirOut, connectorTypeControl, {{-19,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Pitch",         labelLocUp   }, // 198 Pitch (the manual's order, reference §70.7)
+    {moduleTypePitchTrack,  connectorDirOut, connectorTypeLogic,   {{ -8,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Gate",          labelLocUp   }, // 198 Gate
+    // 199 MonoKey
+    {moduleTypeMonoKey,     connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Pitch",         labelLocUp   }, // 199 Pitch
+    {moduleTypeMonoKey,     connectorDirOut, connectorTypeLogic,   {{ 20,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Gate",          labelLocUp   }, // 198 Gate
+    {moduleTypeMonoKey,     connectorDirOut, connectorTypeControl, {{ 37,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Vel",           labelLocUp   }, // 199 Vel
+    // 200 RandomA
+    {moduleTypeRandomA,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   }, // 200 Pitch
+    {moduleTypeRandomA,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 200 Vel
+    // 201 Red2Blue -- ???
+    {moduleTypeRed2Blue,    connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   }, // 201 In
+    {moduleTypeRed2Blue,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 201 Out
+    // 202 RandomB
+    {moduleTypeRandomB,     connectorDirIn,  connectorTypeControl, {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 200 Rate
+    {moduleTypeRandomB,     connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocRight}, // 202 RateVar
+    {moduleTypeRandomB,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 202 Out
+    // 203 Blue2Red -- ???
+    {moduleTypeBlue2Red,    connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   }, // 203 In
+    {moduleTypeBlue2Red,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 203 Out
+    // 204 RndClkA
+    {moduleTypeRndClkA,     connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight}, // 204 Clk
+    {moduleTypeRndClkA,     connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocRight}, // 204 Rst
+    {moduleTypeRndClkA,     connectorDirIn,  connectorTypeControl, {{ 68,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Seed",          labelLocUp   }, // 204 Seed
+    {moduleTypeRndClkA,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 204 Out
+    // 205 RndTrig
+    {moduleTypeRndTrig,     connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight}, // 205 Clk
+    {moduleTypeRndTrig,     connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocRight}, // 205 Rst
+    {moduleTypeRndTrig,     connectorDirIn,  connectorTypeControl, {{ 76,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Seed",          labelLocUp   }, // 205 Seed
+    {moduleTypeRndTrig,     connectorDirIn,  connectorTypeControl, {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 205 Prob
+    {moduleTypeRndTrig,     connectorDirOut, connectorTypeLogic,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 205 Out
+    // 206 RndClkB
+    {moduleTypeRndClkB,     connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight}, // 206 Clk
+    {moduleTypeRndClkB,     connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocRight}, // 206 Rst
+    {moduleTypeRndClkB,     connectorDirIn,  connectorTypeControl, {{ 76,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Seed",          labelLocUp   }, // 206 Seed
+    {moduleTypeRndClkB,     connectorDirIn,  connectorTypeControl, {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight}, // 206 Step input
+    {moduleTypeRndClkB,     connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   }, // 206 Out
+    // 207 Unknown
+    // 208 RndPattern
+    {moduleTypeRndPattern,  connectorDirIn,  connectorTypeLogic,   {{  3,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocRight},  // 208 Clk
+    {moduleTypeRndPattern,  connectorDirIn,  connectorTypeLogic,   {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocRight},  // 208 Rst
+    {moduleTypeRndPattern,  connectorDirIn,  connectorTypeControl, {{ 53,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},  // 208 A
+    {moduleTypeRndPattern,  connectorDirIn,  connectorTypeControl, {{ 69,  -18}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},  // 208 B
+    {moduleTypeRndPattern,  connectorDirIn,  connectorTypeControl, {{ 53,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "-",             labelLocRight},  // 208 Step input
+    {moduleTypeRndPattern,  connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },  // 208 Out
+};
+
+// moduleType, paramType, offsetX, offsetY, label, range, defaultValue, string map
+const tModeLocation      modeLocationList[] = {
+    {moduleTypeOscShpB,    paramTypeMenu,   {{ 38, 10}, { 7, 7}}, anchorTopLeft,     "Wave",  8, 0, oscShpBStrMap       }, // 8 OscShpB
+    {moduleTypeOscC,       paramTypeMenu,   {{-16,  0}, { 7, 7}}, anchorMiddleRight, "Wave",  6, 0, shapeOscATypeStrMap }, // 9 Wave
+    {moduleTypeReverb,     paramTypeMenu,   {{  3, 17}, {14, 7}}, anchorTopLeft,     "Type",  4, 0, reverbTypeStrMap    }, // 12 Reverb
+    {moduleTypeLfoC,       paramTypeMenu,   {{ 64,  0}, { 7, 7}}, anchorBottomLeft,  "Wave",  6, 0, lfoWaveStrMap       }, // 24 LfoC
+    {moduleTypeDriver,     paramTypeMenu,   {{ 35,  0}, { 7, 7}}, anchorBottomLeft,  "Type",  4, 0, driverTypeStrMap    }, // 35 Type
+    {moduleTypePulse,      paramTypeMenu,   {{-13,  0}, { 7, 7}}, anchorBottomRight, "Mode",  2, 0, pulseModeStrMap     }, // 38 Mode
+    {moduleTypeDelay,      paramTypeMenu,   {{-13,  0}, { 7, 7}}, anchorBottomRight, "Mode",  3, 0, logicDelayModeStrMap}, // 42 Mode
+    {moduleTypeGate,       paramTypeMenu,   {{ 25,  2}, { 7, 7}}, anchorMiddleLeft,  "G1",    6, 0, gateTypeStrMap      }, // 64 Gate 1 Type
+    {moduleTypeGate,       paramTypeMenu,   {{ 75,  2}, { 7, 7}}, anchorMiddleLeft,  "G2",    6, 0, gateTypeStrMap      }, // 64 Gate 2 Type
+    {moduleTypeClkDiv,     paramTypeMenu,   {{ 74,  0}, { 7, 7}}, anchorBottomLeft,  "Mode",  2, 0, divModeStrMap       }, // 69 DivMode
+    {moduleTypeFltLP,      paramTypeMenu,   {{ 67,  0}, { 7, 7}}, anchorBottomLeft,  "Slope", 6, 0, fltLPSlopeStrMap    }, // 87 FltLP
+    {moduleTypeFlipFlop,   paramTypeMenu,   {{ 45,  0}, { 7, 7}}, anchorBottomLeft,  "Type",  2, 0, flipFlopStrMap      }, // 91 Selector
+    {moduleTypeOscD,       paramTypeMenu,   {{-18,  0}, { 7, 7}}, anchorMiddleRight, "Wave",  6, 0, shapeOscATypeStrMap }, // 96 Wave
+    {moduleTypeFltHP,      paramTypeMenu,   {{ 67,  0}, { 7, 7}}, anchorBottomLeft,  "Slope", 6, 0, fltLPSlopeStrMap    }, // 134 FltHP
+    {moduleTypeDlySingleA, paramTypeMenu,   {{  3,  0}, { 7, 7}}, anchorBottomLeft,  "Range", 7, 0, delayRangeStrMap    }, // 172 Delay Range
+    {moduleTypeDlySingleB, paramTypeMenu,   {{  3,  0}, { 7, 7}}, anchorBottomLeft,  "Slope", 7, 0, delayRangeStrMap    }, // 173 Delay Range
+    {moduleTypeDelayDual,  paramTypeMenu,   {{  3,  9}, { 7, 7}}, anchorTopLeft,     "Range", 7, 0, delayRangeStrMap    }, // 174 Delay Range
+    {moduleTypeDelayQuad,  paramTypeMenu,   {{  3, 10}, { 7, 7}}, anchorTopLeft,     "Range", 7, 0, delayRangeStrMap    }, // 175 Delay Range
+    {moduleTypeDelayA,     paramTypeMenu,   {{  3,  9}, { 7, 7}}, anchorTopLeft,     "Range", 4, 0, delayABRangeStrMap  }, // 176 Delay Range
+    {moduleTypeDelayB,     paramTypeMenu,   {{  3, 25}, { 7, 7}}, anchorTopLeft,     "Range", 4, 0, delayABRangeStrMap  }, // 177 Delay Range
+    {moduleTypeDlyStereo,  paramTypeMenu,   {{  3, 30}, { 7, 7}}, anchorTopLeft,     "Range", 3, 0, dlyStereoRangeStrMap}, // 182 Delay Range
+    {moduleTypeDlyEight,   paramTypeMenu,   {{  3,  9}, { 7, 7}}, anchorTopLeft,     "Range", 7, 0, delayRangeStrMap    }, // 181 Delay Range
+    {moduleTypeOscPM,      paramTypeMenu,   {{ 51, 10}, { 7, 7}}, anchorTopLeft,     "Wave",  2, 0, oscPmWaveStrMap     }, // 183 Wave
+    {moduleTypeRndClkB,    paramTypeMenu,   {{  3,  8}, { 7, 7}}, anchorTopLeft,     "Char",  2, 0, rndClkBCharStrMap   }, // 206 Character
+    {moduleTypeRndPattern, paramTypeToggle, {{  3,  8}, { 7, 7}}, anchorTopLeft,     "Wave",  2, 0, rndPatternWaveStrMap}, // 208 Wave
+};
+
+//{moduleTypeReverb,     paramTypeToggle, {{  3,    0}, {14, 7}}, anchorBottomLeft,  "Type",      4, 0, reverbTypeStrMap,    NULL          },
+//{moduleTypeOscC,       paramTypeToggle, {{-30,   5}, {7,  7}}, anchorTopRight,    NULL,        5,  0, shapeTypeStrMap,    NULL          },     // 9 Waveform
+//{moduleTypeLfoC,    paramTypeToggle, {{64, -3}, {7, 7}}, anchorBottomLeft,  NULL,  6, 0,  lfoWaveStrMap,  NULL},  // 24 Wave
+//    {moduleTypePulse,    paramTypeToggle, {{ -13, -3}, {7,  7}}, anchorBottomRight,  NULL,       2,  0, pulseModeStrMap, NULL},  // 38 Range
+//    {moduleTypeDelay,    paramTypeToggle, {{ -13, -3}, {7,  7}}, anchorBottomRight,  NULL,       2,  0, pulseModeStrMap, NULL},  // 42 Mode
+// {moduleTypeGate,   paramTypeToggle, {{ 40, -3}, {7,  7}}, anchorBottomLeft,  NULL,        6,  0, gateTypeStrMap,   NULL          }, // 64 Gate 1 Type
+// {moduleTypeGate,   paramTypeToggle, {{ 70, -3}, {7,  7}}, anchorBottomLeft,  NULL,        6,  0, gateTypeStrMap,   NULL          }, // 64 Gate 2 Type
+//    {moduleTypeClkDiv,  paramTypeToggle,   {{ 80,  -3}, {7, 7}}, anchorBottomLeft,  NULL,    2, 0, divModeStrMap,               NULL          },  // 69 DivMode
+// {moduleTypeFltLP, paramTypeToggle, {{ 67,   0}, {7,  7}}, anchorBottomLeft,  "Slope",       6,  2, fltLPSlopeStrMap,   NULL          },
+// {moduleTypeFlipFlop,   paramTypeToggle, {{ 45, -3}, {7,  7}}, anchorBottomLeft,  NULL,        2,  0, flipFlopStrMap,   NULL          }, // 91 Selector
+//    {moduleTypeOscD,       paramTypeToggle, {{-20,   5}, {7,  7}}, anchorTopRight,    NULL,        5,  0, shapeTypeStrMap,    NULL          },     // 96 Waveform
+
+
+const tVolumeLocation    volumeLocationList[] = {
+    {moduleTypeMix4to1C,  volumeTypeMono,      {{ -4,  0}, { 3, 24}}, anchorMiddleRight},
+    {moduleTypeCompress,  volumeTypeCompress,  {{-11,  0}, { 3, 30}}, anchorMiddleRight},
+    {moduleType2toOut,    volumeTypeStereo,    {{-25,  0}, { 3, 14}}, anchorMiddleRight},
+    {moduleType4toOut,    volumeTypeQuad,      {{-50,  0}, { 3, 14}}, anchorMiddleRight},
+    {moduleTypeFxtoIn,    volumeTypeStereo,    {{-25,  0}, { 3, 14}}, anchorMiddleRight},
+    {moduleTypeMix4to1S,  volumeTypeStereo,    {{ -9,  0}, { 3, 24}}, anchorMiddleRight},
+    {moduleTypeMix4to1B,  volumeTypeMono,      {{-11,  0}, { 3, 14}}, anchorMiddleRight},  // moved left + extended down, symmetric top/bottom gap
+    {moduleTypeMix8to1A,  volumeTypeMono,      {{-10,  6}, { 3, 10}}, anchorTopRight   },
+    {moduleTypeMix8to1B,  volumeTypeMono,      {{ -4, 13}, { 3, 24}}, anchorTopRight   },  // far-right column, below Chain / above Out
+    {moduleTypeMixStereo, volumeTypeStereo,    {{-17,  0}, { 3, 15}}, anchorMiddleRight},
+    {moduleTypeMixFader,  volumeTypeMono,      {{ -4, 16}, { 3, 80}}, anchorTopRight   },
+    {moduleTypeEq2Band,   volumeTypeMono,      {{-11,  6}, { 3, 28}}, anchorTopRight   },
+    {moduleTypeEq3band,   volumeTypeMono,      {{-11,  6}, { 3, 40}}, anchorTopRight   },
+    {moduleTypeEqPeak,    volumeTypeMono,      {{-11, 20}, { 3, 22}}, anchorTopRight   },
+    {moduleTypeFltVoice,  volumeTypeMono,      {{-10, 20}, { 3, 22}}, anchorTopRight   },
+    {moduleTypeFltPhase,  volumeTypeMono,      {{-11, 22}, { 3, 18}}, anchorTopRight   },
+    {moduleTypeFltComb,   volumeTypeMono,      {{-11,  6}, { 3, 20}}, anchorTopRight   },  // raised to top-right so it clears the bottom-row Level dial
+    {moduleType2toIn,     volumeTypeStereo,    {{-25,  0}, { 3, 14}}, anchorMiddleRight},
+    {moduleType4toIn,     volumeTypeQuad,      {{-50,  0}, { 3, 14}}, anchorMiddleRight},
+    {moduleTypeSeqEvent,  volumeTypeSequencer, {{ 20, 24}, {64,  5}}, anchorTopLeft    },
+    {moduleTypeSeqNote,   volumeTypeSequencer, {{ 20, 17}, {64,  5}}, anchorTopLeft    },
+    {moduleTypeSeqVal,    volumeTypeSequencer, {{ 20, 17}, {64,  5}}, anchorTopLeft    },
+    {moduleTypeSeqLev,    volumeTypeSequencer, {{ 20, 17}, {64,  5}}, anchorTopLeft    },
+    {moduleTypeSeqCtr,    volumeTypeSequencer, {{ 20, 17}, {64,  5}}, anchorTopLeft    }, };
+
+// volumeType, style, segments (LEDs or level-bar steps), space (LED gap, or gap between repeated
+// per-channel meters), on colour, off colour
+const tVolumeMeterConfig volumeMeterConfigList[] = {
+    {volumeTypeCompress,  volumeMeterStyleMaskLeds,  10, 2.0, RGB_GREEN_7, RGB_GREEN_3},
+    {volumeTypeMono,      volumeMeterStyleLevelBar,  12, 0.0, RGB_BLACK,   RGB_BLACK  },
+    {volumeTypeStereo,    volumeMeterStyleLevelBar,  12, 2.0, RGB_BLACK,   RGB_BLACK  },
+    {volumeTypeQuad,      volumeMeterStyleLevelBar,  12, 2.0, RGB_BLACK,   RGB_BLACK  },
+    {volumeTypeSequencer, volumeMeterStyleSingleLed, 16, 2.0, RGB_GREEN_7, RGB_GREEN_3}, };
+
+// Read-only readouts. Every Switch module with a Ctrl output has one, showing the value that output
+// is sending — see displayTypeSwitchCtrl in types.h for the rule and where it comes from. The Ctrl
+// connector sits at {3, -3} on all ten faces, so the box sits in the same place on all ten too,
+// clear of the connector's own "Ctrl"/"Control" label.
+const tDisplayLocation   displayLocationList[]   = {
+    {moduleTypeSw1to2,    displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  90 Sw1-2
+    {moduleTypeSw2to1,    displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, // 100 Sw2-1
+    {moduleTypeSw1to4,    displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  88 Sw1-4
+    {moduleTypeSw4to1,    displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  79 Sw4-1
+    {moduleTypeSw1to8,    displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  78 Sw1-8
+    {moduleTypeSw8to1,    displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  15 Sw8-1
+    {moduleTypeSwOnOffM,  displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  36 SwOnOffM
+    {moduleTypeSwOnOffT,  displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, //  76 SwOnOffT
+    {moduleTypeSw1to2M,   displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, // 186 Sw1-2M
+    {moduleTypeSw2to1M,   displayTypeSwitchCtrl, 0, {{ 10, 0}, {10, 7}}, anchorBottomLeft, NULL,     labelLocRight}, // 187 Sw2-1M
+    {moduleTypeDrumSynth, displayTypeDrumPreset, 0, {{-10, 5}, { 7, 7}}, anchorTopRight,   "Preset", labelLocUp   }, //  58 DrumSynth
+};
+
+// Section headings. See tLabelLocation in types.h for why these are not paramLocationList rows.
+// Placed by the rules in Docs/module-layout-rules.md.
+const tLabelLocation     labelLocationList[]     = {
+    {moduleTypeOperator,  {{12,  38}, {BLANK_SIZE, 7}}, anchorTopLeft,    "Envelope"    },
+    {moduleTypeOperator,  {{12,  87}, {BLANK_SIZE, 7}}, anchorTopLeft,    "KB Lev Scale"},
+    // The four bands of the Drum Synth, one heading each, which is what lets the dials drop their
+    // M/S/NF/B prefixes. Bottom-anchored like the dials they head, 17 above each band's dial row -
+    // one text line clear of that row's own label.
+    {moduleTypeDrumSynth, {{15, -70}, {BLANK_SIZE, 7}}, anchorBottomLeft, "Master"      },
+    {moduleTypeDrumSynth, {{15, -51}, {BLANK_SIZE, 7}}, anchorBottomLeft, "Slave"       },
+    {moduleTypeDrumSynth, {{15, -32}, {BLANK_SIZE, 7}}, anchorBottomLeft, "Noise Filter"},
+    {moduleTypeDrumSynth, {{15, -13}, {BLANK_SIZE, 7}}, anchorBottomLeft, "Bend"        }, };
+
+// Face buttons that are not parameters (moduleGraphics.c notes §93a). The Sampler's step through a bank's
+// presets, under the preset's name: 18 px wide with the button's padding, 4 px apart.
+const tButtonLocation    buttonLocationList[]    = {
+    {moduleTypeSampler, buttonTypeSamplerPresetPrev, {{ 1.5, 10.5}, {4.0, 3.4}}, anchorTopLeft, "<"},
+    {moduleTypeSampler, buttonTypeSamplerPresetNext, {{7.75, 10.5}, {4.0, 3.4}}, anchorTopLeft, ">"}, };
+
+const tLedLocation       ledLocationList[]       = {
+    {moduleTypeInvert,     ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeInvert,     ledTypeYes,      {{53, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvADSR,    ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeGate,       ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeGate,       ledTypeYes,      {{53, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeFlipFlop,   ledTypeMultiBit, {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeFlipFlop,   ledTypeMultiBit, {{53, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeValSw1to2,  ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeValSw2to1,  ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeLfoC,       ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeLfoA,       ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeLfoShpA,    ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeLfoB,       ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeModADSR,    ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeModAHD,     ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvAHD,     ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvH,       ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvD,       ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvADR,     ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvMulti,   ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeEnvADDSR,   ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypePulse,      ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeDelay,      ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeDrumSynth,  ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeWindSw,     ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeNoteDet,    ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeNoiseGate,  ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypePitchTrack, ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeRandomA,    ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeRandomB,    ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeOperator,   ledTypeYes,      {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    // Mux1to8 (ID 21) — 8 LEDs across the upper-right strip
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{23, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{30, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{37, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{44, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{51, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{58, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{65, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux1to8,    ledTypeMultiBit, {{72, 7}, {3, 3}}, anchorTopLeft},
+    // Mux8to1X (ID 60) — 8 LEDs spread across the middle
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{23, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{30, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{37, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{44, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{51, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{58, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{65, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1X,   ledTypeMultiBit, {{72, 7}, {3, 3}}, anchorTopLeft},
+    // Mux8to1 (ID 124) — 8 LEDs across the upper-right strip
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{23, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{30, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{37, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{44, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{51, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{58, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{65, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeMux8to1,    ledTypeMultiBit, {{72, 7}, {3, 3}}, anchorTopLeft},
+    // BinCounter (ID 130) — 8 LEDs across the upper-right strip
+    {moduleTypeBinCounter, ledTypeMultiBit, {{23, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{30, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{37, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{44, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{51, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{58, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{65, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeBinCounter, ledTypeMultiBit, {{72, 7}, {3, 3}}, anchorTopLeft},
+    // ADConv (ID 131) — 8 LEDs across the upper-right strip
+    {moduleTypeADConv,     ledTypeMultiBit, {{23, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{30, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{37, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{44, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{51, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{58, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{65, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeADConv,     ledTypeMultiBit, {{72, 7}, {3, 3}}, anchorTopLeft},
+    // 8Counter (ID 86) — 8 LEDs across the upper-right strip
+    {moduleType8Counter,   ledTypeMultiBit, {{23, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{30, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{37, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{44, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{51, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{58, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{65, 7}, {3, 3}}, anchorTopLeft},
+    {moduleType8Counter,   ledTypeMultiBit, {{72, 7}, {3, 3}}, anchorTopLeft},
+
+    {moduleTypeSeqEvent,   ledTypePark,     {{ 3, 7}, {3, 3}}, anchorTopLeft},  // Park LED — display-only, not in LED stream
+    {moduleTypeSeqNote,    ledTypePark,     {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeSeqVal,     ledTypePark,     {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeSeqLev,     ledTypePark,     {{ 3, 7}, {3, 3}}, anchorTopLeft},
+    {moduleTypeSeqCtr,     ledTypePark,     {{ 3, 7}, {3, 3}}, anchorTopLeft}};
+
+// moduleType, rectangle, anchor - placement only; each module's own graph function
+// (moduleGraphics.cpp) still owns its drawing/curve logic.
+const tGraphLocation     graphLocationList[] = {
+    {moduleTypeOscShpB,    {{   -3,   3}, {  30, 10}}, anchorTopRight  },
+    {moduleTypeOscShpA,    {{   -3,   3}, {  30, 10}}, anchorTopRight  },
+    {moduleTypeLfoShpA,    {{   -3,   3}, {  30, 10}}, anchorTopRight  },
+    {moduleTypeLfoB,       {{   -3,   3}, {  30, 10}}, anchorTopRight  },
+    // OscB carries one too (CT, 2026-08-24): its face has the room, and its Shape genuinely changes
+    // two of its five waves — Sqr's pulse width and DualSaw's detune — which is what a graph is for.
+    // The other three are inert under Shape, so for those it simply draws the wave larger.
+    {moduleTypeOscB,       {{   -3,   3}, {  30, 10}}, anchorTopRight  },
+    // OscA gets one as well (CT). It is the SHORTEST face of the group at three rows against
+    // OscShpB's four, so its Bypass moved from middle-right to the bottom corner to clear the box.
+    // OscA has no Shape dial, so this graph is static per waveform — a legible enlargement of the
+    // picker icon rather than a live display, which is the honest description of what it adds.
+    {moduleTypeOscA,       {{   -3,   3}, {  30, 10}}, anchorTopRight  },
+    {moduleTypeEnvADSR,    {{   20,   8}, {  60, 16}}, anchorTopLeft   },
+    {moduleTypeFltClassic, {{    0,  10}, {  30, 10}}, anchorTopMiddle },
+    // Of the seven filter modules, FltVoice and FltMulti draw no graph (CT); FltStatic's is below.
+    //
+    // A 20.4% box inset 8.2% from the right on the four- and five-row filters, and a 12.5% box
+    // inset 21.6% on the two-row FltLP and FltHP. A response curve needs to be wider than it is
+    // tall to be read at all, which is why FltClassic's existing box was hand-set that way too.
+    // The two-row pair are SHRUNK further still, to 6% tall at y=1: any taller
+    // the Slope selector underneath ran into the bottom of the box (CT: "You could just shrink the
+    // graphics for some modules"). Two rows leave 18.1% of body to share between the two.
+    {moduleTypeFltNord,    {{ -8.2,   8}, {20.4, 12}}, anchorTopRight  },
+    {moduleTypeFltLP,      {{-21.6,   6}, {12.5,  6}}, anchorTopRight  },
+    {moduleTypeFltHP,      {{-21.6,   6}, {12.5,  6}}, anchorTopRight  },
+    // FltStatic is a filter with a response worth showing and
+    // its three-row face has the room, so it gets one anyway (CT: "May as well have all of the
+    // filters showing the graph though, if they fit"). Placed like FltNord's, sat a couple of
+    // percent higher on y to clear its own controls (CT).
+    {moduleTypeFltStatic,  {{ -8.2,   6}, {20.4, 12}}, anchorTopRight  },
+    // The shapers' and EQs' boxes, placed to clear our faces - see
+    // moduleGraphics.c's notes §78 and §79.
+    {moduleTypeClip,       {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeOverdrive,  {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeSaturate,   {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeShpExp,     {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeWaveWrap,   {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeEqPeak,     {{ -8.2,   3}, {20.4, 14}}, anchorTopRight  },
+    {moduleTypeEq2Band,    {{  -15,   3}, {20.4, 14}}, anchorTopRight  },
+    {moduleTypeEq3band,    {{  -15,   3}, {20.4, 16}}, anchorTopRight  },
+    {moduleTypeFltComb,    {{  -16,   3}, {20.4, 12}}, anchorTopRight  },
+    {moduleTypeFltPhase,   {{  -16,   3}, {20.4, 14}}, anchorTopRight  },
+    {moduleTypeVocoder,    {{   10,   6}, {  80, 48}}, anchorTopLeft   },
+    // The Drum Synth's, in the space the 2026-09-18 face re-layout kept clear under the Preset
+    // display (CT: "hopefully still room on the right (under preset button)"). It shows the two
+    // parameters that say what a drum sounds like, see moduleGraphics.c notes §91. Starts at 70% so the Noise
+    // Filter row's last dial, which ends at 67%, has clearance.
+    {moduleTypeDrumSynth,  {{   -4,  16}, {  26, 14}}, anchorTopRight  },
+    // OscNoise's band, in the strip its face leaves clear above the controls. It depends on the
+    // single parameter Width.
+    {moduleTypeOscNoise,   {{   -3,   3}, {  20,  9}}, anchorTopRight  },
+    // The envelopes follow EnvADSR's box, as near as each face allows today - moduleGraphics.c's notes §83.
+    {moduleTypeEnvADR,     {{   20,   6}, {  44, 10}}, anchorTopLeft   },
+    {moduleTypeEnvAHD,     {{   20,   8}, {  60, 16}}, anchorTopLeft   },
+    {moduleTypeEnvD,       {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeEnvH,       {{   -4, 1.5}, {13.3,  9}}, anchorTopRight  },
+    {moduleTypeModADSR,    {{   20,   6}, {  60, 18}}, anchorTopLeft   },
+    {moduleTypeModAHD,     {{   20,   6}, {  60, 18}}, anchorTopLeft   },
+    {moduleTypeEnvADDSR,   {{   20,   6}, {  58, 13}}, anchorTopLeft   },
+    {moduleTypeEnvMulti,   {{   20,  20}, {  54, 16}}, anchorTopLeft   },
+    // KeyQuant's twelve note buttons drawn as one octave of keyboard - moduleGraphics.c's notes §84.
+    {moduleTypeKeyQuant,   {{   52,   2}, {  26, 12}}, anchorMiddleLeft},
+    // The selected DX7 algorithm as the DX7's own chart - moduleGraphics.c's notes §85.
+    {moduleTypeDXRouter,   {{    0,   7}, {  76, 36}}, anchorTopMiddle },
+    // Operator has two, the envelope FIRST (render_envelope_graph() takes the first) and then its
+    // keyboard level scaling - moduleGraphics.c's notes §86.
+    {moduleTypeOperator,   {{   12,  43}, {  62, 20}}, anchorTopLeft   },
+    {moduleTypeOperator,   {{   12,  92}, {  62, 16}}, anchorTopLeft   },
+    // Compress's static curve, with handles that drag Thr, Ratio and RefLvl - moduleGraphics.c's notes §87.
+    {moduleTypeCompress,   {{   24,   6}, {  54, 34}}, anchorTopLeft   }, };
+
+// The G2's factory drum presets: DrumSynth parameters 0-14 for each name in drumSynthPresetNames, in parameter order.
+const uint8_t            drumSynthPresetValues[][DRUM_SYNTH_PRESET_PARAMS] = {
+    { 42,  15, 46, 50, 120, 102,  57,  32, 39, 49, 1,  68,  61,  79, 115},         // Kick 1
+    { 43,  26, 55, 53, 105,  94,  63,  18, 78, 36, 1,  76,  44,  25, 123},         // Kick 2
+    { 31,  71, 45, 35, 127,   0,  90,  24, 71, 27, 0,  84,  42,  81, 112},         // Kick 3
+    { 32,  61, 58, 42, 113, 110,  90,   0,  0, 27, 1,  37,  55,  90, 127},         // Kick 4
+    { 36,  39, 50, 52, 104,  92, 111,   0, 40, 32, 0,  34,  68,  79,  69},         // Kick 5
+    { 79,  55, 35, 43, 127,  42, 102,  46,  0, 37, 2,   2,   0, 127, 127},         // Snare 1
+    { 68,   3, 48, 42,  84, 127,  55,  66, 63, 40, 2,  63,  37, 126, 122},         // Snare 2
+    { 64,  23, 36, 44, 120,  84,  26,   0, 19, 44, 2,  24,  44, 127,  98},         // Snare 3
+    { 68,  57, 47, 33, 105,   0,  91,  28, 42, 42, 0,  81,  44, 112, 127},         // Snare 4
+    { 85, 107, 32, 23, 127,  94,   0,   0, 63, 45, 2,  39,  55, 102,  98},         // Snare 5
+    { 80,  38, 56, 47, 102,  58,  98,  26, 27, 50, 0,  33,  69, 105,  97},         // Tom1 1
+    { 69,  38, 57, 52, 102,  58,  96,  26, 27, 51, 0,  33,  69, 105,  89},         // Tom1 2
+    { 56,  38, 58, 52, 102,  58,  93,  26, 27, 53, 0,  33,  69, 105,  89},         // Tom1 3
+    { 86,   2, 55, 44,  99,   0,  67,   0, 56, 56, 0,  86,  65,  81, 117},         // Tom2 1
+    { 69,   2, 56, 45,  99,   0,  67,   0, 56, 56, 0,  86,  65,  81, 117},         // Tom2 2
+    { 55,   2, 58, 49,  99,   0,  67,   0, 56, 57, 0,  86,  65,  81, 117},         // Tom2 3
+    { 70,  28, 45, 51, 113,  81, 102,   4, 12, 47, 0,  44,  46,  96,  97},         // Tom3 1
+    { 58,  28, 46, 53, 113,  81, 102,   4, 12, 47, 0,  44,  57,  93,  97},         // Tom3 2
+    { 48,  28, 52, 54, 108,  81, 102,   4, 12, 47, 0,  44,  66,  96, 103},         // Tom3 3
+    {127,  93,  0,  0,   0, 102,  91,   0, 26, 46, 2, 127,   0,   0, 127},         // Cymb 1
+    {127,  93,  0,  0,   0, 102,  91,  50, 16, 55, 2, 127,   0,   0, 127},         // Cymb 2
+    {127, 127, 19,  0,  28,  58, 112,  60,  0, 50, 2,   0,   0,  81, 107},         // Cymb 3
+    {127, 127,  0,  0,   0, 127, 102, 107,  0, 53, 2, 127,   0,   0, 127},         // Cymb 4
+    { 28, 111, 42, 64,  73,  28,  83,  57, 37, 71, 0,  83,  50, 109, 123},         // Cymb 5
+    { 77,  32, 31, 45, 117,  93,  32,  32, 40, 45, 2, 110, 126, 116,  30},         // Perc 1
+    {127,  99, 52, 48,  86,  71, 110, 120,  0, 45, 2,  47,  16,  49, 114},         // Perc 2
+    { 96,  60, 36, 42, 127,  72,  32,  32, 40, 45, 2,  46,  24,  89,  46},         // Perc 3
+    { 87,  60, 36, 42, 127,  72,  32,  32, 40, 45, 2,  46,  24,  89,  46},         // Perc 4
+    {110,  93, 58, 66,  92,  79,  92, 127,  0, 58, 0,   0,   0, 127,  89},         // Perc 5
+    { 30,  45, 62, 46, 127, 127,  55, 127, 28, 41, 2,  81,  55,  80,  97},         // Perc 6
+};
+
+#endif // __MODULE_RESOURCES_H__

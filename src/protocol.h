@@ -1,0 +1,81 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/protocol.h.md - "// notes §k" refers there.
+
+#ifndef __PROTOCOL_H__
+#define __PROTOCOL_H__
+
+#include "sysIncludes.h"
+
+void read_clavia_string(uint8_t * buff, uint32_t * bitPos, char * name, int nameSize);
+void write_clavia_string(uint8_t * buff, uint32_t * bitPos, const char * name);
+void parse_patch_descr(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_patch_descr(uint32_t slot, uint8_t * buff, uint32_t * bitPos);
+void parse_module_list(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void protocol_include_engine_only(bool include);
+void write_module_list(uint32_t slot, tLocation location, uint8_t * buff, uint32_t * bitPos);
+void parse_cable_list(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_cable_list(uint32_t slot, tLocation location, uint8_t * buff, uint32_t * bitPos);
+void parse_param_list(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_param_list(uint32_t slot, tLocation location, uint8_t * buff, uint32_t * bitPos, uint32_t numVariations);
+void parse_morph_params(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_morph_params(uint32_t slot, uint8_t * buff, uint32_t * bitPos, uint32_t numVariations);
+void parse_knobs(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void parse_global_knobs(uint8_t * buff, uint32_t * bitPos);
+void write_knobs(uint32_t slot, uint8_t * buff, uint32_t * bitPos);
+void parse_controllers(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_controllers(uint32_t slot, uint8_t * buff, uint32_t * bitPos);
+void parse_param_names(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_param_names(uint32_t slot, tLocation location, uint8_t * buff, uint32_t * bitPos);
+void parse_module_names(uint32_t slot, uint8_t * buff, uint32_t * subOffset);
+void write_module_names(uint32_t slot, tLocation location, uint8_t * buff, uint32_t * bitPos);
+void write_patch_notes(uint32_t slot, uint8_t * buff, uint32_t * bitPos);
+void write_current_note_2(uint32_t slot, uint8_t * buff, uint32_t * bitPos);
+void write_current_note_2_perf(uint32_t slot, uint8_t * buff, uint32_t * bitPos);
+void write_global_knobs(uint8_t * buff, uint32_t * bitPos);
+void write_slot_separator(uint8_t * buff, uint32_t * bitPos);
+void write_perf_header(uint8_t * buff, uint32_t * bitPos);
+void store_note2(uint32_t slot, uint8_t * buff, uint32_t * bitPos, uint32_t count);
+void store_patch_notes(uint32_t slot, uint8_t * buff, uint32_t * bitPos, uint32_t count);
+int parse_synth_settings(uint8_t * buff, int length);
+int parse_performance_settings(uint8_t * buff, int length);
+void protocol_upgrade_patch(uint32_t slot, uint32_t fileVersion);
+int parse_midi_cc(uint8_t * buff, int length, uint32_t slot);
+
+// Marks the reply to send_get_midi_cc() so its contents are not mistaken for a controller arriving.
+// That reply lists existing assignments; MIDI Learn must ignore it.
+void midi_cc_parse_set_solicited(bool solicited);
+int parse_patch_version(uint8_t * buff, int length);
+int parse_patch(uint32_t slot, uint8_t * buff, int length);
+int parse_perf(uint8_t * buff, int length);
+void send_module_move_msg(tModule * module);
+void send_param_value(uint32_t slot, tModuleKey moduleKey, uint32_t paramIdx, uint32_t variation, uint32_t value);
+
+// notes §1
+void send_param_value_to_links(uint32_t slot, tModuleKey moduleKey, uint32_t paramIdx, uint32_t variation, uint32_t value);
+void send_param_morph(uint32_t slot, tModuleKey moduleKey, uint32_t paramIdx, uint32_t morphGroup, uint32_t variation, uint32_t value);
+void send_mode_value(uint32_t slot, tModuleKey moduleKey, uint32_t modeIdx, uint32_t value);
+void send_mutation_lock_value(uint32_t slot, tModuleKey moduleKey, uint32_t locked);
+void send_custom_data_value(uint32_t slot, tModuleKey moduleKey);
+void update_module_up_rates(void);
+void write_bank_upload_file(const char * filepath, const char * typeLabel, const uint8_t * content, uint32_t contentLen);
+bool read_bank_upload_file(const char * filepath, uint8_t * outContent, uint32_t outContentSize, uint32_t * outContentLen);
+uint8_t peek_patch_category(const uint8_t * content, uint32_t contentLen);
+
+#endif // __PROTOCOL_H__

@@ -1,0 +1,579 @@
+#!/bin/zsh
+
+# Builds a universal (arm64 + x86_64) Release binary of the editor AND both
+# plug-in formats - a VST3 and an Audio Unit - and packages all three as a .dmg
+# ready to attach to a GitHub release.
+#
+# Versions are semver: V<major>.<minor>.<patch>-beta.<n>. The .dmg is normally
+# built BEFORE the tag exists, so name the part you are bumping and the next
+# version is worked out from the newest existing tag:
+#
+#   ./do-release beta      V0.5.0-beta.6 -> V0.5.0-beta.7   (the usual one)
+#   ./do-release patch     V0.5.0-beta.6 -> V0.5.1-beta.1
+#   ./do-release minor     V0.5.0-beta.6 -> V0.6.0-beta.1
+#   ./do-release major     V0.5.0-beta.6 -> V1.0.0-beta.1
+#   ./do-release final     V0.5.0-beta.6 -> V0.5.0           (drops -beta.n)
+#
+#   ./do-release 0.9.0-rc1 an explicit version, used as given
+#   ./do-release           reuse the newest tag as-is (rebuild an old release)
+#   ./do-release beta ~/tmp any of the above, into a different directory
+#
+# Under semver, 0.x.y means the interface is still unstable - so bumping to 1.0.0
+# is a deliberate statement that it has settled, not just "the next big one".
+#
+# This script never creates or pushes the tag - it prints the git command for you
+# to run once you are happy with the .dmg.
+#
+# The .dmg lands on the Desktop by default - outside the repo, so it is easy to
+# drag onto a GitHub release and can never be committed by accident.
+#
+# The app is ad-hoc signed only. There is no paid Apple Developer membership
+# behind this project, so the .dmg is NOT notarized and macOS will refuse to
+# open it until the user clears the quarantine flag. Instructions for that are
+# written into the .dmg as "Read Me First.txt" so they travel with the download.
+
+set -e
+
+ARG_BUMP="$1"
+
+# Resolve a relative output path against the caller's directory, not the
+# project directory we are about to switch to.
+DIST="${2:-$HOME/Desktop}"
+DIST="${DIST:a}"
+
+cd ${0:a:h}
+
+PROJECT="G2Alike.xcodeproj"
+SCHEME="G2Alike"
+APP_NAME="G2Alike.app"
+VOL_NAME="G2Alike"
+
+# OUTSIDE THE PROJECT, AND REMOVED ON THE WAY OUT. Both halves matter, and the
+# reason is an afternoon lost on the sibling project MidiSyncTool.
+#
+# This used to be build/release-tmp and was left behind after every release. The
+# result was a SECOND "G2Alike.vst3", correctly formed and identically named,
+# sitting inside a directory a host may well be scanning - and VST3 SCANNING
+# RECURSES. The host found both, loaded the stale one, and presented an old build
+# with nothing whatever to say so. It reads exactly like a regression in the
+# plug-in and it is not: it is two bundles with one name.
+#
+# A temporary directory cannot be on any host's search path, and it keeps both of
+# the properties this path already had: away from Xcode's own build directory, so
+# a release does not force a full IDE rebuild afterwards, and away from anything
+# an IDE build or a Clean Build Folder might delete underneath it mid-build.
+#
+# The trap removes it whether the release succeeds, fails a check, or is
+# interrupted. STAGE joins the same trap further down rather than installing a
+# second one on EXIT, which would silently replace this one.
+DERIVED=$(mktemp -d)
+STAGE=""
+trap 'rm -rf "$DERIVED" "$STAGE"' EXIT
+
+# --- version -------------------------------------------------------------
+
+# Git tags are the source of truth. MARKETING_VERSION in the project file is not
+# maintained per-release and is deliberately ignored.
+#
+# --sort=-v:refname orders by version rather than alphabetically, so beta.10 is
+# correctly newer than beta.9. --abbrev=0 on describe would give the tag nearest
+# HEAD, which is not the same thing once branches are involved.
+LATEST=$(git tag --list --sort=-v:refname 'V*' 2>/dev/null | head -1)
+NEW_TAG=""
+
+case "$ARG_BUMP" in
+    super-major)
+        # Retired name from the pre-semver scheme. Rejected rather than silently
+        # treated as a literal version string, which would build "G2Alike-super-major.dmg".
+        echo "error: 'super-major' is the old name for what semver calls 'major'." >&2
+        echo "       The names shifted by one when this switched to semver:" >&2
+        echo "           super-major -> major     minor -> patch" >&2
+        echo "           major       -> minor     beta  -> beta" >&2
+        exit 1
+        ;;
+
+    major|minor|patch|beta|final)
+        if [[ -z $LATEST ]]; then
+            echo "error: no existing V* tag to bump from." >&2
+            echo "       give an explicit version instead: ./do-release 0.1.0-beta.1" >&2
+            exit 1
+        fi
+
+        # V<major>.<minor>.<patch>[-beta.<n>]
+        if [[ ! $LATEST =~ '^[Vv]([0-9]+)\.([0-9]+)\.([0-9]+)(-beta\.([0-9]+))?$' ]]; then
+            echo "error: newest tag '$LATEST' is not V<n>.<n>.<n>[-beta.<n>]," >&2
+            echo "       so it cannot be bumped. Give an explicit version instead." >&2
+            exit 1
+        fi
+
+        MAJOR=$match[1]
+        MINOR=$match[2]
+        PATCH=$match[3]
+        BETA=$match[5]
+
+        case "$ARG_BUMP" in
+            major) (( MAJOR++ )); MINOR=0; PATCH=0; BETA=1 ;;
+            minor) (( MINOR++ ));          PATCH=0; BETA=1 ;;
+            patch) (( PATCH++ ));                   BETA=1 ;;
+            beta)
+                if [[ -z $BETA ]]; then
+                    echo "error: '$LATEST' has no -beta.n to bump." >&2
+                    echo "       use 'patch' to start a new beta series." >&2
+                    exit 1
+                fi
+                (( BETA++ ))
+                ;;
+            final) BETA="" ;;
+        esac
+
+        if [[ -n $BETA ]]; then
+            NEW_TAG="V$MAJOR.$MINOR.$PATCH-beta.$BETA"
+        else
+            NEW_TAG="V$MAJOR.$MINOR.$PATCH"
+        fi
+
+        if git rev-parse -q --verify "refs/tags/$NEW_TAG" >/dev/null; then
+            echo "error: tag $NEW_TAG already exists." >&2
+            exit 1
+        fi
+
+        VERSION="$NEW_TAG"
+        echo "==> version $VERSION ($ARG_BUMP bump from $LATEST)"
+        ;;
+
+    "")
+        if [[ -z $LATEST ]]; then
+            echo "error: no git tag found and no version given." >&2
+            echo "       try: ./do-release beta" >&2
+            exit 1
+        fi
+
+        VERSION="$LATEST"
+        echo "==> version $VERSION (reusing newest tag)"
+
+        # Only meaningful when reusing an existing tag. When bumping, HEAD being
+        # ahead of the previous tag is the whole point.
+        if [[ -n $(git rev-list "$LATEST"..HEAD 2>/dev/null) ]]; then
+            echo "    WARNING: HEAD is ahead of $LATEST - this .dmg contains code" >&2
+            echo "             that is not in that tag. Did you mean ./do-release beta?" >&2
+        fi
+        ;;
+
+    *)
+        # An explicit version. Require it to start like one, so a mistyped keyword
+        # ("bета", "pacth") is caught here instead of producing G2Alike-pacth.dmg.
+        if [[ ! $ARG_BUMP =~ '^[Vv]?[0-9]+\.' ]]; then
+            echo "error: '$ARG_BUMP' is not a bump keyword or a version number." >&2
+            echo "       keywords: major minor patch beta final" >&2
+            echo "       or give a version: ./do-release 0.9.0-rc1" >&2
+            exit 1
+        fi
+
+        VERSION="$ARG_BUMP"
+        echo "==> version $VERSION (specified)"
+        ;;
+esac
+
+if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+    echo "    WARNING: working tree has uncommitted changes" >&2
+fi
+
+# Strip a leading V/v for filenames and the volume title: tags read "V0.5.0",
+# but "G2Alike-0.5.0.dmg" is the conventional artifact name.
+VERSION_CLEAN="${VERSION#[Vv]}"
+
+# --- build ---------------------------------------------------------------
+
+echo "==> clean build, universal Release"
+
+# Always build from scratch. A fresh temporary derived-data path per run (see the
+# note at the top) is stronger than "xcodebuild clean": it also discards the
+# module cache and any stale headers, so a release can never pick up something
+# left behind by an earlier Debug build - and it keeps this away from Xcode's own
+# build dir, so running this does not force a full rebuild next time you open the
+# IDE.
+
+xcodebuild \
+    -project $PROJECT \
+    -scheme $SCHEME \
+    -configuration Release \
+    -derivedDataPath $DERIVED \
+    ARCHS="arm64 x86_64" \
+    ONLY_ACTIVE_ARCH=NO \
+    CODE_SIGN_IDENTITY="-" \
+    CODE_SIGN_STYLE=Manual \
+    DEVELOPMENT_TEAM="" \
+    MARKETING_VERSION="$VERSION_CLEAN" \
+    GCC_PREPROCESSOR_DEFINITIONS='$(inherited) SYNTHLIB_VERSION_STRING=\"'"$VERSION"'\"' \
+    clean build
+
+APP="$DERIVED/Build/Products/Release/$APP_NAME"
+
+if [[ ! -d $APP ]]; then
+    echo "error: build succeeded but $APP is missing" >&2
+    exit 1
+fi
+
+# --- verify --------------------------------------------------------------
+
+BINARY="$APP/Contents/MacOS/${APP_NAME:r}"
+ARCHS=$(lipo -archs "$BINARY")
+
+echo "==> built $ARCHS"
+
+if [[ $ARCHS != *arm64* || $ARCHS != *x86_64* ]]; then
+    echo "error: expected a universal binary, got '$ARCHS'" >&2
+    exit 1
+fi
+
+# Confirm the version actually reached the bundle, so the .dmg name and the
+# app's Get Info panel can never disagree.
+PLIST_VERSION=$(defaults read "${APP:a}/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "")
+
+if [[ $PLIST_VERSION != $VERSION_CLEAN ]]; then
+    echo "error: Info.plist says '$PLIST_VERSION', expected '$VERSION_CLEAN'" >&2
+    exit 1
+fi
+
+echo "==> bundle version $PLIST_VERSION"
+
+# --- sign ----------------------------------------------------------------
+
+# Ad-hoc signature. Not a substitute for notarization, but it keeps the bundle
+# internally consistent so it launches once quarantine is cleared.
+echo "==> ad-hoc signing"
+xattr -cr "$APP"
+codesign --force --options runtime --sign - "$APP"
+codesign --verify --strict "$APP"
+
+# --- plug-ins ------------------------------------------------------------
+
+# BOTH PLUG-IN FORMATS SHIP IN THE SAME .dmg AS THE APP - a VST3 and an Audio
+# Unit, built from the identical sources by do-plugin. It is a script rather than
+# an Xcode target because each bundle is a wrapper around one dylib and needs no
+# build system to say so, so it is a separate invocation here.
+#
+# A MISSING SDK ABORTS THE RELEASE rather than quietly producing a .dmg with no
+# plug-ins in it. The .dmg's own Read Me First.txt tells the user they are there,
+# so shipping one without them is worse than a build that stops and says so. Only
+# the VST3 half wants the SDK - `./do-plugin au` needs nothing - but a release
+# ships both or it stops.
+# Set G2_RELEASE_SKIP_PLUGINS=1 for the app on its own, deliberately.
+
+PLUGIN_BUNDLES=()
+PLUGIN_ARCHS=""
+
+if [[ -n ${G2_RELEASE_SKIP_PLUGINS:-} ]]; then
+    echo "==> skipping the plug-ins (G2_RELEASE_SKIP_PLUGINS is set)"
+else
+    echo "==> building the plug-ins"
+
+    # BUILT IN THE RELEASE'S OWN TEMPORARY TREE, not the shared build/ directory. build/ is where
+    # Xcode puts its IDE products too, so an IDE build or a Clean Build Folder running alongside a
+    # release can delete a bundle between do-plugin creating it and linking into it — which is how a
+    # release failed with "lipo: can't create temporary output file ... (No such file or directory)".
+    # Keeping them in $DERIVED also means a release never overwrites the developer's own
+    # build/G2Alike.vst3, which is the copy normally installed for testing - and, since $DERIVED is
+    # now a temporary directory, never leaves a second bundle of that name where a host will find it.
+    #
+    # --no-install for the same reason: do-plugin normally copies each bundle into the machine's
+    # plug-in folders, and a RELEASE must not disturb what the developer has installed.
+    #
+    # G2_VERSION_STRING, because do-plugin's own `git describe` would name the PREVIOUS release: the
+    # tag for this one is not created until after the .dmg has been checked. See do-plugin.
+    if ! G2_VERSION_STRING="$VERSION" G2_PLUGIN_OUT_DIR="$DERIVED/plugins" ./do-plugin --no-install >/dev/null; then
+        echo "error: the plug-in build failed - see ./do-plugin for the reason" >&2
+        echo "       (the VST3 needs the VST3 SDK; set VST3_SDK if it is not in ~/Documents/vst3sdk)" >&2
+        echo "       set G2_RELEASE_SKIP_PLUGINS=1 to release the app without them" >&2
+        exit 1
+    fi
+
+    for bundle in "$DERIVED/plugins/G2Alike.vst3" "$DERIVED/plugins/G2Alike.component"; do
+        if [[ ! -d $bundle ]]; then
+            echo "error: do-plugin reported success but $bundle is not there" >&2
+            exit 1
+        fi
+        # Same universal check the app gets. A single-architecture plug-in would
+        # load for half the users and be invisible to the other half.
+        archs=$(lipo -archs "$bundle/Contents/MacOS/G2Alike" 2>/dev/null || echo "")
+
+        if [[ $archs != *arm64* || $archs != *x86_64* ]]; then
+            echo "error: ${bundle:t} is not universal, got '$archs'" >&2
+            exit 1
+        fi
+        PLUGIN_BUNDLES+=("$bundle")
+        PLUGIN_ARCHS=$archs
+        echo "==> ${bundle:t} built $archs"
+    done
+fi
+
+# --- stage ---------------------------------------------------------------
+
+echo "==> staging disk image contents"
+
+# NO NEW TRAP HERE. The one set beside DERIVED covers both, and a second trap on
+# EXIT would silently replace the first - leaving the build tree behind again,
+# which is the whole thing this is guarding against.
+STAGE=$(mktemp -d)
+
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
+
+# NO SYMLINK TO THE PLUG-IN FOLDERS beside the Applications one, deliberately:
+# there are two of them, both outside the user's reach from a .dmg, and a symlink
+# baked into one would point at the machine that built it. The Read Me First
+# covers them with a Terminal line and a Finder route instead.
+for bundle in "${PLUGIN_BUNDLES[@]}"; do
+    cp -R "$bundle" "$STAGE/"
+done
+
+# THE READ ME MUST NOT PROMISE WHAT IS NOT IN THE .dmg, which is why these two
+# blocks are built rather than written out: with G2_RELEASE_SKIP_PLUGINS set, the
+# plug-in lines have to disappear entirely rather than describe files that are not
+# there. Both are empty in that case and the heredoc below simply loses a section.
+PLUGIN_CONTENTS=""
+PLUGIN_SECTION=""
+PLUGIN_REQUIREMENT=""
+
+if [[ ${#PLUGIN_BUNDLES[@]} -gt 0 ]]; then
+    PLUGIN_CONTENTS=$(cat <<CONTENTS
+
+  G2Alike.vst3      the same instrument in both plug-in formats. It PLAYS
+  G2Alike.component patches and performances rather than editing them, which is
+                     why it has its own name. Install whichever your host uses -
+                     see "THE PLUG-INS" below, and install neither if you only
+                     want the editor.
+CONTENTS
+)
+
+    PLUGIN_SECTION=$(cat <<SECTION
+
+THE PLUG-INS (OPTIONAL)
+
+"G2Alike" is an instrument that PLAYS a patch rather than editing one. There are
+two copies of it here and they are the same plug-in: "G2Alike.vst3" for a VST3
+host and "G2Alike.component" for an Audio Unit host. Install the one your host
+uses; installing both is fine, and hosts that read both formats will then list it
+twice.
+
+It models 169 of the 170 module types the G2 offers on the G2's own
+behaviour, so most patches sound as they do on the hardware. It starts empty: open
+a patch or a performance from its own File menu, and your project then remembers
+it, edits and all. In a performance all four slots play together, each over its
+own keyboard range; otherwise the keyboard plays the selected slot.
+
+Its Settings menu has two options worth knowing:
+
+  G2 Output Filter      the gentle top-end roll-off of the G2's own outputs.
+  Half Rate (economy)   runs the engine at half its internal rate: roughly half
+                        the CPU, for big patches or slower Macs, a little less
+                        exact. Saved with your project.
+
+It has eight stereo outputs for your host to route to separate tracks: Out 1/2 and
+Out 3/4 are the G2's own, and Out 5/6 to Out 15/16 are extra ones only the sound
+engine has - choose them in a 2-Out module's "Out to", for instance to give each
+drum voice its own track. A patch using them saves as .pchx (or .prfx), shows
+"Not G2", and plays those voices on Out 1/2 on a G2 or wherever there are no
+channels for them.
+
+The editor does not need it and it does not need the editor. Skip this section
+entirely if you only want the editor.
+
+For a VST3 host, in Terminal:
+
+    cp -R "/Volumes/${${VOL_NAME}[1,15]} $VERSION_CLEAN/G2Alike.vst3" /Library/Audio/Plug-Ins/VST3/
+    xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/VST3/"G2Alike.vst3"
+
+For an Audio Unit host - Logic, GarageBand, Ableton Live on a Mac:
+
+    cp -R "/Volumes/${${VOL_NAME}[1,15]} $VERSION_CLEAN/G2Alike.component" /Library/Audio/Plug-Ins/Components/
+    xattr -dr com.apple.quarantine /Library/Audio/Plug-Ins/Components/"G2Alike.component"
+
+Or in Finder: choose Go > Go to Folder, enter
+
+    /Library/Audio/Plug-Ins/VST3          (or .../Components for the Audio Unit)
+
+and drag the plug-in from this window into it. It is unsigned in the same way the
+app is, so still run the matching xattr line above afterwards, or your host will
+refuse to load it with no useful explanation.
+
+Those are the system-wide plug-in folders, which is where installers put things
+and where hosts look first. On an administrator account they are writable without
+any special step. If Terminal says "Permission denied", or a folder does not exist
+at all, put sudo in front of both lines and it will ask for your password.
+
+There are per-user folders at ~/Library/Audio/Plug-Ins/VST3 and
+~/Library/Audio/Plug-Ins/Components which also work. Use one or the other - a copy
+in both means your host may list the plug-in twice and load whichever it finds
+first.
+
+Then rescan plug-ins in your host - most do it at startup. It appears as
+"G2Alike" by Chris Purusha, as an instrument. An Audio Unit host may need a
+moment the first time while macOS registers the new component; if it does not
+appear at all, quit the host and open it again.
+SECTION
+)
+
+    PLUGIN_REQUIREMENT="The plug-ins need a host; they do not work on their own."
+fi
+
+cat > "$STAGE/Read Me First.txt" <<EOF
+$VOL_NAME $VERSION_CLEAN
+========================
+
+WHAT IS IN HERE
+
+  $APP_NAME     the editor$PLUGIN_CONTENTS
+
+STEP 1 - INSTALL
+
+Drag "$APP_NAME" onto the Applications folder shown in this window.
+
+Do this before step 2. The command below refers to the app in your
+Applications folder, so it only works once the app is actually there. Do not
+run the app from this disk image.
+
+STEP 2 - UNLOCK
+
+This app is not notarized by Apple, so macOS blocks the first launch and may
+claim the app is damaged. It isn't - macOS says that about any app it cannot
+check with Apple.
+
+Open Terminal (Applications > Utilities > Terminal), then copy and paste this
+line exactly, including the quotes, and press Return:
+
+    xattr -dr com.apple.quarantine "/Applications/$APP_NAME"
+
+It prints nothing if it worked. You can now launch $APP_NAME from your
+Applications folder as normal.
+
+You only need to do this once, and again after each update.
+
+If you installed somewhere other than Applications, change the path in the
+command to match where you put the app.
+
+Alternative, if you would rather not use Terminal: double-click the app in
+Applications, dismiss the warning, then open System Settings > Privacy &
+Security, scroll down, and click "Open Anyway".
+
+ACCESS TO DOCUMENTS, DESKTOP AND DOWNLOADS
+
+The first time the editor's file browser opens one of those folders, macOS asks
+whether $APP_NAME may access it. Click Allow. If you clicked Don't Allow, the
+folder will look empty (the browser says it cannot be read). To switch it back
+on: System Settings > Privacy & Security > Files & Folders > $APP_NAME, and turn
+on the folder. Or, in Terminal, reset the answer so macOS asks again next launch:
+
+    tccutil reset SystemPolicyDocumentsFolder Purusha.G2Alike
+
+(SystemPolicyDesktopFolder and SystemPolicyDownloadsFolder for the other two.)
+An update may ask again, because each release is signed afresh.
+
+PLAYING PATCHES WITHOUT A G2 (EXPERIMENTAL)
+
+The editor can play the patch it shows through your Mac's audio, with or without
+a G2 connected: Experimental > Enable Sound Engine, then choose the Audio Device.
+The same menu has the settings that matter if the sound breaks up:
+
+  Engine Rate       "Half (economy)" roughly halves the CPU, a little less exact.
+  Multi-threading   "On" (the default) spreads the work over two cores.
+  Render Ahead      a few milliseconds of extra safety against dropouts.
+  Buffer Size       larger is safer, smaller plays more promptly.
+
+While the engine is on, the grey lines just below "Disable Sound Engine" show the
+load and a "late" count. If "late" keeps climbing while you play, the Mac cannot
+keep up with that patch:
+try Half, a larger buffer, or Render Ahead. Only the G2's ACTIVE slots play, as on
+the instrument itself.
+
+THE SAMPLER (ENGINE ONLY, EXPERIMENTAL)
+
+The Sampler is a module the G2 itself does not have: it plays sample files, and
+only the sound engine above and the G2Alike plug-in can play it. Add one from the
+module palette's "Special" group, then right-click it > Choose Sample... The file
+browser starts in Nord Sound Manager's sample folder,
+
+    ~/Library/Application Support/Nord Sound Manager/Cache/Data
+
+and remembers wherever you go after that. The file's name shows on the module, in
+red if it cannot be read.
+
+  Files it plays
+    .nsmp, .nsmp4   Nord sample files (Nord Sample Library), mono or stereo,
+                    with their own key maps and loops
+    .exb            E-mu Emulator X banks - keep the bank's sample files in its
+                    folder beside it. Right-click > Preset chooses which of
+                    the bank's presets plays.
+  Not yet           Nord piano files (.npno), WAV and other formats
+
+Its controls: Pitch (with KB to turn keyboard tracking off), Start (where in the
+sample a note begins), Delay (silence before it starts), Atk/Dcy/Sus/Rel, Vel,
+Level, and Speed and Grain - Speed stretches time without changing the pitch: 96
+plays at normal speed, lower is slower, 64 stops, and below that it plays in
+reverse. Grain sets how the stretch sounds, short grains buzzy, long ones smooth.
+Spray scatters the grains for a smeared, cloudy sound, at any speed.
+Start, Delay, Speed, Grain and Spray each have a modulation input.
+
+A patch with a Sampler saves as .pchx, and a performance as .prfx, which keep the
+Sampler and the file it plays. The file is remembered by where it is, so moving
+or renaming it later leaves the Sampler silent until you choose it again. The G2
+never receives a Sampler: while a patch holds one, the top bar shows "Not G2" in
+red, and the G2 plays the rest of the patch without it.
+
+$PLUGIN_SECTION
+
+REQUIREMENTS
+
+macOS 12.0 (Monterey) or later, Apple Silicon or Intel.
+
+NOTE: this is a CHANGE. Releases up to and including V0.5.x ran on macOS 11.5
+(Big Sur); from this one the minimum is 12.0. If you are on Big Sur, stay on
+the earlier release - this one will not launch.
+$PLUGIN_REQUIREMENT
+EOF
+
+# --- package -------------------------------------------------------------
+
+mkdir -p $DIST
+DMG="$DIST/$VOL_NAME-$VERSION_CLEAN.dmg"
+rm -f "$DMG"
+
+echo "==> creating $DMG"
+
+# macOS 27 deprecates `hdiutil create` in favour of `diskutil image create from`. That makes an APFS
+# volume where hdiutil made HFS+ - readable on macOS 10.13 and later, below every minimum here - and the
+# older systems that lack it keep the hdiutil line, whose volume names are capped at 27 characters.
+if diskutil image create from -h >/dev/null 2>&1; then
+    diskutil image create from \
+        --format UDZO \
+        --volumeName "${${VOL_NAME}[1,15]} $VERSION_CLEAN" \
+        "$STAGE" \
+        "$DMG" >/dev/null
+else
+    hdiutil create \
+        -volname "${${VOL_NAME}[1,15]} $VERSION_CLEAN" \
+        -srcfolder "$STAGE" \
+        -fs HFS+ \
+        -format UDZO \
+        -ov \
+        "$DMG" >/dev/null
+fi
+
+echo
+echo "done: $DMG ($(du -h "$DMG" | cut -f1))"
+echo "architectures: $ARCHS"
+
+if [[ ${#PLUGIN_BUNDLES[@]} -gt 0 ]]; then
+    echo "contents: $APP_NAME + ${(j:, :)${(@)PLUGIN_BUNDLES:t}} ($PLUGIN_ARCHS)"
+else
+    echo "contents: $APP_NAME ONLY - no plug-ins (G2_RELEASE_SKIP_PLUGINS was set)"
+fi
+echo "signature: ad-hoc, NOT notarized - users must clear quarantine"
+
+if [[ -n $NEW_TAG ]]; then
+    echo
+    echo "$NEW_TAG does not exist yet. Once you are happy with the .dmg:"
+    echo
+    echo "    git tag -a $NEW_TAG -m \"$NEW_TAG\""
+    echo "    git push origin $NEW_TAG"
+fi

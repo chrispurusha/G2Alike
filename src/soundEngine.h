@@ -1,0 +1,188 @@
+/*
+ * The G2Alike application.
+ *
+ * Copyright (C) 2026 Chris Turner <chris_purusha@icloud.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+// Notes: Docs/code-notes/soundEngine.h.md - "// notes §k" refers there.
+
+#ifndef __SOUND_ENGINE_H__
+#define __SOUND_ENGINE_H__
+
+#include "sysIncludes.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include "types.h"
+
+// How many engines a process can hold. One in the application; in the plug-in each instance takes
+// one, and a performance will one day take four. Unused banks are zero-fill and cost no memory.
+// One engine per slot, four per G2 (sound-engine-notes §204): the application has one G2, a plug-in up to 32
+#ifdef SYNTHLIB_PLUGIN_BUILD
+#define SOUND_ENGINE_MAX_ENGINES    (128)
+#else
+#define SOUND_ENGINE_MAX_ENGINES    (4)
+#endif
+
+// notes §1
+
+// Whether the engine is running and holding the audio device.
+bool sound_engine_active(void);
+
+// Whether the engine models this module (the canvas greys out the rest while it runs).
+bool sound_engine_models_module(tModule * module);
+
+// One line saying what the engine is doing, or why it is silent — "Playing OscB", "Select an OscB
+// to play", and so on. The Experimental menu shows this under the toggle, because an engine that is
+// on but silent otherwise gives no clue which of the several reasons applies. UI thread only.
+const char * sound_engine_status_text(void);
+
+// Why there is no vibrato, in one line: whether the keyboard is sending pressure at all, where that
+// has left the morph, and whether the patch actually put an LFO into the graph. Those three failures
+// all present as silence but need different fixes. UI thread only.
+const char * sound_engine_modulation_text(void);
+
+// Opens the audio device and starts rendering. False if the device would not start, in which case
+// nothing is held and the engine stays inactive.
+bool sound_engine_start(void);
+void sound_engine_stop(void);
+
+// Plug-in host entry points: same preparation as sound_engine_start()/stop(), but the caller owns
+// the audio device and drives sound_engine_render() itself. audioOutput.c is not involved.
+void sound_engine_start_hosted(double sampleRate);
+void sound_engine_stop_hosted(void);
+
+// Pins the random start phase so an offline measurement repeats exactly - tools/morphcheck and
+// nothing else. See the comment on the definition.
+void sound_engine_set_start_phase_seed(uint32_t seed);
+
+// notes §2
+void sound_engine_render_reverb_ir(double deviceRate, uint32_t type, uint32_t timeValue, uint32_t brightValue, float * out, uint32_t frames);
+
+// notes §3
+bool sound_engine_meters_dirty(void);
+
+bool sound_engine_module_meter(uint32_t location, uint32_t moduleIndex, uint32_t leg, uint32_t * value);
+
+// The same for a module's LED. Only LFOs publish one today and only index 0; everything else falls
+// back to the value the instrument sent.
+bool sound_engine_module_led(uint32_t location, uint32_t moduleIndex, uint32_t ledIndex, uint32_t * value);
+
+void sound_engine_render_chorus(double deviceRate, uint32_t detuneValue, uint32_t amountValue, const float * in, float * out, uint32_t frames);
+
+// Drone mode: on by default, and never changed by the application. Off, sound outliving its envelopes is
+// faded out after two seconds and voice 0 stops running at rest - the plug-in's way to save CPU. Any thread.
+void sound_engine_set_drone_mode(bool on);
+bool sound_engine_drone_mode(void);
+
+// Whether the outputs roll off at the top as the G2's converter and output stage do (on by default).
+void sound_engine_set_dac_emulation(bool on);
+bool sound_engine_dac_emulation(void);
+
+// notes §4
+void sound_engine_set_output_level_db(double db);
+
+bool sound_engine_set_morph(uint32_t group, double amount);
+
+// Pitch bend, -1..+1 across the wheel's travel. How many semitones that is comes from the patch's
+// own Bend setting, so the engine bends by the same amount the G2 would. Called from the MIDI thread.
+void sound_engine_pitch_bend(double bend);
+void sound_engine_midi_cc(uint32_t channel, uint32_t controller, uint32_t value, bool listened);           // §70.13
+void sound_engine_midi_note(uint32_t channel, uint32_t note, uint32_t velocity, bool on, bool listened);   // §70.13
+
+// notes §5
+// velocity: 1-127 with a note-on, the release velocity (0 when unknown) with a note-off.
+void sound_engine_note(int32_t note, uint8_t velocity, bool on);
+
+// Whether a voice is sounding this key with its key still down. For poly pressure: in Mono a key
+// held underneath the one playing must not move the morph. Any thread; see §15 of the reference.
+bool sound_engine_note_sounding(int32_t note);
+
+// How many voices the current patch may sound at once, and how many are audible right now. For the
+// status line — the second figure is what tells you whether a chord is being cut short.
+uint32_t sound_engine_voice_count(void);
+uint32_t sound_engine_voices_sounding(void);
+
+// Worst render load since this was last called, as a percentage of real time — reading it clears the
+// peak. Approaching 100 % means the engine is running out of its deadline, which is what crackling
+// is; well below it means a crackle is something else.
+uint32_t sound_engine_load_percent(void);
+uint32_t sound_engine_late_blocks(void);   // sound-engine-notes §207
+uint32_t sound_engine_stats_epoch(void);
+
+// UI thread. Reads the current selection and publishes a parameter snapshot for the audio thread.
+// Cheap enough to call on every redraw, which is what graphics.c does — every parameter change
+// forces one, so nothing else needs to poll.
+void sound_engine_update_from_patch(void);
+// §62.3 - a CtrlSend has selected another variation for a slot; the next update_from_patch() applies it
+bool sound_engine_variation_pending(void);
+// notes §216 - a performance has been loaded: its slots start together, from the top of the master clock
+void sound_engine_start_performance(void);
+// notes §215 - called (from the audio thread) when a CtrlSend posts a variation change; the host rebuilds at once
+void sound_engine_set_variation_wake(void ( *wake )(void));
+
+// notes §6
+const char * sound_engine_debug_text(void);
+
+// Audio thread, real-time context: no locks, no allocation, no logging below this line.
+// Fills frameCount frames of interleaved float, channelCount channels wide.
+void sound_engine_set_sample_rate(double sampleRate);
+// notes §217 - the output pairs the engine renders: the G2's Out 1/2 and 3/4, then its own Out 5/6 .. 15/16
+#define SOUND_ENGINE_OUT_PAIRS       (8)
+#define SOUND_ENGINE_OUT_CHANNELS    (2 * SOUND_ENGINE_OUT_PAIRS)
+
+void sound_engine_render(float * out, uint32_t frameCount, uint32_t channelCount);
+
+// notes §218 - NaN repairs made by the current engine so far, and the module of the last
+uint32_t sound_engine_nan_repairs(int32_t * module);
+void sound_engine_test_inject_nan(void);
+
+// §37 - the G2's In 1-4 for the NEXT sound_engine_render() on this thread: one buffer per channel at
+// the device rate, frameCount long. Channels past channelCount, and a NULL in, are silence.
+#define SOUND_ENGINE_INPUT_CHANNELS    (4)
+void sound_engine_set_input(const float *const * in, uint32_t channelCount);
+
+// notes §202 - the voices on a worker thread, the FX pass trailing them on the audio thread. Inline is
+// the same pipeline run on one thread, which the threaded one must match sample for sample.
+typedef enum {
+    eSplitSerial,
+    eSplitInline,
+    eSplitThreaded
+} tSplitMode;
+
+void sound_engine_set_split_mode(uint32_t mode);
+bool sound_engine_split_threaded(void);
+
+// sound-engine-notes §208 - the output device's os_workgroup_t, which the voice threads join; NULL withdraws it
+void sound_engine_set_audio_workgroup(void * workgroup);
+
+// sound-engine-notes §205 - the graph at the device's rate below 88.2 kHz: half the CPU, not the G2's laws
+void sound_engine_set_economy(bool on);
+bool sound_engine_economy(void);
+bool sound_engine_take_rate_changed(void);
+
+// notes §7
+bool sound_engine_attach(void);
+void sound_engine_detach(void);
+
+// The current document's index among the engines' owners - for state kept per G2 outside this file (noteStack.c).
+uint32_t sound_engine_index(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // __SOUND_ENGINE_H__

@@ -1,0 +1,1256 @@
+G2Alike - TO TEST
+
+Built, not yet checked against real hardware or a real user session.
+Confirmed -> delete the line. Check failed -> move it to todo.md.
+
+- ***REVERB DRY/WET CUBED; IDLE DX VOICES AT REST (2026-10-16)*** - reference §20.5, §14.2a; patch-ab-log.md. By ear against the G2: Bassic FM4, BassVaria NL3 and BriteTine have the G2's amount of reverb; Backtalk DX's notes after the first sound like the first; AdditiveG2's tones all there (Freq mode tracks the key, §6.1a)
+- ***PLUG-IN: MODULE BAR ON REOPEN (2026-10-16)*** - g2Draw.c notes §6. In a DAW: open G2Alike's editor, show the Module Bar, close the editor, reopen it - the patch starts below the bar, not under it
+- ***METER FALLS FROM THE TOP WITHOUT A HOLD (2026-10-16)*** - moduleGraphics.c notes §33. A hot signal that reaches 11, then drops: the meter falls through the yellows a row at a time, nothing left lit above it; only a clip keeps the red lit for a second
+- ***"SENDING TO THE G2..." WHILE A FILE GOES OVER (2026-10-16)*** - graphics.c notes §45, usbComms.c notes §78. App with the G2 connected: open a patch and a performance - the overlay reads "Loading...", switches to "Sending to the G2..." as soon as the patch is on the canvas, and goes when the write is done
+- ***METERS AS THE G2 SHOWS THEM, AND SMOOTHED (2026-10-16)*** - sound-engine-reference §1.2/§1.3, meterDisplay.c notes. Engine on, app and plug-in: a meter rises at once and falls about one value per half second after the sound stops; unlit rows show dim; lamps (gates, clocks) flash visibly; no flicker. With the G2 connected: its own meters look the same, the hold showing after a hot signal. Then time the G2's meter values over USB after a tone stops (one value per ~half second?) - that settles METER_POLL_SECONDS. Apple Silicon plug-in confirmed working (CT, 2026-10-16); retest on the Intel Mac with a fresh build, Live restarted
+- ***G2 ALIKE: ENGINE REBUILT ONLY ON INPUT (2026-10-16)*** - g2Draw.c notes §17. IN A DAW with a patch playing: turn a dial, add and delete a cable, change a mode, switch variation, rename a module, load a file, move a morph from the host - each is heard at once, never after a second's delay; and BCHydro_DZLW on the Intel Mac with the editor open no longer breaks up (or breaks up less)
+- ***A SET OF SLOTS PER MODE, OFFLINE AND IN THE PLUG-IN (2026-10-11)*** - slotSets notes §1. With no G2 (and in G2Alike): build something in Patch mode, switch to Perf Mode - four empty slots; load or build a performance, switch back - the Patch-mode slots return and the performance's sequencers stop; switch again - the performance returns. In a DAW, save and reopen the project in either mode - the other mode's slots are kept too
+- ***PLUG-IN: NO SILENCE AFTER A PATCH CHANGE (2026-10-11)*** - sound-engine-notes §218, g2Plugin notes §16. IN A DAW: load patches one after another (and a performance) while playing; it never goes silent for good. If anything goes silent: `touch /tmp/g2alike-log`, then /tmp/g2alike.log names any NaN repair and its module
+- ***SAMPLER BANK PRESETS (2026-10-11)*** - nordSample.c notes §11, menus.c notes §34a, patchWrite.c notes §2/§3. Load an E-mu .exb with several presets (GUNSHOTS): right-click > Preset lists them by name, ">" on the one playing; the < > buttons under the name step through them, grey while pressed; choosing one changes the sound and the face reads "PRESET - BANK"; save as .pchx / .prfx and reopen - the preset comes back (offline round trip confirmed byte-identical); in G2Alike the same, and a reopened DAW project keeps it
+- ***EXTRA OUTPUTS OUT 5/6 .. 15/16 (2026-10-11)*** - sound-engine-notes §217. IN A DAW: a 2-Out set to Out 5/6 plays on G2Alike's "Out 5/6" bus (tools/vst3host --bus-test confirmed every pair); route two drum voices to their own tracks; save and reopen the project - they stay apart. (G2 side confirmed 10-11: Out 5/6 plays on the G2's Out 1/2, the editor keeps Out 5/6 and a Sampler through a whole-slot push)
+- ***.prfx AND THE "Not G2" WARNING (2026-10-11)*** - patchWrite notes §3, topbarRender notes §6. Save a performance holding a Sampler: it becomes NAME.prfx and reopens with the Sampler's file; "Not G2" shows in red right of the performance name while a Sampler or an engine-only output is in any slot, and goes when they are removed
+- ***SLOT BUTTONS MOVE THE KEYBOARD IN PATCH MODE (2026-10-11)*** - 2026-10-11. CLICK the topbar slot buttons in Patch mode: the G2's keys and the virtual keyboard play the slot clicked (DEVSLOT confirmed on hardware); in a performance, the keys still follow the Keyboard switches
+- ***SAMPLER: NO BEATING, IN TUNE, NOTES END (2026-10-10)*** - notes §213, nordSample notes §5, §7. LISTEN: a held note
+  sustains with no beat at any key, in tune; with no envelope in the patch, a released note stops and a repeat does not stack
+- ***SAMPLER LOOPS (2026-10-10)*** - nordSample.c notes §3, §5. LISTEN: hold a Melodica note for several seconds at
+  low, middle and high keys - it should sustain without a click at the loop, in tune, against a Nord playing the same file
+- ***CHOOSE SAMPLE AND .PCHX (2026-10-10)*** - menuActions.c notes §15, patchWrite.c notes §2. Right-click a Sampler >
+  Choose Sample... - the browser opens in Nord Sound Manager's folder, the module takes the file's name and plays it;
+  File > Save As with a Sampler writes NAME.pchx whatever extension is typed; reopening it restores the Sampler and its file
+- ***SAMPLER, FIRST VERSION (2026-10-10)*** - notes §213. LISTEN: Oscillators palette > Sampler into an EnvADSR and an Out, engine on -
+  the Melodica at the key played (short: no loops yet). With the G2 connected: adding, cabling and editing it must not
+  reach the G2 (no error, the G2's slot unchanged), and Store/PUSH must leave it out
+- ***LAMPS AND METERS THE ENGINE NOW DRIVES (2026-10-10)*** - notes §194. LOOK in the editor, G2 attached: 8Counter, Mux8-1/1-8
+  and the counters now light their LEDs (they were dark); in engine mode the envelope lamps follow the gate, RandomA blinks
+  at its rate, and the filter/EQ meters move
+- ***LAMPS FOLLOW THE METERED VOICE (2026-10-10)*** - notes §194. LOOK on the engine with a poly patch whose LFO is Poly:
+  the LFO lamp should follow the note just played (the newest held), not voice 0's
+- ***PAN / X-FADE MODULATION A QUARTER AS STRONG (2026-10-10)*** - reference §4.3. LISTEN to 10 Troll, 11 Cosmic Dream,
+  16 Sweep Lots, 17 Mighty Nord and 18 Unreal Dreams against the G2: the LFO panning should now be as wide as the G2's,
+  no longer hard side to side; X-Fade users (01, 02, 07, 08, 13, 14) should sound as the G2 does
+- ***UNPATCHED OUT SOCKET SILENT (2026-10-10)*** - notes §167. LISTEN to 04, 05, 10 and 17 on the engine against the G2:
+  the stereo image should now match (one-sided Outs no longer centred)
+- ***VOICE AREA METERS FOLLOW ONE VOICE (2026-10-10)*** - notes §191. CHECK on the G2 against the engine: play 60, then
+  hold 48 on top and release 60 - both should meter the 48's voice; a clip should stay red for a second after it
+- ***BCHYDRO SEQUENCERS, AGAIN (2026-10-09)*** - LISTEN to 1:2 on the engine through all eight
+  variations (about a minute): B, C and D's sequences should run whole, variation 7 included (slot D's four-step
+  cycle), with no restarts between bar lines
+- ***GRAPH RESET OFF THE AUDIO THREAD (2026-10-09)*** - sound-engine-notes §212. LISTEN: edit cables while a patch plays,
+  in the app and the plug-in - the edited slot should drop out for about a block and come back as before, other
+  slots carrying on; loading patches should start as cleanly as ever
+- ***PULSE MODE AND ITS ZERO THRESHOLD (2026-10-09)*** - reference §18.4. CHECK on the G2 against the engine: a bipolar
+  LFO into Pulse, Mode Plus then Minus - Plus should fire as the LFO rises through zero, Minus as it falls (the engine
+  used to fire Plus only, and half way up)
+- ***MASTER CLKGENS SHARE ONE POSITION (2026-10-09)*** - sound-engine-notes §211. LISTEN: in a performance with
+  sequencers on Master ClkGens in two slots (BCHydro_DZLW), load or edit one slot while it plays - its sequence
+  should stay on the others' bar, not restart from wherever the edit landed
+- ***CTRLSEND AND CC 70 (2026-10-09)*** - reference §62.3. LISTEN: performance 1:2 BCHydro_DZLW on the engine should
+  move slots B-D on a variation every four bars, as the G2 does; and a CtrlSend to a slot's CtrlRcv should reach it
+- ***NOTESEND TO ANOTHER SLOT (2026-10-08)*** - reference §62.2. LISTEN in a performance: a sequencer patch whose
+  NoteSend names Slot B, with B active, should play B's sound on the engine as on the G2; a NoteSend on This
+  should play only its own slot even with several slots on the keyboard. Checked offline only
+- ***ARPEGGIATOR (2026-10-08)*** - reference §72. LISTEN on the engine (app or G2Alike): Patch Settings > Arpeggiator
+  On, hold a chord - each Direction and Range, each Rate against the topbar tempo; it runs with the master clock
+  stopped too, as the G2's does. Step timing and order are checked offline and against the G2's take; nobody
+  has played it by hand
+- ***DUALSAWMODEL CLICK (2026-10-08)*** - 2026-10-08, reference §6.7, revert record 141. LISTEN: DualSawModel
+  on the engine (app or G2Alike) should no longer click once a cycle of the "Phase" LFO; the law is measured on
+  the G2 and the engine matches it, but nobody has heard the patch since
+- ***FRONT PANEL MODE (2026-10-08)*** - front-panel-mode-design.md, code-notes/frontPanel.c.md. CHECK in the app and
+  G2Alike: Tools > Show Front Panel; turn a dial knob, a switch/list knob (drag steps it, a click cycles or opens
+  the list), a button assignment; Cmd-Z undoes each; Patch Settings (one press), Global Panel (Shift or double
+  press); the page buttons; the mode comes back after a restart / project reopen; with a G2 attached the knobs
+  change the G2
+- ***PATCH SETTINGS PER VARIATION (2026-10-08)*** - dataBase.h patch_settings_variation(), code-notes/frontPanel.c.md §4.
+  The front panel AND the Patch Settings panel now read, write and send the active variation's settings. CHECK
+  with a G2: select Variation 3, change Glide, Bend or the Arpeggiator from either, then switch between Variations
+  1 and 3 - the setting should follow the variation on the G2's own panel and in the engine; Cmd-Z undoes it in
+  the variation it was made in
+- ***DOCUMENTS ACCESS (2026-10-08)*** - SynthLib code-notes/fileBrowser.cpp.md §1a. CHECK: the macOS prompt for
+  Documents now carries "G2Alike opens and saves patches..." (a fresh build may ask again); after Don't Allow,
+  the file browser's list says the folder cannot be read and where to switch it on, rather than looking empty;
+  Read Me First has the new ACCESS TO DOCUMENTS section
+- ***G2 ALIKE SIDE-CHAIN AS IN 1/2, THE AUDIO UNIT (2026-10-08)*** - reference §37, g2Plugin notes §8. The VST3 side-chain
+  is confirmed in a host (CT ran audio through a patch's reverb). CHECK the AU in Logic: G2Alike on an instrument
+  track, its side-chain menu set to an audio track, and a 2-In (In 1/2) -> 2-Out patch should play it
+- ***ENVAHD HOLD, FLTCOMB PITCH, FLTMULTI FREQM (2026-10-08)*** - 2026-10-08, reference §17.11a, §13.1a,
+  §10.1a. Each measured against the G2 with a cut-down patch; LISTEN to the whole patches: Flows_DZ (EnvAHD notes now
+  last their Hold), GlassCathedral (no slow phasing), MicroWaves (unchanged in the engine, matched once rendered at
+  velocity 127). Every stage patch with an EnvAHD, a FltComb with Pitch in use or a FltMulti with FreqM in use
+  will sound different - say if one got worse
+- ***OUT 3/4 AS ITS OWN VST3 BUS (2026-10-07)*** - g2Plugin notes §8. CHECK in Ableton: load ChorusSaw (1:1) in G2
+  Alike; its track plays the dry sound only, and a second audio track set to "Audio From: G2Alike / Out 3/4"
+  plays the StChorus. tools/vst3host --bus-test already shows -21.5 dBFS on Out 1/2 and -29.2 on Out 3/4. The
+  application now plays Out 1/2 only on a stereo device; a patch sending everything to Out 3/4 is silent there
+- ***ENGINE PATCH FIXES (2026-10-07)*** - 2026-10-07. LISTEN against the G2: ALARM DX (4:41, an octave too
+  high - patch settings are per variation), AnalogClassic (1:36, OscShpB Partial), FMFunkNL2 (3:3) and schtraengt
+  (2:80) (one-shot envelopes looped while the key was held), MicroWaves (3:2, was silent), AccBass1 DX (4:11,
+  brighter now). All matched the G2's spectrum on a held C4 capture; none heard yet
+- ***WINDOWS VST3 AS ONE FILE (2026-10-07)*** - tools/do-windows-plugin. The zip now holds a single "G2Alike.vst3" file
+  (the DLL) instead of the bundle's three nested folders. CHECK on Windows: copy it into C:\Program Files\Common
+  Files\VST3, rescan, and the host lists and opens G2Alike as before
+- ***LAST KEY BEFORE ANY IS PLAYED (2026-10-07)*** - sound-engine-notes §209. LISTEN: 16 Sweep Lots (bank 1:51) on the
+  engine should drone at the G2's pitch from load, with no key played (the patch's stored note, then the last key).
+  The engine render matched the G2's harmonics; your ears have not checked it. The last key also survives Experimental >
+  Disable/Enable Sound Engine: play a key, toggle the engine, and a drone should come back on that key
+- ***14 PATTERN SEQ (2026-10-07)*** - reference §38.4, sound-engine-notes §210. LISTEN: 14 pattern seq (bank 5:9) on
+  the engine against the G2 - same notes, same C5 centre, a SeqEvent step once a bar. The pitch tracks match the
+  G2's capture note for note; worth checking Flows_DZ alongside, which is also sequencer-driven
+- ***RESONATOR FROM THE INSTRUMENT (2026-10-03)*** - reference §70.4a. LISTEN against the G2: a Resonator on String1
+  struck by a short noise burst into In1, Pos swept - the pitch should hold and the timbre move like a pluck
+  position; Out2 sounds, Out1 is silent on String1. Then a Tube with a Driver (Reed) closing the loop through
+  Out1 -> Driver In2, Driver Out -> Resonator In1, breath into Driver In1. If the strings or tubes only work
+  with the two lines' inputs swapped, say so - which junction output feeds which line is the reading still to
+  confirm.
+- ***DRIVER AND LEVEL SCALER FROM THE INSTRUMENT (2026-10-03)*** - reference §70.5, §70.12. LISTEN/MEASURE on the G2:
+  a Driver set to Reed and to Bow between an excitation (In1) and a delay or OscString return (In2) - if it
+  only works with the two inputs swapped, say so (the input order is the one reading not yet confirmed). A
+  Level Scaler with L.Gain and R.Gain at 127, BrkPnt 64: Level should read about +8 dB an octave either side
+  of E4 (a capture of Level at E3, E4, E5 settles it).
+- ***MOD WHEEL ZIPPER, 07 UNSTABLE LEAD (2026-10-03)*** - notes §61. Dials, morphs and the wheel now glide to a new
+  value as the G2 does (a straight line over 125 ms, restarted by each new value) instead of an 8 ms smoother
+  that left a staircase. LISTEN: 07's wheel sweeps its VCF; the zipper should be gone. A knob turned quickly
+  now trails by up to 125 ms, as on the G2. The CONSTANT TONE with no key held did not reproduce: offline,
+  07 is silent at rest with drone mode on or off and its tail dies within 8 s - say if it comes back, and
+  whether it was the engine or the G2.
+- ***BYPASS SKIPS THE WORK (2026-10-03)*** - Phaser, FltPhase, DlyStereo, Flanger, OscString and MetNoise no longer
+  compute while switched off (the rest already did not). Their state now freezes while off instead of running
+  on, so switching one back on can replay what it held from before. LISTEN for that on a delay or flanger.
+- ***STEREO PATHS: SEQCTR TRIG AND 4-IN BUS RIGHT (2026-10-03)*** - notes §168. Every node's second output was
+  overwritten with its first unless its kind was on a list; SeqCtr and 4-In (Bus) were missing, so SeqCtr's
+  Trig was a copy of Val and a 4-In from the bus played its left leg on the right. MixStereo itself was
+  measured on the G2 and is unchanged. LISTEN: a 4-In set to Bus carrying a stereo FX chain is stereo again.
+- ***CLICK ON A MODULE THAT IS GONE (2026-10-03)*** - code-notes/moduleGraphics.c.md §2a. The one-off crash in
+  param_click_handler(): every canvas click handler now ignores a module deleted or replaced since the frame
+  was drawn. WATCH the log for "Click on a module that is no longer there" - it names when it would have
+  crashed.
+- ***VOCODER FROM THE INSTRUMENT'S PROGRAM (2026-10-03)*** - reference §70.8. LISTEN against the G2: a voice or
+  drum loop into Ctrl and a saw into In, all BandSel 1-16, then Emphasis on, then a scrambled routing.
+  The level is the new code's arithmetic (quieter than the old guess) - say if it differs from the G2's.
+- ***OSCSTRING AND PITCH TRACKER FROM THE REFERENCE MODEL (2026-10-03)*** - reference §70.4, §70.7. LISTEN: an OscString
+  struck by a short noise burst should sit in tune with Damp at 0 and go flat as Damp rises (+8 cents at
+  A4 at Damp 64); Decay 127 should ring forever, 64 die in a few hundred periods. LOOK: the Pitch Tracker's
+  outputs are now labelled Period, Pitch, Gate (Pitch and Gate were swapped); patched from an OscB saw it
+  should track 55-880 Hz and Gate should open at the Threshold. Period is now a square at the pitch.
+- ***FLANGER, PSHIFT, SCRATCH FROM THE REFERENCE MODEL (2026-10-03)*** - reference §70.2-§70.3. LISTEN against the
+  G2: a Flanger at FB 0 and 127 (now at most a 0.5 loop gain, Out 0.6 dry + 0.8 wet); a PShift at Coarse
+  112 on a sustained tone in each Delay range (Fine now spans +-50 cents, Pitch M half a semitone a
+  unit); a Scratch at Ratio 80 (normal speed), 96 and 32 (backwards), and its Ratio M driven by a small
+  LFO - the Mod input is now far stronger than the dial. PShift and Scratch now INVERT the signal, as
+  the parts do: mixed with the dry signal at Coarse 64 they should cancel on the G2 too.
+- ***OSCDUAL FACE PW / SQR M (2026-10-03)*** - reference §12.1. The face drove PW from the mod-amount
+  dial and the reverse. LOOK: on an OscDual, the "PW" dial should now change the pulse width on the G2
+  and in the engine, and "SqrM" only scale the PW input.
+- ***LFOSHPA DIR AND MUX8-1X (2026-10-02)*** - reference §28.4, §70.11. LISTEN: an LfoShpA with a negative
+  value in Dir should run backwards, 0 should stop it; a Mux8-1X swept by an LFO should crossfade between
+  neighbouring inputs as on the G2.
+- ***LFO SHP A WAVES (2026-10-01)*** - reference §28.6. LISTEN/LOOK: an LfoShpA's LED and its effect
+  should now follow the G2 at any Shape - Sine leans saw-wards away from 64 (15 Randee dz's FltNord LFO
+  sits at 76), Tri>Sqr squares up, CosBell/TriBell narrow at low Shape. 01, 13, 14 and 15 use it.
+- ***SEQNOTE RECORD AND LFO CLK TEMPO (2026-10-01)*** - reference §58.1, §28.2. LISTEN to 15 Randee dz
+  against the G2: the FX bass's occasional re-recorded low notes should now come and go as on the G2,
+  the sequence drifting from its stored steps. Its LfoShpAs (Clk range) now run at the dial's division
+  (they ran 64x fast) and follow the G2's tempo: the FltNord LFO's LED should toggle every ~5 s as on the
+  G2, the OscDual one about four times as often; change the tempo, both follow.
+- ***COMPUTER-KEYBOARD VELOCITY 127 (2026-09-28)*** - code-notes/virtualKeyboard.c.md §11. LISTEN: a,s,d... on a
+  Vel-morphed patch (FltClassicTest) should now sound the same through the engine as on the G2.
+- ***EXACT VEL/KEYB MORPHS (2026-09-28, late)*** - reference §26.2. LISTEN: FltClassicTest's resonance should now
+  sit where the G2's does (mod wheel at zero on both). Any patch with a Vel or Keyb morph on a filter Freq
+  should track the G2 more closely, especially at velocities between the old rows.
+- ***15 RANDEE DZ FX BASS (2026-09-28, night)*** - reference §16.2a. LISTEN: the FX-area bass line (OscDual
+  and OscD) should now be heard. The re-recorded low notes are the 2026-10-01 entry above.
+- ***18 UNREAL DREAMS SEQUENCES (2026-09-28, evening)*** - reference §62.1. LISTEN: 18 should now play its
+  melody and held chord as the G2 does. It builds up over ~25 s as voices fill, on the G2 too. The engine
+  may be louder than the G2 (about 9 dB offline) - say if it is.
+- ***PLUG-IN OUTPUT FILTER REMEMBERED (2026-09-28)*** - toggle Settings > G2 Output Filter in G2Alike,
+  then load a NEW instance: it should come up with the same setting, as the dial mode does.
+- ***MIDI IN TO THE PATCH (2026-10-02)*** - reference §70.13. In the app with MIDI in: a CtrlRcv on a CC
+  you move should pulse Rcv and follow Val; a NoteRcv on a note and channel should gate; a Device's
+  global wheel outputs should follow CC 96 and CC 97.
+- ***4-IN FROM BUS, MORE CHORUSES (2026-10-02)*** - reference §69.12, notes §197. A 4-In set to Bus should
+  carry 2-Outs sent to Bus 1/2 and 3/4; up to eight FX-area choruses in one patch should all sound.
+- ***FLTCOMB PEAK AND DEEP (2026-10-02)*** - reference §13.4. The comb is now the reference model.
+  LISTEN at high FB on Peak and Deep: Deep is quieter than before at full FB (-6.7 dB), and every Type
+  now delays the signal by one period at FB 64.
+- ***EVERY CABLED INPUT (2026-09-28)*** - 2026-09-28 (later), reference §6.7, §6.8, §28.4.
+  Oscillator Shape Mod and FM inputs and the LFOs' Rst, Phase M and Shape M now act. LISTEN: 18 Unreal
+  Dreams should have its moving background pad; 07 Unstable Lead should wander in pitch as on the G2;
+  10 Troll, 11 Cosmic Dream, 17 Mighty Nord gain FM timbre; 13, 14, 15 LFOs restart on their Rst.
+- ***LISTENING ROUND FIXES (2026-09-28)*** - 14 CS80 (and 11, 17 down, 05, 06, 16 up)
+  now at the G2's octave; 08 Ice Pad's OscD plays its Partial tuning; 07 goes straight to its first note;
+  15 Randee dz is silent with the master clock stopped; stereo compressors keep their stereo.
+- ***RESOURCE WARNING (2026-09-27)*** - g2-budget-estimate-design.md. With a G2 connected, load a heavy
+  patch: the top bar's VA/FX Cycles and Memory figures should turn red at 100%, as the voice count does
+  when the G2 assigns fewer voices than asked for.
+- ***REFERENCE-MODEL LAWS: OSCNOISE, FLTVOICE, NOTEDET, MODAMT (2026-09-27, night)*** - 2026-09-27 (night).
+  LISTEN: 10 Troll's vowel filter now sits a quarter tone lower. An OscNoise is quieter at high pitches
+  (about -3 dB/octave above 500 Hz) and narrower at Width 0; its Width input is a quarter as strong.
+- ***STAGE-PATCH PARTIALS SETTLED FROM THE REFERENCE MODEL (2026-09-27)*** - 2026-09-27 (evening). LISTEN:
+  15 Randee dz now runs at the G2's master clock (top-bar tempo), not a fixed 120 BPM - change the tempo
+  and it should follow. 07 Unstable Lead's two Lin Glides are now 2.5x slower (the instrument's tenth-step).
+  01 Mini Emulator's three ValSw2-1 now switch only while Ctrl EQUALS the value. A Multi Filter's cutoff
+  now stops at 20.8 kHz. A ModAmt with Enable off and m/1-m off is now silent (none of the stage patches
+  has that combination).
+- ***G2 OUTPUT FILTER (2026-09-27)*** - sound-engine-notes §199. The engine now rolls
+  off its top end as the G2's outputs do (-1 dB at 21 kHz, -6 dB at 42 kHz). LISTEN to Kick 5 in the app
+  against the G2: the engine's extra hiss should be gone. OFF by default since 2026-09-28 - turn it on to
+  test: Experimental > G2 Output Filter (app), Settings > G2 Output Filter (plug-in); both remembered.
+- ***PATCH VOLUME ON OLD FILES (2026-09-27)*** - code-notes/protocol.c.md §23. A patch file saved by the
+  editor before 2026-09-27 carries no Volume; it now loads at 127 (0 dB), on. Open e.g. ReverbMeasure.pch2
+  with the engine on: the top-bar Volume dial should show 0.0dB and the patch should play.
+- ***09 ANTARKTIS HOWL (2026-09-27)*** - 2026-09-27, reference §23.5 and §28.3. FltNord's FM lin,
+  Res and Pitch inputs, and the RndSt/Rnd generator. Offline the level now matches
+  the G2 capture. LISTEN in the app: the howl should be gone, the Nord Filter should now play a
+  wandering random pitch sequence, and any other patch with a RndSt/Rnd LFO should move as on the G2
+  (its random sequence restarts from the same seed on each patch load).
+
+- ***14 CS80 CLICK AND DC (2026-09-27)*** - 2026-09-27, reference §17.4, notes §198. EnvD/EnvH
+  now fire only from their Trig jack; every envelope reads its own KB and Reset; the outputs are
+  AC-coupled at 11.7 Hz as on the G2. LISTEN: 14 should start each note without a click and without the
+  overdriven edge. Also check a patch that relies on an EnvADR, EnvAHD, EnvMulti, EnvADDSR, ModADSR or
+  ModAHD with KB on still plays, and that KB off with nothing in the Gate now leaves it silent, as on
+  the G2.
+
+## STAGE PATCHES (User1) - which should play fully in the engine
+
+Kept current as modules land (2026-09-25). COMPLETE = every module that makes sound is in the engine
+(Status, Device, CtrlSend and NoteSend make none). A complete patch can still differ where a module is
+Partial (engine-module-status.md) or an input is not modelled - 07 Unstable Lead's S&H drives OscB's
+Shape mod input, which the engine ignores.
+
+```
+01 Mini Emulator   COMPLETE
+02 Big Pad         COMPLETE
+03 Chris Lead      COMPLETE
+04 Chris Pad       COMPLETE
+05 SelfOsc LFO     COMPLETE
+06 Noise Sweep     COMPLETE
+07 Unstable Lead   COMPLETE (09-25 late)
+08 Ice Pad         COMPLETE (09-25 late)
+09 Antarktis       COMPLETE (09-26)
+10 Troll           COMPLETE (09-26)
+11 Cosmic Dream    COMPLETE (09-27)
+12 Deli Noise      COMPLETE - its FreqShift's outputs are not cabled (FreqShift now built anyway)
+13 Dist Activity   COMPLETE (09-26) - a slow swell: its gate LFO runs at 1/16 Hz
+14 CS80project72   COMPLETE (09-25 late) - was silent
+15 Randee dz       COMPLETE (09-27) - plays itself from its ClkGen and sequencers
+16 Sweep Lots      COMPLETE (09-25 late) - its 12 RandomA were stuck at 0
+17 Mighty Nord     COMPLETE
+18 Unreal Dreams   COMPLETE (09-26) - plays itself from its sequencers through NoteSend
+19 DxPiano         COMPLETE
+```
+
+- ***VOICE-AREA FX PER VOICE, SATURATION (2026-09-27)*** - notes §196-197. CHECK: 08 Ice Pad plays chords
+  as a pad (it clicked then went silent); patches with a Chorus/Flanger/PShift in the Voice area sound
+  as on the G2 (each voice its own effect); nothing latches or goes silent after heavy feedback.
+- ***WAVEWRAP JACKS (2026-09-27)*** - In is connector 0, Mod connector 1 (they were swapped). CHECK: 14
+  CS80project72 now plays through its FX chain; in the editor, a cable into WaveWrap's In lands on In.
+- ***LFO FIXES FROM 05 SelfOsc LFO (2026-09-27)*** - LfoC now plays its Wave mode (it was always a sine);
+  every LFO's Saw now falls, as the instrument's. CHECK: 05 by ear against the G2 at LFO 58-200 Hz; any
+  patch using LfoA/B/C Saw. Open: 05 is ~6 dB louder than the G2 (Compressor/FX chain, not the filter).
+- ***BASIC VERSIONS OF EVERY REMAINING MODULE (2026-09-27)*** - reference §70; all 170 types now modelled,
+  52 Partial (engine-module-status.md is the refinement queue). CHECK: patches using them play without
+  runaway or silence; tell me which sound most wrong, and those get the reference model first.
+- ***SINGLE-PART MODULES (2026-09-27)*** - reference §69: SeqLev, RandomB, NoteDet, 4-In, CompSig, LevMod, EnvFollow, PartQuant,
+  DlyShiftReg, DlyClock, Digitizer, WahWah; checked in patches built in code (WahWah exactly).
+  CHECK ON THE G2 by ear: WahWah swept by an LFO, Digitizer at a low rate and 4 bits, LevMod's Balance
+  from clean through AM to ring.
+- ***SWITCHES, COUNTERS, CONVERTERS (2026-09-27)*** - reference §68: SwOnOffM, Sw2-1M, Sw4-1, Sw1-2,
+  Sw1-2M, Sw1-4, ValSw1-2, Mux8-1, Mux1-8, T&H, WindSw, ConstSwM, 8Counter, BinCounter, ADConv, DAConv,
+  Red2Blue, Blue2Red. Checked in patches built in code, not on the G2. CHECK ON THE G2 (one minute,
+  settles §68.2): ValSw2-1 with its value at 10, Ctrl from a ConstSwT - is In 2 chosen at Ctrl 10
+  only (the module's equality test), or at 10 and above (the manual's threshold)?
+- ***FLTPHASE (2026-09-27)*** - reference §67, exactly with the reference model. CHECK ON THE
+  G2: 11 Cosmic Dream untouched (two FltPhases, Peak and Deep), engine against the G2, by ear. KBT is
+  the one path the parts check did not cover.
+- ***DLYSTEREO, METNOISE, RNDCLKA, RNDTRIG (2026-09-26/27)*** - reference §64-§66, from the reference model; none captured yet. CHECK ON THE G2: 15 Randee dz untouched, engine against the G2, by ear -
+  the random triggers' density, the stereo delay's cross-feedback, the metallic hats' colour. A
+  Fireface capture of MetNoise alone (Freq 0/64/127, Colour 0/64/127) would check §66's pitch and
+  filter laws directly.
+- ***PATCH VOLUME IN THE ENGINE (2026-09-26)*** - reference §63, law measured on the G2. CHECK: the top
+  bar's Volume dial in engine mode (app without a G2, and the plug-in) shows on a new patch and turns
+  the level down smoothly; a patch with Volume below 127 now plays quieter to match the G2.
+- ***SEQUENCERS, CLKGEN, NOTESCALER, NOTESEND, 2-IN FROM A BUS (2026-09-26)*** - reference §58-§62. The
+  sequencer part is measured on the G2 (instant steps, 2 ticks late); ClkGen is from its part. CHECK
+  ON THE G2: 18 Unreal Dreams untouched - does the engine's self-playing sequence match (notes, timing,
+  the 120 BPM master tempo)? 15 Randee dz's sequencing, once its last four modules are in.
+- ***PHASER, FLTVOICE, FREQSHIFT (2026-09-26)*** - reference §55-§57, from the reference model.
+  CHECK ON THE G2: 09 Antarktis (Phaser Type I, Rate 14) and 10 Troll (FltVoice A/E/O swept by an LFO)
+  by ear. FreqShift's Sub range disagrees with its readout 12x (§57) - a capture at Sub, dial 127,
+  would settle it.
+- ***OSCPM, LOOPS CLOSED, LFO SNC (2026-09-26)*** - reference §53, §54, notes §192. A cable loop now
+  runs with a one-sample delay instead of being cut, and LfoB/LfoShpA's Snc is a 50% square, not a copy
+  of the wave. CHECK ON THE G2: 13 Dist Activity - the engine's version is silent for ~4 s then swells
+  over ~16 s (its LfoShpA is slowed x16 by a Constant on its Rate input); does the G2 do the same?
+- ***LFO RATE INPUTS, COMPLEV, NOTEQUANT, OSCMASTER, DLYSINGLE (2026-09-25 late)*** - reference
+  §48-§52. Every LFO's rate inputs and KBT were ignored until now (§50) - any patch that modulates an
+  LFO's rate changes. CHECK ON THE G2: 08 Ice Pad (OscMaster drives an LfoC; two DlySingleB), and
+  09 Antarktis / 10 Troll / 13 Dist Activity where NoteQuant and CompLev now act.
+- ***LFO MONO NOW SHARED (2026-09-25)*** - reference §42. A Mono LFO used to run per voice from a
+  random phase, so chord notes swept out of step. CHECK ON THE G2: 02 Big Pad and 17 Mighty Nord with
+  a chord held - the Mono LFO's sweep should move all notes together. 05 SelfOsc LFO (one voice) is
+  unchanged: its LFO keeps exact time; CT heard it "vary" - its Freq is morphed by the Wheel (0 to +127)
+  and the LFO's lower half is clamped at dial 0, so the sweep changes with the wheel. Say what varies.
+- ***MINMAX, CONSTSWT, SW1-8, LOGIC DELAY, RANDOMA (2026-09-25)*** - reference §43-§47, from the reference model. CHECK ON THE G2: 07 Unstable Lead, 14 CS80project72 and 16 Sweep Lots by ear
+  against the G2. RandomA's rate, Step and Edge feel; logic Delay's Mod input and RandomA's Pitch
+  input are not read.
+- ***MODADSR / MODAHD TIME-MOD JACKS NOW PLAY (2026-09-20)*** - reference §17.10. They were not
+  connected to anything, so 01 Mini Emulator's filter sweep was wrong in every variation. The DECAY
+  jack is measured against the G2 and matches (28/136/500/1536 ms at -32/-16/0/+16 units). CHECK ON
+  THE G2: Mini Emulator's filter sweep by ear across the variations, which is what started this.
+  **The ATTACK and SUSTAIN jacks and all of ModAHD's are NOT measured** - they share the one code
+  path the decay proves, but neither the attack's curve under a mod nor the sustain's own law has
+  been checked. `PatchTestFiles/EnvModDecay.pch2` is the rig, ready to reload into a slot.
+- ***PITCH BEND NOW REACHES MonoKey's PITCH (2026-09-20)*** - reference §35.2. It never did, so the
+  wheel was dead on any patch whose oscillators have KBT off and take their pitch from MonoKey;
+  01 Mini Emulator is that patch and Chris' Lead is not, which is why only one of them bent (CT).
+  Offline it now bends symmetrically, +-2 semitones at the patch's range, and SimpleLead is
+  unchanged. CHECK ON THE G2: the wheel through its whole travel on Mini Emulator, both directions,
+  and that the vibrato (mod wheel) moves with it - vibrato went the same way and by the same route.
+- ***OSC 3 TRACKS THE KEYBOARD ON MINI EMULATOR VARIATION 7 (2026-09-20)*** - cableChain notes §3.
+  Its pitch arrives through an input-to-input link recorded the other way round, which the chain
+  walk did not follow, so that oscillator sat at a fixed pitch - inaudible except in variation 7,
+  the one variation that turns it up (CT). Offline, variation 7 now tracks (note 60 reads 262 Hz
+  where it read 392 Hz) and is 3.4x louder, because the stuck oscillator was beating against the
+  other two. CHECK ON THE G2: variation 7 across the keyboard against the instrument, and then the
+  other variations for anything that has quietly changed - 24 connections in this patch were being
+  ignored and now are not.
+- ***FOUR LOGIC MODULES PLAY: Invert, Gate, FlipFlop, ClkDiv (2026-09-19)*** - reference §38. The
+  truth tables and the logic levels are checked offline and exact, so what needs the G2 is the
+  TIMING and the edge cases: a ClkDiv at a few dividers in both Gated and Toggled (Toggled counts
+  BOTH edges, so an odd divider should halve the rate again), its delayed Rst (it should wait for
+  the next rising clock), and a FlipFlop in both types - especially Set-Reset toggling from Clk
+  with S and Rst low, and stopping when either is held high. An unpatched Invert input should sit
+  its output HIGH.
+- ***MONOKEY RETURNS TO A HELD NOTE, AND GLIDE IS THE INSTRUMENT'S (2026-09-19)*** - reference
+  §35.1 and §36.1, revert record 62 and 63. Both found by reading the instrument after CT's repro:
+  hold a key on 01 Mini Emulator, play a higher one, release it, and the first should sound again -
+  it did on the G2 and did not here. MonoKey's Last now follows the mono voice, which §15.2 has
+  already handed back. Offline the pitch goes 300 Hz, 642, back to 300. The Glide's slew is now the
+  envelope-table coefficient the instrument uses rather than our reading of the printed dial, and
+  runs at the envelope tick rate. CHECK ON THE G2: CT's repro again by ear; a Glide at a few Time
+  settings in both Log and Lin against the hardware; and that Lo and Hi priorities behave (they
+  rescan the held keys now, and report that key's own velocity).
+- ***APP NAP IS NOW REFUSED WHILE THE AUDIO OUTPUT IS OPEN (2026-09-19)*** - misc.mm notes §2a.
+  NOT the break-up fix - that was the Debug build. Kept on its own merits: this
+  application draws only on request, so between gestures it looks idle to macOS. The render thread
+  was measured as REALTIME in both builds, so this is tidiness rather than a cure. If it causes any
+  trouble, take it out.
+- ***OSCILLATOR PITCH TYPES NOW PLAY: Freq, Factor and Partial (2026-09-19)*** - reference §6.1a,
+  revert record 60 and 61. They were all read as Semi, so any oscillator not set to Semi was at the
+  wrong pitch - 02 Big Pad's two are Partial and were an octave high. CHECK AGAINST THE G2: 02 Big
+  Pad first, since it should now sit an octave lower; then an oscillator in each of Freq, Factor and
+  Partial, including Partial below 33 where it becomes sub-audio hertz, and Partial at 0 which
+  should be silent. OscD's table entry changed too - it has no pitch type - so check an OscD still
+  plays as it did.
+- ***TWO NEW STATUS LINES IN THE EXPERIMENTAL MENU (2026-09-19)*** - the audio device's rate, buffer
+  and CoreAudio overrun count (audioOutput.c notes §5), and every controller that is NOT at rest.
+  The second used to report aftertouch alone, so a wheel, sustain or expression pedal left standing
+  was invisible; it now names any morph group that is not zero and any bend that is not centred, or
+  says "controls at rest". Both are information only. Check they read sensibly and that the morph
+  line moves when you move a wheel or pedal.
+- ***THE STANDALONE NOW COUNTS COREAUDIO OVERRUNS (2026-09-19)*** - audioOutput.c notes §5. This is
+  the instrument for the break-up, not a fix: `kAudioDeviceProcessorOverload` is CoreAudio's own
+  verdict on whether we missed the deadline, and nothing was listening for it. WHEN YOU ARE BACK AT
+  THE MACHINE: make it break up, then read `SNDSTATUS` over the backdoor - it now reports
+  `rate= buffer= overloads=`. **If overloads is climbing, the callback really is late and the next
+  step is to find what is blocking it. If it stays at zero while you can hear the break-up, it is
+  not our render time at all** and the device, the driver or something downstream is dropping it -
+  which is what every measurement so far points at.
+- ***THE STANDALONE FOLLOWS A DEVICE RATE CHANGE (2026-09-19)*** - audioOutput.c notes §4. It read
+  the rate once when the unit opened and never again, so changing it in Audio MIDI Setup (or another
+  application opening the device first and setting it) left the engine rendering at the old rate -
+  wrong speed, and since notes §29a the wrong amount of work too. It now listens for
+  `kAudioDevicePropertyNominalSampleRate` and re-opens the output from the render loop. CHECK: play
+  something, change the rate in Audio MIDI Setup, and it should carry on at the new rate; then the
+  same with another application grabbing the device first. The plug-in is unaffected - the host
+  tells it.
+- ***PLUG-IN REMEMBERS THE LAST PATCH FOLDER AGAIN (2026-09-19)*** - plugin/g2Plugin.c. Its prefs
+  were initialised only from the editor-WIDTH hook, and both view wrappers skip that hook once the
+  instance carries its own restored width - which every reopened project has, since the editor
+  geometry went into the saved state. So nothing registered the file browser's start-directory
+  provider and the browser opened at the default folder every time (CT). Now initialised when the
+  instance is created. CHECK: open a patch from somewhere unusual in the plug-in, close the host
+  project, reopen it, and File > Open should start in that folder - and the application and the
+  plug-in should still follow each other, since they share the one key.
+- ***01 MINI EMULATOR PLAYS (2026-09-19)*** - reference §§31-37, revert record 59. The eight module
+  types it lacked are in (MonoKey, Glide, LevConv, LevAdd, Sw2-1, Sw8-1, ValSw2-1, 2-In), and with
+  them a bug that mattered more: an envelope's In/Gate/AM jacks were found by POSITION, which is
+  right for EnvADSR and wrong for the other eight, so the chain stopped dead at any ModADSR. The
+  patch built ten nodes and reported "Nothing is patched into it"; it builds 80 and sounds. NEEDS
+  AN EAR AGAINST THE G2, which is the only thing that can settle it - play it in Slot A and
+  compare. Worth listening for specifically: the octave Range switches (Sw8-1 into Pitch), the
+  Decay switch (SwOnOffT and ValSw2-1 setting the envelopes' Release), the pitch path through
+  MonoKey and Glide landing on the played note, and the Filter KBT mix.
+- ***EIGHT ENVELOPES WERE READING THE WRONG JACKS (2026-09-19)*** - reference §17.4a. Separate from
+  the above because it affects any patch with an envelope that is not an EnvADSR: EnvADR and
+  EnvMulti had In and Gate swapped, EnvAHD/EnvD/EnvH/EnvADDSR had all three wrong, ModADSR and
+  ModAHD never looked at their audio In at all. EnvADSR is UNCHANGED, so a patch using only those
+  sounds exactly as it did. CHECK a patch with each of the others - a ModADSR used as a VCA is the
+  clearest case, since it produced silence before.
+- ***VOICE ALLOCATION IS NOW THE INSTRUMENT'S SINGLE QUEUE (2026-09-19)*** - reference §15.1a,
+  revert record 57 and 58. What sounded like stealing after a few notes was not stealing: voice 0 is
+  the one the engine free-runs for drone, and it had `sounding` cleared the moment its key came up,
+  so the allocator saw it as free while it was still releasing. Once the other thirteen had been
+  used, every note landed on voice 0 and cut its own tail. The allocator no longer consults
+  audibility at all - released goes to the back of one queue, a new note takes the front. CHECK:
+  play 02 Big Pad, release notes and play them again, and the tails should now ring on undisturbed
+  through a long phrase; hold more notes than the patch's voice count and it should still steal, and
+  still keep the lowest note. ALSO WORTH AN EAR: drone mode on a patch WITH an envelope, since voice
+  0 now releases and retires before it free-runs again rather than jumping straight to free-run.
+- ***THE ENGINE NO LONGER OVERSAMPLES A DEVICE THAT IS ALREADY FAST (2026-09-19)*** - notes §29a,
+  revert record 56. It was multiplying the DEVICE rate by two, so a 96 kHz interface ran the graph at
+  192 kHz and a 192 kHz one at 384 kHz, for two and four times the CPU. It now caps at the
+  G2's own 96 kHz. AT 44.1 AND 48 kHz NOTHING CHANGES - bit-identical output, checked sample
+  for sample on four patches and on the reverb IR - so this needs checking only if you run the
+  interface at 88.2 kHz or above, where the sound does change slightly (towards what 48 kHz gives,
+  not away from it). WORTH KNOWING IF THE BREAK-UP WAS THIS: at a 192 kHz device BigPad at 16 voices
+  needed 105% of a core and simply could not play; it is 51% now.
+- ***LFO CLOCK SYNC NOW PLAYS (2026-09-18)*** - reference §28.2, revert record 50. An LFO with Range
+  set to Clk ran at a flat 1 Hz whatever its rate dial; it now follows the G2's 32 sync
+  ratios, 256 beats per cycle at dial 0 down to 1/24 beat at 127. STILL TO CHECK ON THE G2: a
+  clock-synced LFO against the hardware at a few dial settings. NOTE it uses the same fixed 120 BPM the
+  delay's Clk does, because the engine has no live master clock - so it will only agree with a G2 set
+  to 120. The other four ranges were confirmed exact and did NOT change.
+- ***EQPEAK CENTRE IS NOW THE INSTRUMENT'S LAW (2026-09-18)*** - reference §11.3, revert record 49.
+  20 x 800^(v/127) instead of the filter curve: 20 Hz at dial 0 (was 13.8) and 16 kHz at 127 (was 21),
+  agreeing with the old law only near dial 73. THIS CHANGES HOW EXISTING PATCHES SOUND wherever an
+  EqPeak sits away from the middle of its dial, and the drawn EQ curve and the dial reading move with
+  it. STILL TO CHECK ON THE G2: the dial reading against the G2's own display at several settings,
+  0 and 127 especially, and an EqPeak patch by ear. The shelf tables were confirmed exact at the same
+  time and did NOT change.
+- ***ALL NINE ENVELOPE MODULES PLAY (2026-09-19)*** - reference §17.9, revert record 52. EnvADR,
+  EnvAHD, EnvD, EnvH, EnvADDSR, EnvMulti, ModADSR and ModAHD were absent from the engine and are now
+  played from the same stage map their faces draw. EnvADSR renders bit-identically, so nothing that
+  worked before has moved. STILL TO CHECK ON THE G2: each of the eight against the hardware by ear -
+  the times and the curves especially, and EnvMulti most of all, whose rise to an intermediate level
+  is a guess. Their KB gate and Reset are NOT read yet, so they always gate from the key.
+- ***POLY NOW CYCLES ITS VOICES (2026-09-19)*** - reference §15.1a, revert record 51. Every note of a
+  separated phrase used to land on voice 0, which handed the next note a modulation envelope still
+  part-way through its release - so only the first note of a phrase had a full attack. Measured fixed
+  offline. STILL TO CHECK BY EAR: play a Poly patch with a slow filter envelope and confirm every note
+  now opens the same way, and that a fast repeated note on ONE key still behaves (§15.3 gives it a
+  fresh voice and lets the old one ring).
+- ***OSCNOISE BAND GRAPH, AND ITS WIDTH LABELS SWAPPED (2026-09-19)*** - moduleGraphics.c notes §92,
+  reference §8.1. The face's two right-hand dials now read WidthM then Width, which is the instrument's
+  own numbering and the order the engine already used - so a patch will BEHAVE the same, but the dial
+  you reach for changes. STILL TO CHECK ON THE G2: that the dial the G2 calls Width is the one we now
+  label Width, and that the band picture matches what you hear as Width is swept.
+- ***SECTION HEADINGS SIT ON A LIGHTENED BAND (2026-09-18)*** - moduleGraphics.c notes §90. Every
+  tLabelLocation heading now has a background a fraction of the way from its module's OWN colour to
+  white, so it follows whatever body colour the module is set to. Checked at 1.0 and 0.59 on the Drum
+  Synth and the Operator. STILL TO CHECK: how it looks on a module set to each of the 25 body colours,
+  the darkest shades especially - LABEL_BAND_LIGHTEN (0.28) is one number for all of them and may want
+  to be more on a dark colour.
+- ***AN OPEN MENU CLOSES WHEN THE POINTER LEAVES THE WINDOW (2026-09-18)*** - SynthLib
+  synthlibWindow.c notes §7. IN SYNTHLIB, so SynthEdit and EmuUtility get it too once the pin moves.
+  Tested end to end with a real pointer (cliclick) and the new MENUOPEN/MENUSTATE backdoor commands:
+  opens, closes on leaving, and a move WITHIN the window leaves it alone. STILL TO CHECK by hand: a
+  flyout open two levels deep, a right-click context menu (not just the menu bar), that nothing closes
+  while a drag is in progress, and the same in the plug-in editor - which has no GLFW, so it does NOT
+  get this yet and would need an NSTrackingArea.
+- ***FILE MENU SPLIT INTO PATCH AND PERFORMANCE (2026-09-18)*** - appMenuBar.c notes §13-14. The
+  performance operations were always there but only ever visible in Perf mode; they now have their own
+  heading, and the kind follows the menu item rather than the G2's mode. NEW CAPABILITY: in Perf mode a
+  single slot's patch can be saved to a .pch2, which was impossible before (the save wrote a .prf2).
+  Checked offline through the backdoor - both menus list correctly and every device item is greyed.
+  STILL TO CHECK ON THE G2, and the destructive half has NOT been exercised: Store Patch to Bank and
+  Store Performance to Bank from their own menus (peek-and-confirm should name the right kind), Store
+  Back to Bank b:l, Delete Patch/Performance, that the perf bank items grey out in Patch mode and come
+  live in Perf mode, and that Save Patch As... in Perf mode really writes one slot as a .pch2. Also the
+  plug-in's own two menus (no bank items there).
+- ***BACKDOOR: PER-INSTANCE CHANNEL AND QUIT (2026-09-18)*** - backdoor.c notes §1a, §25a, §25b.
+  $G2ALIKE_BACKDOOR_CHANNEL names the command/result pair so a test's editor cannot be answered by one
+  already running on a live G2; QUIT shuts down through the normal teardown instead of a signal; and a
+  MENU listing now marks greyed items [disabled]. Checked offline. STILL TO CHECK: that tools/face-shots
+  and anything else on the default channel still work unchanged (the default is untouched), and that
+  QUIT leaves prefs.txt written as a window-close does.
+- ***A NODE BOTH MORPH AXES MOVE IS MERGED PER VOICE (2026-09-18)*** - reference §26.2.2. A Vel morph on
+  one parameter of a module and a Keyb morph on another are now both delivered; the Vel one used to be
+  thrown away entirely. Checked offline on an EnvADSR (Vel on Sustain, Keyb on Decay): 1687% out before,
+  0.00% after. The same parameter moved by both axes is now covered too (reference §26.2.3): a build at
+  the PAIR of amounts for the words both axes move, 7.66% out before and 0.14% after. STILL TO CHECK BY EAR AGAINST THE G2, and four patches now exist for it (morphcheck --write):
+  PatchTestFiles/MorphVelFilter (velocity opens the filter), MorphKeybFilter (the key does),
+  MorphSplitEnv (Vel on an envelope's Sustain, Keyb on its Decay - this entry's case) and
+  MorphSameDxLevel (both on one Operator Level - the case still 7.7% out). Load each on the G2 and in
+  the editor and compare; none of §26.2 has ever been heard against the instrument.
+- ***NEW PATCH STOPS THE VOICES (2026-10-04)*** - sound-engine-notes §171. From a droning or self-playing patch
+  (18 Unreal Dreams) load a simple one (04 Chris' Pad): it must be silent until played. Re-cabling while a
+  key is held now stops the note, as the G2's recalculation does.
+- ***VOICE THREAD SCHEDULING (2026-10-04)*** - sound-engine-notes §208. A heavy patch (Ice Pad, Unreal Dreams on
+  Half) with the app's window behind Terminal or another app: no more break-up than in front; "late" should
+  not climb faster in the background.
+- ***LATE BLOCKS IN THE STATUS (2026-10-04)*** - sound-engine-notes §207. When a heavy patch breaks up, the
+  status line's "late N" should be climbing; if the sound breaks up while it stays at 0, the cause is not
+  the engine's time and wants looking at again.
+  The status figures (late, load, overruns) clear on a new patch, re-cabling, or another slot selected.
+- ***VOICES RETIRE / DRONE PER PATCH (2026-10-04)*** - sound-engine-notes §170, §206. A patch whose sound needs a key now idles at a fraction of the load (CS80 ~13%, Mini Emulator
+  ~8%); a patch that sounds at rest (07, 09, 10, 13, 15, 16, 18) still does, and an edit that makes a patch
+  sound at rest (an oscillator wired past its envelope) starts it droning at once. After a chord on a poly
+  patch, the load falls back once the releases end; nothing cut short. (No Drone Mode switch any more.)
+- ***ECONOMY ENGINE RATE (2026-10-04)*** - sound-engine-notes §205. In the app at 48 kHz: Settings > Audio >
+  Engine Rate > 48 kHz economy while a patch plays - the device reopens with a short gap, the load halves,
+  the stage patches sound the same; switch back and nothing is left changed. Listen above all to reverb
+  tails, FltNord and Phaser patches (11, 18), and noise patches (05, 06, 12).
+  The app ran on the Fireface at 44.1 kHz (load 95% -> 73%, no overloads) but was not LISTENED to there.
+  Plug-in: Settings > Half Rate (economy) while playing - the load drops at once, a held note is cut and
+  the next plays; save and reopen the project and the setting comes back; a new instance takes the last
+  setting chosen.
+- ***FOUR SLOTS (2026-10-04)*** - sound-engine-notes §204. ONLY ACTIVE SLOTS PLAY (fixed the same day - inactive
+  slots were sounding): with the G2's slots B-D inactive, nothing sounds at rest unless the selected patch
+  does; Shift+slot on the G2 to make one active and its patch joins in. In the app with the engine on: patches in A and B,
+  play - only the selected slot sounds, switching slot while a key is held still releases it. Performance
+  mode with Keyboard on for A and B: both sound; with Key Range on and split ranges, each its own half.
+  A slot's own MIDI channel from another controller plays that slot. In the plug-in: a performance file
+  plays its keyboard slots together. Meters and LEDs follow the selected slot.
+- ***STATUS PATCH ACTIVE LOW (2026-10-04)*** - reference §70.13. LISTEN: SeqOscExp (bank 5:23) plays in the app and plug-in as on the G2;
+  any other patch using Status Patch Active still behaves.
+- ***CONTROL MODULES AT 24 kHz (2026-10-04)*** - sound-engine-notes §203. LISTEN: patches heavy in LFOs,
+  envelopes and sequencers against before - no change in sound or timing expected; the CPU readout lower.
+- ***RENDER AHEAD (2026-10-04)*** - audioOutput.c notes §7, Settings > Audio > Render Ahead. On the Intel MacBook,
+  a patch that breaks up: does 10 or 20 ms cure it, and does Off behave exactly as before.
+- ***THE VOICES ON THEIR OWN THREAD (2026-10-04)*** - sound-engine-notes §202. LISTEN: patches with an FX area
+  in the app and the plug-in, at small buffers - no clicks, no dropouts, and the CPU readout lower on heavy
+  patches; Settings > Audio > Multi-threading switches it off in the app to compare.
+- ***OVERDRIVE BY THE INSTRUMENT'S LAW (2026-10-04)*** - reference §71. LISTEN: 14 CS80project72 in the
+  engine against the G2 - CT heard it distort on one note; the OverDrive was the first stage that differed.
+- ***DX OPERATOR AND DXROUTER BY THE INSTRUMENT'S LAWS (2026-10-03)*** - reference §14. Checked on the
+  G2 already: the envelope's shape, the level, FM depth, feedback, keyboard level and rate scaling, and
+  levels above 99. Velocity confirmed too (Vel 7, MIDI velocities 127/100/64/30, within
+  0.03 dB). STILL TO CHECK: algorithm 28 by ear (Operator 2 is on Main as well); 19 DxPiano and PatchTestFiles/Dx.pch2
+  against the G2 by ear.
+- ***DXROUTER OPERATORS FOLLOW THE VEL AND KEYB MORPHS (2026-09-18)*** - reference §26.2.1. A Vel or
+  Keyb morph on an Operator's own dials (Level, the ratio, the envelope) now moves per voice; it moved
+  nothing at all before. Checked offline on DXTest.pch2 to within 0.04% rms of the dial turned down by
+  hand. STILL TO CHECK by ear against the G2: a velocity-sensitive FM patch, the brightness especially,
+  since a Vel morph on a modulator's Level is what makes one. Two morphed routers per axis is the cap.
+- ***G2 ALIKE REBUILDS THE SNAPSHOT OFF THE AUDIO THREAD (2026-09-18)*** - g2Plugin.c notes §14. A
+  moved morph was folded in at the top of render() - up to ~3.6 ms of node building, and a mutex the
+  editor's thread holds every frame. A per-instance thread does it now, polling at 4 ms. Built and
+  loads (auval pending). STILL TO CHECK in a host: the mod wheel and aftertouch still move the sound
+  and still feel immediate, automation on the eight morph parameters, no crackle on a small buffer, and
+  nothing left behind when a track is deleted or the host stops and restarts the plug-in.
+- ***OSCA/OSCB/OSCC/OSCD WAVES AGAINST THE INSTRUMENT (2026-09-17)*** - reference §6.3. Saw and square are
+  duller at the top (up to 4 dB by 18 kHz, as the G2), the saw now rises, squares carry no DC, OscB's fifth
+  wave is DualSaw (it was three detuned saws), the sine is the instrument's. Harmonics checked against
+  captures; STILL TO CHECK by ear, a high OscB saw or a DualSaw patch especially.
+- ***FILTER GRAPH PEAK STEADY AT FULL RESONANCE (2026-09-17)*** - code-notes/moduleGraphics.c.md §68a. FltClassic at Res 127: sweep Freq, the peak should glide rather than jump.
+- ***STAGE PATCHES: S&H, KEYQUANT, AND EVERY OUTPUT ON AN FX BUS (2026-09-25)*** - reference §38.5, §41,
+  notes §75. Play 08 Ice Pad (its second branch now sounds, +7.7 dB), 15 Randee dz, 09 Antarktis and
+  10 Troll against the G2; check KeyQuant's Closest/Evenly on a held S&H sequence.
+- ***OSCPERC PLAYS (2026-09-25)*** - reference §40. New module, from the reference model; offline
+  it matches the G2 at E4 across Decay, Click and Punch. By ear against the G2: a Trig from the Keyboard,
+  Decay 20-127, Click 0/127, Punch on (an octave-up first half cycle), and an unpatched Trig (silent).
+- ***OSCSHPB SINE3/SINE4 RUN THE REFERENCE MODEL (2026-09-25)*** - reference §27.3. Offline they
+  match the G2's 17 September sweep to 0.001 at every Shape; about 0.4 dB quieter than before at Shape 64
+  (level slope 0.703 for 0.642), and the top of the dial now wraps as the hardware's division does. By ear
+  against the G2: Sine3 and Sine4 at Shape 96-127.
+- ***OSCSHPB AND OSCDUAL ON THE INSTRUMENT'S LAWS (2026-09-17)*** - reference §27.5, §12.5. OscShpB matches its
+  harness sample for sample (TriSaw near-exact); OscDual's sub lost its shelf (fuller bass), square/saw/sub
+  polarities and saw rotation follow the instrument, mod inputs deeper. Listen, OscDual's sub especially; the old
+  code is kept verbatim in Docs/oscillator-code-before-edge-conversion.md.
+- ***RANDOM OSCILLATOR START PHASE (2026-09-17)*** - notes §63. Two oscillators at the same pitch in one voice
+  now sound different in each voice and after each load, as on the G2. Check by ear on a layered patch
+  (two OscB saws at the same pitch, chords): the voices should no longer all share one timbre.
+- ***OSCSHPB ALL EIGHT WAVES AGAINST THE INSTRUMENT (2026-09-17)*** - reference §27. DblSaw is now 6 dB
+  louder (two full saws), Pulse loses its DC offset and narrows to nothing at full Shape, Sine1 and Sine2
+  follow the instrument exactly (Sine2 up to 6 dB louder above Shape 0, and thinner at very low pitch),
+  Sine3/Sine4 quieter above Shape 0. STILL TO CHECK by ear against the G2, DblSaw's and Sine2's levels
+  especially, and a low Sine2 note.
+- ***G2 ALIKE KEEPS ITS PATCHES IN THE PROJECT (2026-09-17)*** - the state record ends with the whole
+  instance as a .prf2 image. Checked with tools/vst3host: a record built from DualBob.prf2 restores the
+  performance (editor shows it), and saving, reloading and saving again gives identical bytes. STILL TO
+  CHECK in Live: edit a patch, save the set, reopen - the edit and the Voice/FX divider are back; the AU
+  too; a set saved by an older build opens empty without complaint.
+- ***STORE BACK TO BANK; SAVE AND STORE BACK EXCLUSIVE (2026-09-17)*** - File > "Store Patch/Perf Back to
+  Bank b:l..." stores to where the patch (or performance) was loaded from, through the usual
+  peek-and-confirm; greyed when it did not come from a bank. A bank load greys Save (to the last file),
+  and opening or saving a file greys Store Back. Checked on the G2 (no store): bank 5:21 into slot A,
+  then Open Recent, then the bank again - the two swap each time, and a late version notice did not
+  undo the file load. STILL TO CHECK: the Store itself, a performance, a patch changed on the G2's
+  panel (both greyed), and a bulk edit (neither changed). Save now reads 'Save Patch Back to File "name"' to match
+  (checked offline).
+- ***KEYB MORPH PER VOICE (2026-09-17)*** - reference §26.2. Checked offline: a Keyb morph +127 on a
+  mixer level is silent at note 36, dial ~64 at note 66 and full at 96. STILL TO CHECK: a
+  Keyb-morphed patch against the G2 by ear.
+- ***VEL MORPH PER VOICE, SUSTAIN PEDAL (2026-09-17)*** - reference §26.2-26.3. Checked offline by
+  rendering straight to memory: a Vel morph on a mixer level follows the velocity to the dial it maps
+  to, and the pedal holds a released note at its sustain level. STILL TO CHECK: a velocity-morphed patch
+  against the G2 by ear, the pedal in a host and from a MIDI keyboard, and that a knob turned while
+  notes sound still moves smoothly.
+- ***G2 ALIKE STARTS WITH THE WHEEL AT 0; SHARED LAST FOLDER (2026-09-17)*** - the eight morphs and
+  pitch bend are no longer saved in a host project (and an old project's values for them are
+  ignored), so the wheel starts at rest. The file browser's last folder is kept in G2Alike's own
+  prefs.txt by both the application and the plug-in. STILL TO CHECK: reopen a Live set that had the
+  wheel up; open a patch in one and see the other start in that folder.
+- ***ENVADSR OUTPUT TYPE AND NORMAL/RESET (2026-09-16)*** - the engine now reads both (reference §17.6,
+  §17.7), matched against the envelope. STILL TO CHECK BY EAR: a Bip/BipInv filter
+  envelope and a Reset retrigger against the G2, and a patch using PosInv or Neg.
+- ***VELOCITY IN THE ENGINE AND THE PLUG-IN (2026-09-16)*** - notes carry velocity from MIDI, the
+  Virtual Keyboard and the plug-in's host; the Keyboard module (Pitch, Gate, Lin, Release, Note, Exp) and
+  the EnvADSR AM jack are modelled (reference §17.5, §26). Checked offline: Lin into AM halves the level
+  at velocity 64, Exp takes it to about an eighth. STILL TO CHECK: velocity-sensitive patches against the
+  G2 by ear, in the application and in a host (G2Alike), and that a Keyboard Pitch or Note into a
+  filter or oscillator tracks as on the G2.
+- ***ENVADSR KB AND GATE JACK (2026-09-16)*** - the engine now honours KB (the keyboard gate) and the
+  Gate jack (reference §17.4). Checked offline on 03 Chris' Lead: KB off on both envelopes silences it,
+  KB on restores it, a Keyboard module's Gate in the jacks still plays, an LFO in the jacks gates it.
+  STILL TO CHECK BY EAR: that patches with KB off and a gate patched sound as on the G2.
+- ***THE PLUG-IN'S MENUS OPEN THEIR PANELS, AND MENU CLICKS NO LONGER FALL THROUGH (2026-09-16)*** -
+  two CT reports, one cause: register_app_popups() lived in graphics.c, which do-plugin does not
+  compile, so in G2Alike no floating panel was ever drawn or clicked (Settings > Synth/Patch/Perf/
+  Notes, Parameter Pages/Overview, MIDI Controller List, Tools > Mutator/Virtual Keyboard/Patch
+  Adjuster, Help) and the menu bar was handled by hand on the PRESS, leaving the release to trigger
+  whatever button lay underneath. The panels and the coordinator are now src/settingsPanels.c and
+  src/floatingPanels.c, in both builds, and g2Input.c dispatches through synthlib_popups_dispatch_click()
+  exactly as mouseHandle.c does. STILL TO CHECK IN A REAL HOST: each of those entries opens a panel
+  that draws, drags by its title bar, closes by its button and by Escape; that a menu click no longer
+  fires the control beneath it; that panels stack and raise on click; and that the application is
+  unchanged by the move.
+- ***V TOGGLES VOICE-AREA-ONLY (2026-09-16)*** - manual p64, in both the application and the plug-in
+  through one shared split_view_toggle_voice_area_only(); the return leg is the same remembered
+  position the split bar's double-arrow uses. Added to the Help panel's VIEW section. STILL TO CHECK:
+  V collapses the FX area and V again comes back to where the divider was, in both editors; that it
+  does NOTHING while typing a patch/module/parameter/synth/perf name; that Cmd V still pastes; that
+  it survives a slot change (the divider is per slot); and that the move lands on the G2 as a patch
+  edit. NOT DONE, and deliberately: the manual's twin F for FX-Area-only. F is a white key in the
+  computer keyboard's note entry, and CT's call on 2026-09-16 was not to bind it for now - the
+  reasoning is kept in mouseHandle.c.md §36 rather than on todo.md.
+- ***THE PLUG-IN NO LONGER LOADS A PATCH BY ITSELF (2026-09-16)*** - CT: "We shouldn't be loading the
+  last loaded patch file." g2_get_state() names no file, g2_set_state() opens none and puts every slot
+  back to an empty patch, and default_patch_path()/load_patch() are gone - so $G2_PLUGIN_PATCH,
+  $G2_VST3_PATCH and ~/Documents/G2Alike/plugin.pch2 no longer do anything. The remembered Save paths
+  are cleared with them, so Save cannot aim at a file that was never loaded. STILL TO CHECK IN A REAL
+  HOST: a new instance comes up empty and silent; reopening a project comes back empty rather than
+  reloading the old patch; File > Open still works and File > Save then targets the right file; and a
+  project saved by the PREVIOUS build (which has slot0=/perf= in its record) opens empty without
+  complaint. The divider (`split=`) still restores - CT confirmed it storing before this change, and
+  it is applied after the empty patches for that reason, so it is worth re-checking alongside.
+- ***KEYQUANT KEYBOARD AND DXROUTER ALGORITHM GRAPH (2026-09-13)*** - KeyQuant's twelve notes are
+  one octave of keys (the old on/off buttons are no longer drawn); DXRouter draws the selected DX7
+  algorithm, its feedback loop orange when Feedback is above 0. Eight algorithms screenshot-checked
+  against the DX7 chart. STILL TO CHECK: clicking a key toggles that note on the G2 (and undo).
+- ***DX TEST PATCH, AND OPERATOR/DXROUTER IN THE ENGINE (2026-09-13)*** - PatchTestFiles/DXTest.pch2
+  (an E.Piano, algorithm 5) is in Slot A on the G2; the engine plays DXRouter patches (§14). STILL TO
+  CHECK: play it on the G2 and on the engine and compare by ear - brightness (FM depth), the feedback
+  operator's edge, level with several carriers (Main scaling), decay times - then capture both.
+- ***ENVELOPE HANDLES, GRAPH AREAS NO LONGER DRAG THE MODULE (2026-09-13)*** - a handle on each
+  timed breakpoint of every envelope graph (time sideways, level up/down where it is a parameter);
+  a press on a graph off its handles does nothing. Checked by real drags on EnvADSR. STILL TO CHECK:
+  by hand on EnvMulti, EnvADDSR and Operator, undo of a two-axis drag (two steps), and how the handles
+  feel on the small EnvD/EnvH graphs.
+- ***RANDOM CLOCKS, LEVSCALER AND SW2-1 TIDIED (2026-09-13)*** - RndTrig, RndClkA, RndClkB and
+  RndPattern on one face with Seed/Bypass/Out down the right; LevScaler and Sw2-1(M) fixed.
+  Screenshot-checked at 1.0 and 0.59. STILL TO CHECK: CT's eye.
+- ***COMPRESS GRAPH WITH DRAGGABLE HANDLES (2026-09-13)*** - static curve, three handles that drag
+  Thr/Ratio/RefLvl following the pointer, a live dot from the gain-reduction LEDs, the dB
+  marks, and the three dials reading dB and :1. One real drag checked offline (Thr -12 -> +5 dB); the
+  live dot followed the G2's own meter, and the engine's meter now matches the G2's step for step.
+  STILL TO CHECK: by hand in every dial mode (rotary, vertical, horizontal), Alt-drag on a handle for
+  morph, undo after a handle drag, and the Ratio/RefLvl handles.
+- ***OPERATOR REWORKED (2026-09-13)*** - face re-laid by rule, envelope and level-scaling graphs,
+  Coarse read the DX7's way (x0.50..x31 with Fine in Ratio, Hz in Fixed). Screenshot-checked with
+  scripted values. STILL TO CHECK: Coarse's reading against the G2's own display at a few settings in
+  both modes, the graphs following the dials by hand, and CT's eye on the face.
+- ***FACES CLEAR OF A 16-W NAME (2026-09-13)*** - NoteQuant, CtrlSend, NoteSend and EnvADR re-laid
+  by rule because their labels or graph ran into a sixteen-W name; KeyQuant given room under its
+  name. Screenshot-checked at 1.0 and 0.59 with --name-band. STILL TO CHECK: CT's eye.
+- ***SHAPER AND EQ GRAPHS (2026-09-13)*** - Clip, Overdrive, Saturate, ShpExp and WaveWrap draw their
+  transfer curve, EqPeak, Eq2Band and Eq3band their response. Checked by screenshot at zoom 1.0 and
+  0.59 with scripted values. STILL TO CHECK: turn each dial by hand and watch the curve follow.
+- ***LEVEL GROUP RE-LAID OUT BY RULE (2026-09-13)*** - all 16 faces (Constant, ConstSwM/T, CompLev,
+  CompSig, LevAdd, LevAmp, LevConv, LevMod, LevMult, MinMax, ModAmt, NoiseGate, EnvFollow, Red2Blue,
+  Blue2Red) to module-layout-rules.md's "common face": In top-right, Out bottom-right, the 16% grid.
+  Screenshot-checked at 1.0 and 0.59. STILL TO CHECK: CT's eye - especially whether one- and
+  two-dial faces should stay left-aligned or move their controls towards the I/O column.
+- ***DELAYS AND PITCH/FX RE-LAID BY RULE (2026-09-13)*** - DelayDual, DelayQuad, DlyEight,
+  DlyShiftReg, DlyClock and DelayA on DelayB/DlyStereo's template (Range top-left, Time/Clk over the
+  Time dial, columns 19/36/53/70, taps ending bottom-right); PShift, FreqShift, Scratch and Digitizer
+  on the oscillators' pattern. DlySingleA/B, DelayB and DlyStereo untouched. The range selectors now
+  read "Range" on every re-laid face - DlySingleB still says "Slope". Screenshot-checked at 1.0 and
+  0.59. STILL TO CHECK: CT's eye.
+- ***MIXERS: EXP IN ONE SLOT, MIX2-1 CHANNELS CLEAR OF THE OUT (2026-09-13)*** - only what CT asked
+  for, the rest of the approved mixer faces untouched: Exp top-left after the Chain (Mix1-1A/S, and
+  "Curve"/Pad top-left on Mix8-1B); Mix2-1A/B channels 8% left and aligned with each other; Mix8-1A
+  inputs 5% left, off the meter they overlapped; ModAmt's Exp top-left and its Mod jack beside
+  Depth. Screenshot-checked at 1.0 and 0.59. STILL TO CHECK: CT's eye.
+- ***ENVELOPE GRAPHS ON ALL NINE ENVELOPES (2026-09-13)*** - EnvADSR's graph generalised to EnvADR,
+  EnvAHD, EnvD, EnvH, ModADSR, ModAHD, EnvADDSR and EnvMulti, stages from the manual. STILL TO CHECK:
+  EnvADSR still draws exactly as before; each Output Type, EnvADR's Decay/Release with Trig and Gate,
+  EnvADDSR's Sustain L1/L2, EnvMulti's Sustain and Reset.
+- ***FLTCOMB, FLTPHASE AND VOCODER GRAPHS (2026-09-13)*** - comb teeth from the engine's law, the
+  phaser from a model fitted to the 2026-08-29 figures (its Spread law is a placeholder), the
+  Vocoder's band routing. Checked by screenshot at zoom 1.0 and 0.59. STILL TO CHECK: by hand, and
+  FltPhase's graph against the G2's sound at a few Freq and Spread settings.
+- ***FLTCOMB PLAYS IN THE ENGINE (2026-09-12)*** - all three Types from the measured laws (§13); by
+  meter 10 of 10 settings read the same as the G2. STILL TO CHECK by ear: Freq swept with high FB,
+  Deep at full feedback (approximate, §13.4), Kbt, and the FB Mod input (depth unmeasured).
+- ***OSCDUAL PLAYS IN THE ENGINE (2026-09-12)*** - pulse, phased saw and a shelved sub-octave (§12).
+  By meter one value above the G2 almost everywhere (§12.5). STILL TO CHECK by ear: the sub with Soft
+  off and on against the instrument, PW and Phase modulation (depths unmeasured).
+- ***EQPEAK, EQ2BAND AND EQ3BAND PLAY IN THE ENGINE (2026-09-12)*** - measured laws (§11), fits
+  0.5-0.7 dB; by meter all 16 settings read the same as the G2. STILL TO CHECK: by ear with swept
+  dials, Bypass, and a deep wide cut above 1 kHz (§11.5).
+- ***FLTMULTI PLAYS IN THE ENGINE (2026-09-12)*** - the reference model's Chamberlin filter with all three
+  outputs (§10); its responses fit the instrument's to 0.5-0.6 dB. By meter, 16 of 19 settings read the
+  same as the G2 and the rest are one value apart, each with mixed readings on both sides. STILL TO
+  CHECK: by ear with a swept Freq and Res near 127, GComp off, and the Freq and Pitch inputs.
+- ***OSCNOISE PLAYS IN THE ENGINE (2026-09-12)*** - two band-passes in series at the pitch, Q from the
+  measured Width law (§8). STILL TO CHECK: the narrow end (Width below 80, extrapolated, not resolved)
+  by ear against the instrument, and the Width input's depth (from the reference model).
+- ***THE NOISE MODULE PLAYS IN THE ENGINE (2026-09-12)*** - white noise through the Color dial's
+  one-pole, corner and level from a 17-point measurement of the instrument. By meter, 6 of 9 Color
+  settings read the same as the G2; at the brightest the engine reads one value higher (its noise
+  peaks past full scale more often - a crest difference, not level or spectrum). STILL TO CHECK by
+  ear: Color swept on a real patch, engine against instrument.
+- ***OSCC AND OSCD PLAY IN THE ENGINE (2026-09-12)*** - OscA's oscillator with the waveform read as a
+  mode; checked on the G2 as identical to OscA (0.25 dB). STILL TO CHECK by ear in a real patch.
+- ***PAN, X-FADE, FADE1-2, FADE2-1 AND MIXSTEREO PLAY IN THE ENGINE (2026-09-12)*** - each law measured
+  on the G2 at the converter and checked against the reference model; the engine's meters then
+  agreed with the G2's on 63 of 63 readings. STILL TO CHECK: the Mod/Ctrl input's depth (taken from
+  the reference model as 4x the dial range at full attenuator, not yet measured), and by ear, a
+  patch that pans or crossfades under modulation.
+- ***THE WHOLE MIXER FAMILY PLAYS IN THE ENGINE (2026-09-12)*** - Mix1-1A/S, Mix2-1A/B, Mix4-1A/B,
+  Mix8-1A/B and MixFader join Mix4-1C/S, and every Chain input now sounds (it never did). Checked on
+  the G2: 106 configurations within 0.07 dB. STILL TO CHECK by ear: a real patch that chains mixers
+  or uses Mix8-1B/MixFader, engine against instrument.
+- ***ENGINE METERS FOLLOW THE G2's LAW, AND ITS MIXERS THE MEASURED TAPER (2026-09-12)*** - one meter
+  value per octave of peak (9, 11, 12 above full scale), and Mix4-1C/4-1S levels as cube + 1%.
+  Checked on the instrument: engine and G2 meters agree on 67 of 80 steps of a sweep, the rest one
+  value high at boundaries. STILL TO CHECK by eye: a busy patch with the engine on and off - the
+  module faces' meters should look the same either way.
+- ***G2 ALIKE SAVES ALL FOUR SLOTS, AND PERFORMANCES (2026-09-12)*** - the project now stores each
+  slot's patch path and the selected slot, or the .prf2 path in performance mode, where it stored
+  only slot A. File > Open takes a .prf2 (all four slots, Perf Mode on), and in Perf Mode File > Save
+  writes a .prf2. Projects saved before still open, into slot A. Checked with tools/vst3host
+  --dump-state: old path, .prf2, slots A+C with C selected, and a .prf2 with slot B selected all
+  come back as saved, and the editor shows the right slot lit; File > Save Perf, clicked in the
+  editor, wrote the .prf2 back and it reloads (but see todo.md: the writer changes Morph 8's label
+  and a cable filter, in the app too). STILL TO CHECK in Live: save a set
+  with patches in A and C and C selected, reopen it; open a .prf2 from File, save it under a new name
+  and open that in G2Alike.
+- ***SMALL DRAWS NO LONGER ALLOCATE A METAL BUFFER EACH (2026-09-11)*** - SynthLib's Metal backend
+  passes any draw of up to 4 KB of vertices (128 vertices) with setVertexBytes, which is most of
+  them, instead of creating a buffer per draw call. All three applications and all three plug-ins
+  draw through it. Checked: the three plug-in editors draw as before in tools/vst3host, and the
+  continuously repainting panels' idle CPU fell (GenBridge 3.5% -> 2.9%, MidiSyncTool 4.8% -> 3.6%).
+  STILL TO CHECK: the three applications look exactly as before - text, cables, meters, menus.
+- ***G2 ALIKE IS MULTI-INSTANCE (2026-09-11)*** - every instance owns a whole document (all four
+  slots, the patch and performance settings) and an engine of its own; nothing is shared but the
+  editor's panels. Checked offline: two engines rendering different patches on two threads at once
+  are sample-identical to each rendered alone (0 of 204,800 samples differ); tools/vst3host
+  --instances 2 loads two connected instances in one process, each editor drawing its own patch;
+  the application's output is bit-identical to before (same checksum). STILL TO CHECK in Live: (1)
+  two tracks of G2Alike, a different patch in each, both playing - each must sound only its own;
+  (2) both editors open at once, editing each - a dial in one must not move the other; (3) A-D in
+  the editor now switch slots (they used to snap back to A) and the engine plays the selected one;
+  (4) a patch opened from the editor's File menu is the one the project reopens with - it used to
+  be forgotten. Known limits are in todo.md (shared editor panels, no performance playback yet).
+- ***NOTES START AT THEIR OWN SAMPLE (2026-09-11)*** - G2Alike used to start every note at the
+  start of its block. tools/vst3host --offset-test N: a note at sample 0, 256 and 400 is heard from
+  frame 28, 284 and 428 - the offset plus the engine's fixed 28-frame latency. Worth hearing in
+  Live as tighter timing on fast, quantised parts at large buffer sizes.
+- ***THE PLUG-IN EDITOR'S POPUPS TAKE THE KEYBOARD (2026-09-11)*** - a filename can be typed into
+  File > Save As, and Escape and Enter close dialogs; the plug-in never passed keys to SynthLib's
+  popups. Untested by hand: type a name, backspace, arrows, Enter.
+- ***THE EDITOR NO LONGER SLOWS DOWN THE LONGER IT IS OPEN (2026-09-11)*** - CT's "does not refresh
+  as quickly as standalone". do-plugin compiled the Metal backend without ARC, so every vertex buffer
+  leaked: in tools/vst3host, forty seconds of pointer movement took the process from 1.7 GB to 12.7 GB
+  and a frame from 3.8 ms to 44 ms (60 frames a second down to 23). Built with ARC: 511 -> 523 MB and
+  a flat 3 ms at 60 frames a second over the same run. In Live the meter timer redraws 20 times a
+  second while the engine runs, so it leaked whether or not the mouse moved. STILL TO CHECK in Live:
+  leave the editor open on a playing patch for a few minutes - it should stay as responsive as the
+  application, and Activity Monitor should show Live's memory flat. For numbers, `launchctl setenv
+  G2_PLUGIN_FRAME_STATS 1` before starting Live, and Console shows a line a second from the editor.
+- ***SHAPER CURVES FROM THE INSTRUMENT'S LAWS (2026-09-13)*** - paramCurves notes §31-§36. STILL TO
+  CHECK by ear against the G2 with a sine at full scale: Clip at Level 64 (clips at half scale, much
+  gentler than before); ShpStatic Inv x3 (a fast rise, not a cube root); Saturate Curve 4 at full Amount;
+  ShpExp x5 at half Amount. And a hot signal (a LevAmp at 4x) into each - it now keeps its level.
+- ***ENVELOPE AND PULSE TIMES FROM THE INSTRUMENT'S LAWS (2026-09-13)*** - reference §17, §18. STILL TO
+  CHECK by ear against the G2, same patch: (1) an EnvADSR with Decay 64 and Sustain 0 - the tail should
+  now match, where the engine's used to run about 6% long; (2) Attack 127 LinExp takes about 50 s, not
+  45; (3) retriggering a slow Exp attack part-way up reaches the top much sooner than from zero.
+- ***CONSTANT POLARITY AND PITCH-INPUT SCALE CORRECTED (2026-09-13)*** - reference §16. STILL TO
+  CHECK, engine against the G2: (1) a Constant set Bipolar at 76 into an OscA's Pitch input, KBT off -
+  an octave above E4 (659 Hz), and Unipolar at 76 (38 units) 38 semitones above E4; (2) an
+  LFO at full depth into a Pitch input sweeps about five octaves each way on both; (3) a patch with
+  vibrato from an LFO into PitchVar - the engine's used to be a fifth as deep.
+- ***THE ENGINE VOICES LIKE THE G2 (2026-09-13)*** - reference §15. The engine keeps the keys held
+  itself; Mono and Legato go back to the HIGHEST key still held (not the newest); Mono restarts the
+  envelopes on every change of note including that return, Legato on neither; a Poly steal spares
+  the lowest note; patch glide is constant rate. The computer keyboard now sends every key to both
+  targets, so it plays chords in Poly. Checked offline on SimpleLead with a plucked envelope (attack
+  0, decay 40, sustain 0), first 100 ms after each event: Mono 0.018 RMS on each new key and 0.0105
+  on the return, Legato 0.0008 and below; hold 67, 60, 64, let 64 go -> 67, let 67 go -> 60. Poly, 2
+  voices: 48, 60, 72 keeps 48 and drops 60. STILL TO CHECK, engine against the G2 with the same
+  patch, from the computer keyboard and a MIDI keyboard: (1) Mono, hold G, play C, play E, let E go -
+  G should sound and restart; (2) Legato the same - G without a restart; (3) Poly at 2 voices, hold
+  C3 and C4, play C5 - C3 should survive; (4) glide Normal: an octave should take about twice as
+  long as a fifth; (5) a chord from the computer keyboard in Poly.
+- ***THE PLUG-IN WRAPPERS ARE PER-INSTANCE NOW (2026-09-11)*** - SynthLib's VST3 and AU wrappers were
+  reworked so several copies of a plug-in can be loaded at once (a controller finds its own processor
+  through the host's connection, not a global), and the saved state moved from "SLP1" to "SLP2".
+  Checked offline: auval clean, tools/auhost renders SimpleLead (peak 0.0716) and opens the editor,
+  tools/vst3host opens the editor, and SynthLib/plugin/test passes (21 multi-instance checks, state
+  round trips). STILL TO CHECK in Live: (1) a set saved by the 2026-09-09..10 build reopens with its
+  patch and parameter values - that is the SLP1 read path; (2) automation, the host's generic panel,
+  mod wheel and pitch bend; (3) in Logic or GarageBand, the mod wheel and bend again, since the AU now
+  queues its MIDI and delivers it inside the render rather than on arrival.
+- ***THE AUDIO UNIT (2026-09-09)*** - "G2Alike.component", aumu G2al CPur, built by ./do-plugin
+  from the same sources as the VST3. auval -v aumu G2al CPur passes clean with no warnings, and
+  tools/auhost opens its Cocoa editor and renders a note. Ableton confirmed working by CT on the
+  day. STILL TO CHECK: Logic and GarageBand, which are the sandboxed hosts - if the plug-in cannot
+  reach ~/Documents the patch path yields silence that looks like every other cause of silence.
+  Also worth confirming there: automation of the ten parameters, the mod wheel and pitch bend
+  (which the AU wrapper maps itself from raw MIDI, where a VST3 host does the mapping), and that a
+  saved project reopens playing the same patch.
+- ***THE SHARED PLUG-IN WRAPPERS (2026-09-09)*** - the VST3 is no longer its own g2Vst3.cpp; it is
+  SynthLib's generic wrapper driven by plugin/g2Plugin.c. Behaviour should be identical, but the
+  paths that changed and are not covered by tools/vst3host are: a project SAVED by an older build
+  reopening (the state blob has a header now, and a headerless blob is meant to be read as a bare
+  patch path), the host's own generic parameter panel, and automation recorded before the change.
+- ***THE PLUG-IN'S METERS AND LEDs NOW REDRAW ON THEIR OWN (2026-09-09)*** - the application half of
+  this landed on 2026-09-08; the plug-in had no consumer for the engine's dirty flag, so its
+  compressor LED and volume meters moved only while the mouse did. Open the editor in a host with a
+  patch playing and confirm the compressor's gain-reduction LED and the module volumes move with the
+  mouse still. Worth checking too that an LfoShpA LED blinks at the LFO rate, and that closing and
+  reopening the editor leaves nothing running - the timer is stopped in -removeFromSuperview and
+  -dealloc, and it retains the view through its block.
+
+HARDWARE CHECKS
+
+FROM THE 2026-08-30/31 MEASUREMENT SESSION - engine changes, none of these heard yet
+- OscB's Tri is no longer skewed by Shape. BEHAVIOUR CHANGE: any patch using OscB on Tri with
+  Shape off zero will sound different, and at the top of the dial it used to be a sawtooth
+- Sine2's clamp lowered 0.03 -> 0.005, so it opens fully at Shape 99% (was 4.5 dB short)
+- FltNord: GC now modelled, and the borrowed ladder's passband droop cancelled - the module was
+  both too loud and drooping where the instrument is flat. Biggest audible change of the set
+- OscShpB Shape now reaches the models as 0..1 rather than 0.5..0.99; matters at the BOTTOM of
+  the dial, where raw 0 used to render half-shaped instead of a pure sine
+- Free-running oscillators, on by default. G2_ENGINE_NO_FREERUN=1 restores note-gated behaviour.
+  Confirm a note-off does not interrupt a drone, and that an enveloped patch is unchanged
+- Oscillator/LFO phase now ADVANCES while a voice is idle, so the same note played twice no longer
+  starts identically - listen for whether repeated bass notes now sound less machine-like
+  (a double-advance bug here put a ~3 Hz wah on every oscillator; fixed and owner-confirmed
+  2026-08-31, but it is the thing to listen for if anything sounds unsteady)
+- ValSw1-2/ValSw2-1 Ctrl Value: now a 0-64 dial (top step reads 64). Confirm the range really is 64,
+  not 128, against the G2's own panel - the device ACCEPTED a raw 127 when written directly
+- FltHP and FltNord now play in the sound engine - both need an ear, neither is tuned
+- FltStatic (2026-09-13) is now FltMulti's filter with its own damping - it had sounded ~1.65 octaves
+  high and always LP. Check at Freq 64: LP, BP and HP at Res 0 and 96, GC off and on (reference §10.4)
+- Oscillator PitchMod (OscA/B/C, ShpA/B, OscDual, OscNoise) now tapers as the mixers' Exp - 0.13 at
+  64, was 0.25. An LFO into PitchVar at PitchMod 64 should now match the G2's vibrato depth
+- FltMulti's damping at the top: 0.01 at Res 127, and Res 110 peaks ~1.9 dB lower than before
+- EqPeak BW is now 2√2(1 - BW/128) and every EQ gain reaches +18 dB at 127 - small; listen at BW 0 and 127
+- EqPeak FREQ is open: the engine uses the displayed 13.75 × 2^(Freq/12), the table
+  20 × 800^(Freq/127). On the G2: EqPeak Gain 127, BW 64, noise in - does the peak sit at 44 Hz or
+  57 Hz at Freq 20, at 8.2 kHz or 6.7 kHz at Freq 110?
+- FltLP slope now reaches the engine (was stuck on 1 pole, read from Bypass) - 6 settings, 1-6 poles
+- FltLP can now be bypassed at all - its active flag read a parameter that does not exist
+- A/B both with G2_FILTER_LEGACY=1, which restores the old behaviour without a rebuild
+- FltClassic drawn response now reaches the top of the box at max Res (K_MAX 3.914 -> 4.0) - eyeball it
+- soundEngine.c LADDER_K_MAX (4.3) was chosen while the drawn constant was wrongly 3.914 - needs an ear
+- LevAmp gain law rewritten from measurement 2026-08-30: silent at dial 0, four segments, 0-4x
+- Super-saw ("sup") phase fix - needs an ear
+- The envelope attack is the wrong FORM (fixed-duration shaped ramp against the instrument's one-pole
+  approach to a target) - not yet changed. Owner reports the G2's attack as softer; confirm by ear
+  against a short-attack patch before and after any fix
+- FX In now carries BOTH legs of the FX bus. It resolved only leg 0 and copied it to leg 1, so a
+  stereo Voice-area output feeding the FX area arrived as its LEFT channel doubled and anything
+  panned right was discarded outright. Play a patch with a stereo source into an FX-area Reverb and
+  confirm it is fuller and genuinely stereo; owner reported the engine "not as full as the hardware"
+- VST3 editor open/close: the plug-in never called gfx_detach_window, so a reopened editor could
+  inherit a dead view's Metal layer and crash the host in -nextDrawable (Ableton Live 12.4.5,
+  2026-09-06). Open and close the editor a dozen times in one session, on the same instance and on
+  several, and confirm it neither crashes nor draws into the wrong window
+- The same pass added the per-frame gfx_attach_window() to the plug-in's drawRect that both sibling
+  plug-ins already had. Load TWO G2Alike instances, open both editors, and confirm each draws its
+  own canvas rather than one painting into the other
+- The app was checked against the SynthLib hardening and renders normally (NSWindow path); the
+  plug-in's view path has not been exercised in a host from here
+- Filter resonance, raspiness and whole-graph oversampling changes - need an ear
+- Sound engine parameter smoothing (zipper noise on Shape sweeps) - needs an ear
+- EnvADSR + mixer Channel Mute in the engine
+- Load Perf from Bank - fixed from an owner log, needs a confirming run
+- Store/Delete/Load at a bank location - implemented, never run on hardware
+- Bank backup/restore - restore path confirmed, full-bank restore of a second bank not repeated
+- Cable undo/redo across all five popup commands and drag-connect
+- Reconnection sync dialogue: confirm it appears every time
+
+UI / VISUAL CHECKS
+
+FROM THE 2026-08-31 DROP-SHIFT FIXES
+- Drop a 5-row module (Compress) onto a packed column so it covers two or three neighbours at once,
+  and confirm EVERY one of them moves down - the "chorus didn't move down" report
+- Undo after any drop that pushed other modules down, and confirm the displaced ones go back too
+
+FROM THE 2026-08-30/31 SESSION
+- The 19 ported module faces - owner was hand-adjusting; confirm none regressed
+- Middle-anchored buttons now centre on what is DRAWN, not on the table rectangle. Six rows move
+  down about 6 px: LfoA and Constant menus, OscC/OscD Wave, Gate G1/G2
+- Module right-click info line now reads "name - index N, R rows" (owner confirmed 2026-08-30)
+- New Patch now opens with the FX area minimised (was both areas) - confirm it feels right in use
+- Response graphs on FltNord, FltLP, FltHP and FltStatic - check against the real modules on hardware
+- Escape no longer quits the application
+- File > Save vs Save As, and the Save crash fix - confirm it stops recurring
+- Backdoor SCROLL and ZOOM commands
+- Text rendering: not re-verified on a Retina display since the glyph rewrite
+- SynthLib HiDPI scale fix - committed, all three projects pinned
+- Module layout cleanup: all 12 mix modules need a (CT) verify
+- FltClassic response graph inset
+- PartQuant(22) dial range and its changed creation default
+- Parameter Overview panel: drag-to-move and Escape still unverified
+- Close button moved top-left and drawn as a cross - needs an owner eyeball
+- Patch Window Split Bar - step 1 of 4, in SynthLib
+- Device busy overlay (gDeviceOpInProgress) - built 2026-07-26, never hardware tested
+- Module drop at the BOTTOM of a column no longer piles modules onto row MAX_ROWS - the incoming one comes up by the shortfall instead, a SELECTION is lifted rigidly so the group keeps its shape, and a column with no room refuses the gesture. Single and group paths both backdoor-verified (new SELECTADD + MOVESEL); what is NOT exercised is the real DRAG-DROP rollback, which restores from the drag snapshot rather than MOVESEL's own
+- New backdoor commands SELECTADD and MOVESEL - needs an owner eyeball that they belong there
+- +/- keys (bare param nudge and Cmd zoom) now follow the KEYBOARD LAYOUT via glfwGetKeyName() instead of the US physical slots - needs a FI/SWE tester: '+' zooms in, '-' (bottom row, beside '.') zooms out, '´' does nothing
+
+CROSS-PROJECT
+- EmuUtility gLcd.pixels data race fix - needs an owner eyeball that the LCD still updates cleanly
+- FILE BROWSER SCROLLING IN THE PLUG-IN (2026-09-07), reported broken under Ableton. g2_input_scroll()
+  never forwarded the wheel to the popups - the application's scroll_event() does it on its first
+  line - so the browser list could only be moved by dragging its scrollbar thumb. Now dispatched
+  through SynthLib's own popup table, which also gives the bank browser and alert dialog their wheel.
+  Check the file browser scrolls with both a trackpad and a wheel, that the canvas behind it does
+  NOT move while it is open, and that the bank browser scrolls too.
+- WHEEL DELTAS IN THE PLUG-IN were being treated as points unconditionally. AppKit only reports
+  points when hasPreciseScrollingDeltas is YES; a traditional wheel reports LINES, so a notch was
+  about two pixels of canvas. A notch should now move the canvas the same distance it does in the
+  application. Trackpad behaviour should be unchanged - worth confirming it has not got faster.
+- PULSE TIME LAW REFITTED (2026-09-07) from 17 hardware widths - pulse_time_seconds() is now a cubic
+  in log rather than two endpoints and a constant ratio, and is up to 11% SHORTER than before across
+  the middle of the dial. Anything whose timing depends on a Pulse gate will have moved. Needs an ear
+  on a patch that uses one, and ideally a re-check of the two shortest dial settings.
+- OscShpB TriSaw (2026-09-14): the peak is now the instrument's (1 + raw/128)/2, held two samples from
+  the end at the note's pitch - at Shape 127 a saw with a 0.4% fall on low notes where ours had 3%.
+  CT heard the G2's 99% saw as brighter: A/B on a low and a mid note, and at Shape 64 (0.75, was 0.737)
+- EnvADSR now runs the integer envelope (2026-09-14, reference §17.3). Short and mid
+  settings are unchanged. Listen at LONG ones: attacks are slower (LogExp 26 s at 112 where the dial
+  says 21, and from ~118 it stops at 0.96 and never decays while held; ExpExp 63 s at 127), and
+  decays and releases faster near their end (-40 dB in 37 s at 127). Decay already sounded right to CT
+- ***STCHORUS REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §19) - NEEDS AN EAR.*** Replaces
+  the three 2026-09-07 rounds. Same shape as before (two opposed taps, triangle, quarter-cycle stereo),
+  now exact, with two audible differences:
+  - LEVEL: about 2.5-3 dB lower across the dial than the fitted version (unity at Amount 0, confirmed)
+  - RATE: nominally 1.453 Hz at Detune 127, and each StChorus now runs at its own rate, up to 25% off
+    nominal, as on the instrument - two in one patch should drift against each other.
+- ***REVERB REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §20) - NEEDS AN EAR.*** Replaces
+  every fitted round (the 2026-09-06 stereo rebuild, the 2026-09-07 Brightness refit). It matches the reference model exactly, so what is left is whether that sounds like the G2:
+  - all four rooms across Time and Brightness, and Brightness below 48 especially (never measured cleanly)
+  - DryWet end to end: the law is now squared, where the fitted one was cubed
+  - a STEREO source: the dry path now keeps L and R apart (it was the mono average on both sides), and
+    a source into L only now has its dry on the left only - as the reference model has it
+  - Reverb bypassed: each input now passes to its own output (it passed the average to both)
+- ***FLTCLASSIC REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §21) - NEEDS AN EAR.*** CT heard the
+  engine slightly brighter. Now within 75+ dB of the reference model on a saw. Compare at high Freq
+  (the top octave is where the old one-pole cascade was brightest), with the EnvADSR sweeping it, and at
+  high Res with a loud input (the old knee saturated early). Its Pitch input now works (64 semitones/unit)
+- FILTER KBT NOW PIVOTS ON E4, note 64 (2026-09-14, reference §21.3). CT found the engine brighter at KBT
+  100% with self-oscillation higher than the G2's; at 100% it was 4 semitones high on every note, on every
+  filter. Re-run the self-oscillation comparison at KBT 25/50/100% on a few keys
+- FltClassic at full Res with no input should now stay silent until pinged, as on the G2 (a float tail
+  used to grow into oscillation by itself)
+- MODULES THE ENGINE DOES NOT PLAY ARE GREYED OUT while it runs (always in the plug-in). Toggle the engine
+  in the app and check the veil appears and goes at once, that greyed modules still edit and drag, and
+  that Operators (played via a DXRouter) and Name labels are NOT greyed
+- FLTLP AND FLTHP REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §22): brighter at high cutoffs than
+  before (corners were low, up to 10 dB at 4x the cutoff), and FltLP no longer compresses a loud input.
+  A/B at Freq above 100 with a full-scale saw; G2_FILTER_LEGACY=1 brings the old ones back
+- ***FLTNORD REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §23) - NEEDS AN EAR.*** A Chamberlin
+  pair, not a ladder. FilterType now works (CT: HP came out as low-pass - every type did). GC is now the
+  drive x d rather than the old compensation gain (CT found it harsh). Check all four types at 12 and
+  24 dB, GC on and off at high Res, and the resonance character against the G2
+- FltNord's face graph now draws each FilterType (CT: non-LP types drew as LP) and GC as the drive -
+  eyeball all four types at 12/24 dB against the sound
+- ***DELAYA/DELAYB REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §24) - NEEDS AN EAR.*** Matches the
+  model sample for sample. Audible: the bottom of LP much darker (LP 0 ~50 Hz, was 660 Hz) and LP 127 fully
+  open; the first repeat is now filtered too; DryWet squared (the edges of the dial move); HP a
+  different two-state filter; 16-bit memory. A/B against the G2 across LP and HP, and with FB near 127
+- ***DRONES NO LONGER CUT OFF (2026-09-14, notes §20) - NEEDS AN EAR.*** A voice still sounding after its key is up used to
+  fade out after 2 s; it now plays until stolen, as on the hardware. Check a drone patch holds, and that ordinary notes
+  still free their voices when they go quiet. Voice 0 also now plays at rest in every patch (notes §179): an Osc
+  wired past the envelope to an Out should sound on load with no key; enveloped sounds must stay silent at rest
+- ***VOICE AREA METERS FALL WHEN THE SOUND STOPS (2026-09-15, notes §191) - NEEDS EYES.*** They froze at their last
+  reading once voice 0 stopped, so a drone that had faded out still showed. They now read the sum of the voices and
+  fall to zero with the sound. Check one note reads as before against the G2, and compare a chord: the engine now
+  shows the sum, and what the G2 shows for a chord is unmeasured
+- ***COMPRESSOR REBUILT FROM THE REFERENCE MODEL (2026-09-14, reference §25) - NEEDS AN EAR.*** Matches the model sample for
+  sample. At 03 Chris' Lead's settings the old one did not compress at all (it smoothed the signal and never
+  saw a peak); now it lifts by the make-up and holds louder notes down as the G2 does. Check the attack and
+  release feel, the Level limiter, and the meter
+- ***STEREO IN THE FX AREA (2026-09-14) - NEEDS AN EAR.*** CT: Mix4-1S summed to mono, and so did 2-Out and FX
+  In. FX In's right leg was being overwritten with its left, and stereo mixers averaged each pair into one
+  mono leg. Now L and R stay apart through FX In, Mix4-1S/Mix1-1S and on to 2-Out. Check 03 Chris' Lead's
+  chorus/delay/reverb image, and that a mono source into a stereo mixer's L alone stays on the left
+- DELAYB'S FB-MOD AND DRYWET-MOD INPUTS NOW WORK (reference §24.6) - they were ignored. In 03 Chris' Lead a
+  Constant on both delays' FB mod takes their feedback to zero on the G2, and now in the engine: one repeat
+  each, where the engine played several. With a mod input patched, DryWet is linear, not squared
+- ***COMPRESSOR REWRITTEN AS A LEVELLER (2026-09-07) - THE BIGGEST BEHAVIOUR CHANGE OF THE DAY.*** It
+  was a downward compressor that ignored Ref Level; the instrument drives the signal TOWARDS Ref Level
+  and will BOOST when Ref Level is above it, which the old code could never do. Verified against
+  hardware to 0.10 dB on the ratio law and exactly on the Ref Level shape. Expect patches whose
+  compressor previously did nothing to now do a lot. Listen with Ref Level both above and below the
+  signal, and check the threshold still gates cleanly so quiet passages are not lifted into noise.
+- ***ENGINE-DRIVEN MODULE METERS (2026-09-07), new feature - needs an eye rather than an ear.*** With
+  the sound engine playing, a Compress module's meter should now move by itself, driven by the engine
+  instead of the instrument. Check: it moves with the signal; it reads zero below the threshold; it
+  does NOT blank other modules' meters when the engine starts; and with the engine STOPPED every meter
+  behaves exactly as before. LFO LEDs are wired up too: an LfoShpA's LED should blink at the LFO rate,
+  half on and half off, green - and at high rates it should blink rather than sit at a steady half
+  brightness. Mix4to1C, Fx-In and the Out modules now drive their own LEVEL meters too - check both
+  halves of a stereo pair move, that they fall smoothly rather than flicker, and that they go green
+  to yellow around the top of the scale. Every other module still shows the USB value.
+- ***OSCA NOW PLAYS (2026-09-07)*** - patches using it rendered silence before. Implemented from the
+  module definition and the shared oscillator DSP, NOT yet checked against the osca/ captures that
+  have been on disk since an earlier session. Listen for: the three fixed squares (Sqr50/25/10)
+  sounding progressively thinner, Tune and Fine tracking as OscB's do, and Kbt behaving. The WAVEFORMS
+  are now verified against the captures - all six identified and the three duties confirmed at 50/25/10
+  from their harmonic nulls - so what remains for the ear is pitch, Kbt and level.
+- ***OSCSHPA NOW PLAYS (2026-09-07)*** - patches using it rendered silence before. Shares OscShpB's
+  measured DSP; its parameter indices and the fact its Waveform is a param not a mode were read off
+  the instrument. No captures exist for it, so this is unverified: check the six waveforms sound like
+  OscShpB's corresponding ones (Sine1-4, TriSaw, and A's sixth should match B's SymPulse), and that
+  Shape sweeps them the same way.
+- ***THE WHOLE SHAPER GROUP NOW PLAYS (2026-09-07)*** - Clip, Overdrive, Saturate, ShpExp, WaveWrap,
+  ShpStatic and Rect all rendered silence before. Only TWO of the seven are known rather than assumed:
+  Rect is exact (the manual states all four operations) and ShpStatic's four buttons name their own
+  curves. For the rest the SHAPE follows the manual and the DEPTH LAW is a guess, so this wants ears
+  first and a capture second. Listen for: Rect's four modes doing what their names say on a sine;
+  ShpStatic's Inv x3/Inv x2 brightening and x2/x3 thinning; Overdrive transparent with Amount at 0 and
+  the four types getting progressively harder; Saturate lifting quiet material; ShpExp doing the
+  opposite; WaveWrap breaking into extra folds as it opens; Clip getting QUIETER as its dial opens
+  (that is the module, not a bug - manual p.205). Also check the parameter ORDER, which was read off
+  the layout tables and not the instrument: WaveWrap in particular is the one module whose Mod jack
+  and mod dial come BEFORE its signal input and its Amount, and if that is wrong its dial will do
+  nothing and its Mod jack will be shaping the audio.
+- ***REPLACE A MODULE, FILTER GROUP (2026-09-07), new feature.*** Right-click any filter and there is
+  now a "Replace with" submenu listing the other thirteen. Picking one swaps the module in place,
+  keeping its index, its position, its colour, any name you gave it, and every cable and knob setting
+  that has a counterpart on the new module. Check: cables move to the RIGHT sockets rather than to the
+  same-numbered ones - FltClassic's fixed pitch input is connector 2 and FltPhase's is connector 4, and
+  Vocoder's audio input is connector 1 where every other filter's is 0; a cable with nowhere to go is
+  dropped, so replacing an FltClassic with an FltStatic should lose both its pitch modulation cables
+  and keep the audio one. Knobs carry by meaning: Freq stays Freq even though it is parameter 0 on an
+  FltClassic and parameter 1 on an FltPhase. The drop-down selectors deliberately do NOT carry - an
+  FltLP's Slope does not become an FltHP's - because the role table has no entry for them.
+  A taller replacement pushes its column down, and if the column is full the whole swap is refused
+  with nothing changed. Undo should put the module AND its cables back in one step. The mapping itself
+  is unit-tested; what needs an eye is the menu, the undo, and whether the G2 agrees with the result.
+- ***MODULE PALETTE (2026-09-07), new feature - needs a real mouse.*** A "Modules" button in the
+  topbar (between Online and Undo) and View > Module Palette both open a band under the topbar: the
+  sixteen module groups as a 2x8 grid, and the selected group's modules as tiles carrying their name
+  and their connectors as coloured dots. DRAG a tile onto either area to add the module. What needs
+  your hands: that the drag feels right; that the ghost - a real module face at the size and place it
+  will land - tracks correctly across the split bar and at each zoom; that dropping on the split bar
+  or the scrollbars cancels rather than dropping somewhere odd; that the hover preview names the
+  module; and that the wheel and the < > arrows scroll the Osc row when the window is narrow enough
+  to need it. Toggling the band was hammered from a script across zoom, scroll and split combinations
+  without a failure, and a module scrolled under the band is correctly clipped and unclickable.
+- ***OFFLINE NEW PATCH NO LONGER HANGS (2026-09-07).*** File > New Patch with no G2 connected used to
+  sit on its "New Patch..." overlay until the editor was force quit, and the reset never happened
+  either. It now does the reset locally. Check it clears the patch offline, and that ONLINE it still
+  pushes to the G2 as before - that path is unchanged but untested since.
+- ***DEVICE-OP SAFETY TIMEOUT NOW ACTUALLY FIRES (2026-09-07).*** It was comparing two different
+  clocks and had never fired once. Any device operation whose completion never arrives - the G2
+  unplugged mid-op is the obvious one - should now clear its busy overlay after five seconds with a
+  line in the log, rather than locking the editor. Worth provoking once by pulling the cable during a
+  bank operation.
+- ***REPLACE WITH NOW COVERS ALL NINETEEN GROUPS (2026-09-08).*** It was Filter-only, which is why it
+  looked permanently greyed out - almost nothing you right-click is a filter. Every module except the
+  eleven that are in no group (Blue2Red, Red2Blue, DXRouter, Resonator, NoteDet, NoteZone, LevScaler
+  and the four hidden ones) now offers its group. Driven through the real GUI on an FltClassic and
+  verified: the menu enables, the submenu lists the other thirteen, and the swap keeps the module's
+  index, position and user-given name. Cables and knobs carry BY ROLE - FltClassic's Freq (parameter
+  0) became FltVoice's parameter 6, and replacing with an FltStatic correctly DROPPED the pitch
+  modulation cable it has no input for. Oscillator and envelope swaps checked the same way. What
+  needs your ear rather than my eye: whether a swapped module SOUNDS like the settings it inherited.
+- ***MODULE COLOUR SELECTOR IN THE PALETTE BAND (2026-09-08), CT's suggestion.*** Swatches to the
+  right of the group grid set the colour NEW modules are created in, and the choice persists, which
+  is what the instrument does (manual p.61). Verified by clicking a swatch and adding a module - it
+  came out in that colour. Check it applies to the right-click Create Module route too, and that the
+  standard grey default still behaves for anyone who never touches it.
+- ***PALETTE COLOUR SWATCHES, ENLARGED AND EXTENDED (2026-09-08).*** The swatches are now the same
+  height as the group buttons and sit on the same two rows. A swatch does two things: it sets the
+  colour NEW modules are created in (the drag ghost is drawn in it too, so it previews), and it
+  recolours whatever is SELECTED, group selections included. With nothing selected only the first
+  applies. The module right-click menu's colour entry now recolours the whole selection as well - it
+  used to do only the clicked module even with several selected, which the manual says is wrong.
+  Verified by selecting two oscillators and clicking one swatch: both changed. Check the undo puts
+  them all back, and that the colours reach a connected G2.
+- ***DOUBLE-CLICK A PALETTE TILE TO ADD (2026-09-08)*** - adds below the focused module without a
+  drag, which is what the manual describes (p.81). Check it does not also leave a ghost behind, and
+  that it lands where you would expect when nothing is focused.
+- ***TOPBAR BUTTON RENAMED "Module Bar"*** and it lights green while the band is open.
+- ***REPLACE CONFIRMED ON THE INSTRUMENT (2026-09-08)*** - the whole-patch write path had never run
+  with hardware attached before. FltClassic to FltNord, then slot B and back to pull the G2's own
+  copy: still FltNord. Replacing with an FltStatic kept the two audio cables and dropped the pitch
+  modulation one on the DEVICE'S copy too. Column rearrangement checked on a packed column - growing
+  a 4-row filter to an 8-row Vocoder pushed everything below down by four with no overlaps. Slot A
+  was used and has been put back to SimpleLead. Nothing checked by ear yet.
+- ***PALETTE TILES NOW CARRY THE SELECTED COLOUR (2026-09-08)*** - pick a swatch and the whole tile
+  row is drawn in it, so the choice previews on the tiles as well as on the drag ghost. Hover is a
+  black frame rather than a paler fill, which would have thrown that colour away exactly when the
+  pointer is on the tile you are about to pick up. The selected GROUP button is the app's usual green
+  with black text, not the blue it started as.
+- ***DRAGGING INTO THE FX AREA CONFIRMED (2026-09-08)*** - dropped into both panes and checked where
+  each landed. A release on the split bar or the scrollbar gutter between them creates nothing and
+  disturbs nothing, which is intended. Worth confirming by hand that the ghost tracks smoothly ACROSS
+  the split bar rather than jumping.
+- ***ENGINE METERS AND LEDs NOW REDRAW ON THEIR OWN (2026-09-08)*** - they moved only while the mouse
+  did, because the audio thread was updating the atomic arrays perfectly and nothing was telling the
+  render loop to look. It now raises a flag when a published value actually CHANGES (not every block,
+  or the GUI would run flat out in silence) and the loop consumes it, ticking at 50 ms while the
+  engine is active. CT confirms volumes now move with no mouse movement. Still worth checking: an
+  LfoShpA LED blinking at a high rate, and that a stopped engine goes back to full idle sleep.
+- ***PALETTE SWATCHES REGROUPED BY HUE (2026-09-08)*** - the wire order gModuleColourMap is stored in
+  interleaves the hues, so walking it directly showed the shades shuffled next to the right-click
+  menu's tidy grid. Both now read gModuleColourFamily; the menu keeps six columns so a COLUMN is a
+  hue, the band uses two long rows so a hue's four shades sit together. Grey leads.
+- ***THE PALETTE BAND NOW DRAWS IN THE VST3 PLUG-IN (2026-09-08)*** - palette.c was in do-vst3's
+  source list but nothing called it, so "Module Bar" pushed the canvas down by the band's height and
+  left the band itself empty. g2GlDraw.c now calls palette_render() straight after render_top_bar(),
+  and g2Input.c routes the band's press/release/motion/wheel in the application's order. Verified in
+  tools/vst3host (open, select Filter, drag FltLP out and drop it - module created) and CT confirms
+  the band appears. Still to check IN A REAL HOST: the drop, the double-click add, and the wheel
+  scrolling a group wider than the window.
+- ***COMPRESSOR GAIN STEP AT THE THRESHOLD (2026-09-08)*** - CT: "when the compressor lights a LED
+  the effect is quite brutal, and it has audio glitches around it". The leveller law has unity gain
+  only where env == RefLvl, so GATING it at the threshold put a step there of the full makeup: +9.0
+  dB in ONE SAMPLE at the stock settings (Thr -12, RefLvl 0, Ratio 4:1), up on every note onset and
+  -9.0 dB again on the decay, chattering at audio rate whenever the detector sat near the threshold.
+  Simulated: worst one-sample gain jump 9.000 dB and an output discontinuity of 0.1423, against a 220
+  Hz sine's own largest sample-to-sample step of 0.0102. The detector is now clamped at the threshold
+  from below instead - gain = (target / max(env, threshold))^(1-1/ratio), one expression, no branch -
+  which drops the same figures to 0.066 dB and 0.0151. Listen for: no click on note onset, no buzz
+  while the LED flickers. EXPECT IT LOUDER IN THE GAPS - the makeup now applies all the time, up to
+  +9 dB at the stock settings, which is the honest consequence of the law being continuous.
+  UNMEASURED and worth one capture: a steady tone BELOW the threshold. This law returns it with the
+  makeup on it; a true gate returns it untouched. Nothing captured so far was played quietly enough
+  to tell the two apart.
+- ***THE PLUG-IN CAN SAVE (2026-09-09)*** - File > Save and Save As now reach a writer; CT confirms
+  the dialogue works in Ableton. STILL UNCHECKED: that the .pch2 it writes opens unchanged in the
+  application, that File > Open Recent lists what was opened and saved, and that a save into an
+  unwritable folder shows the alert rather than failing silently.
+
+ModAmt and SwOnOffT in the sound engine (2026-09-19, reference §29/§30)
+  - ModAmt's ENABLE BUTTON, SETTLED 2026-09-27 from the reference model (reference §29.4): off passes In when
+    m/1-m is on and is SILENT when it is off. Big Pad's two are both m/1-m on, so it is unchanged.
+  - ModAmt's m/1-m and the Depth taper are settled (manual p.232, and the Exp curve is the mixers'
+    own §3.2 law to 6e-8) - these need only a listening check, not a measurement.
+  - SwOnOffT closed with NOTHING patched to In should send 64 units; open should send nothing, and
+    the Ctrl output should follow the button. Untested against the hardware.
+  - 02 Big Pad now resolves 25 nodes instead of 22: the "EnvVel" ModAmt and the Keyboard module it
+    pulls in put velocity onto the filter envelope for the first time. Needs a listen against the G2.
+
+StChorus line pooling (2026-09-19)
+  - A chorus now takes a line from a pool of 2 rather than one buffer per node, so its LFO start
+    phase is seeded from the LINE index, not the node index. A patch with a chorus therefore renders
+    a slightly different (equally arbitrary, equally repeatable) phase than before. ChorusSaw.pch2
+    and 02 Big Pad are the ones to listen to. A third chorus in one patch now passes its input dry.
+
+Stolen-voice envelope reset (2026-09-19, reference §15.3a)
+  - The reset itself is CONFIRMED by measurement on 02 Big Pad: every envelope restarts from zero and
+    the slow amplitude attack runs (2026-09-19). The click it could introduce is REAL and CT
+    hears it - that is now a todo item, not a to-test one.
+  - A voice reused from the free or released queue deliberately still attacks from where it was
+    (§17.3/§17.7). If a released-voice reuse also sounds attackless, that is a separate question.
+
+## DrumSynth - one checklist
+
+Everything below is DrumSynth, gathered 2026-09-21 so it can be worked through in one pass with
+the module in front of you. The laws marked (model) came from the reference model, not
+from a capture, so they are the ones most likely to be right.
+
+- ***DRUMSYNTH REBUILT ON THE INSTRUMENT'S NOISE PATH, BEND AND INPUTS (2026-09-25)*** - reference §39.6,
+  §39.9, §39.10. Offline it matches the G2 (Kick 1's 5 ms envelope within 1 dB, every part's energy
+  on one constant); not yet heard. Listen for: Kick 1 against the G2 - the noise ~15 dB quieter
+  than before, the click louder and held, the master/slave beat in the same place; a Constant into
+  the BOTTOM input (Vel) and the MIDDLE one (Pitch) doing what the G2 does; Res at 127 now rings.
+  Old patches with a cable into the drum's middle or bottom input now read it the way the G2 does.
+  Full Bend should start near 2.7 kHz on Kick 1's pitch, and nothing should rise above 4 kHz.
+  The whole drum is 6 dB louder than earlier today's first version: 3-4 dB above a full-scale sine,
+  as on the G2 - Kick 1 through a LevAmp at 127 now reaches the engine's output knee.
+- ***NOISE COLOR IS THE INSTRUMENT'S LAW (2026-09-25)*** - reference §7.2a. From about Color 64 up the
+  noise is now much darker (12 Hz corner at 127, was 129 Hz) and 3-6 dB louder. Compare Color 96-127
+  with the G2.
+- ***DRUMSYNTH'S CLICK IS NOW THE INSTRUMENT'S (2026-09-21)*** - reference §39.4a. It was a linear
+  2 ms ramp at full level; it is a one-pole decay, 0.1 ms to -20 dB, at a QUARTER of the dialled
+  level. So it was about twenty times too long and four times too loud, which on a preset with
+  Click up is a broadband thump. CHECK ON THE G2: the presets with a prominent click - Kick 1 has
+  it at 79 - and whether ours still sounds "clickier" than the instrument. This is the first of
+  the DrumSynth laws to come from the reference model rather than a capture.
+- ***A DRUMSYNTH ON ITS OWN IS NO LONGER SILENT (2026-09-20)*** - the engine's "is there a source
+  in this chain?" test listed the oscillators, Pulse, the noise sources and DXRouter but not
+  DrumSynth, so Keyboard -> DrumSynth -> LevAmp -> Out reported "Nothing is patched into it" and
+  published silence. It looked like the Keyboard's Gate not triggering, which is what CT reported;
+  the Gate was always fine. One list now serves both that test and the all-generators-off test, so
+  the next module cannot be added to one and missed off the other. CHECK: a drum patch with no
+  oscillator in it makes a sound, and the status line says Playing.
+- ***DRUMSYNTH'S PANEL LAMP LIGHTS (2026-09-20)*** - reference §39.5, notes §194. It follows the
+  master envelope, as the instrument's does, so it comes on with the hit and fades with it rather
+  than following the key. Offline it lit at the note-on and went out 263 ms later with the key
+  released at 80 ms. CHECK: against the G2's own lamp, especially a long Master Decay (ours should
+  stay lit as long as the hit lasts) and a hit with Master Level at 0 (the envelope still runs, so
+  ours still lights - check the instrument agrees).
+- ***DRUMSYNTH TRIG EDGE (2026-09-20, CT: "seemed to trigger on key up initially. Seems OK now")***
+  - the code fires on a rising edge only and offline it fires on key DOWN, so this is unreproduced.
+  Watch for it again, and if it returns, note whether it follows a patch load or a rebuild: the
+  per-voice previous-clock state starts at zero, so a gate already high when the chain is rebuilt
+  would read as an edge.
+- ***DRUMSYNTH PLAYS (2026-09-19)*** - reference §39. Two oscillators, a sweeping noise filter,
+  bend and click, with the decays, the noise cutoff and - settled 2026-09-20 - the five level dials
+  all on the conversions, and both pitch laws shared with the face. Every factory
+  preset produces a plausible hit offline. **THE NOISE FILTER IS THE UNSETTLED PART NOW** (§39.4):
+  Res may be four times too resonant at the top of the dial and the cutoff table may be the wrong
+  one, neither settleable without a reference model. CHECK AGAINST THE G2: the presets side by side,
+  listening first to whether ours RINGS where the instrument thumps, then master against slave
+  against noise against click, and whether the click is too loud. Then the bend and the noise
+  sweep, which should both fall rather than rise, and a Trig from a sequencer.
+- ***DRUM SYNTH GRAPH (2026-09-19)*** - moduleGraphics.c notes §91. Amplitude (green, the three voices
+  summed) and bend (orange) in the space kept free under the Preset box. Checked live through the
+  backdoor at two settings - short decays with no bend against long decays with full bend - and the
+  curves change as they should. STILL TO CHECK: that it reads well against real presets rather than
+  two made-up settings, the short ones especially, and at the zoom you work at.
+- ***DRUM SYNTH FACE RE-LAID OUT, SLAVE DIAL NOW A RATIO (2026-09-18)*** - 2026-09-18,
+  renderParams.c notes §19. Four band headings, M/S/NF/B prefixes dropped, rows spread; the Slave dial
+  reads x1.24 / 3:1 instead of a percentage. Checked by rendering at 1.0 and 0.59 (no overlaps, nothing
+  off the right edge) and the ratio law against the manual's own 1:1-to-6.26. STILL TO CHECK ON THE G2:
+  that the Slave readings match the panel dial for dial (especially where it flips between "N:1" and
+  "x2.51", around raw 75/76), and that the face reads well at the zoom you actually work at.
+- ***DRUMSYNTH PRESETS AND ITS ON BUTTON (2026-09-16)*** - the Preset box shows which of the 30 factory
+  presets the dials match ("none" if none do), and clicking it offers all 30; choosing one sets params
+  0-14 as one undo step. Param 15 is now the On button. Checked offline in the editor (values, undo,
+  redo, "none"). STILL TO CHECK ON THE G2: a chosen preset sounds and reads the same on the
+  instrument, the G2 shows the same name, and the On button mutes the module.
+- Economy switch (2026-10-09): the reset now runs on the slot's voice worker (sound-engine-notes §212). Flip Half Rate (economy) while a patch with a long reverb plays: one short gap, no click or stuck note, and new notes play straight after
+- Operator AMod and Pitch inputs (2026-10-09, reference §14.6): on the G2, an LFO into AMod at A-Mod 3 and 7, and a Constant into Pitch at 64 and 96 with KBT on, against the engine; and that a Constant into Freq changes nothing
+- ***SAMPLER VEL DIAL (2026-10-10)*** - notes §213. PLAY: Vel at 0 ignores velocity; turned up, soft notes play quieter. The face is now three rows - a patch saved with the old two-row Sampler may overlap the module below it
+- ***SAMPLER FILE ON THE FACE, BAD FILES REFUSED (2026-10-10)*** - moduleGraphics notes §93, menuActions notes §15. Choose Sample on a non-sample file: an alert, the old file kept; a .pchx whose file has moved: its name in red; loading a file makes no sound until a key is played
+- ***SAMPLER .nsmp4 LEVELS AND ZONES (2026-10-10)*** - nordSample notes §10. LISTEN: a Grand 2 piano is no longer quiet and keys play their own zones; a Piano 6 Mellotron sits about 2 dB under its Wave twin
+- ***SAMPLER: E-MU EMULATOR X BANKS (2026-10-10)*** - nordSample notes §11. Choose Sample on Celtic Harp.exb (inside its folder): stereo, in tune, notes ring and loop without clicks; the level may be low
+- ***SAMPLER PITCH: BEND, Pitch AND PitchVar INPUTS (2026-10-10)*** - notes §213. PLAY: the bend wheel bends it; Keyboard AftTouch into PitchVar with the Pitch dial up bends it by pressure
+- ***SAMPLER: NOTES STARTING IN REVERSE (2026-10-11)*** - notes §213e. PLAY Bright Piano 2 with Speed at 32: each new note plays backwards from the end, swelling to the strike; Start up begins nearer the strike
+- ***SAMPLER GRAINS IN PHASE, SPRAY (2026-10-11)*** - notes §213f. LISTEN at Speed 80 and 72 on a solo instrument: smoother than before; Spray up smears the sound (at Speed 96 too), an LFO into SpryM moves it without clicks
+- ***SAMPLER GRAIN (2026-10-11)*** - notes §213d. LISTEN at Speed x0.5: Grain short buzzes, long smears; an LFO into GrnM changes it without clicks; no effect at x1
+- ***SAMPLER KB (2026-10-11)*** - notes §213c. PLAY Bright Piano 2 with KB off: every key plays the same pitch (middle C's), bend does nothing, Pitch inputs still transpose; KB on as before
+- ***SAMPLER SPEED - TIME-STRETCH (2026-10-11)*** - notes §213b. LISTEN: Speed below 96 slows the sample without lowering it, above speeds it up, 32 plays it backwards, 64 is silent; an LFO into SpdM sweeps through Stop and reverse without clicks; at 96 the sample sounds exactly as before. Dcy with Sus turned down shapes each note
+- ***SAMPLER START, DELAY, ATTACK (2026-10-11)*** - notes §213a. PLAY: Start moves where notes begin; an LFO or random into its jack varies it per note; Delay holds a note back and a tap shorter than it plays nothing; Attack fades in. The face is now six rows - an older patch's Sampler may overlap the module below. Older .pchx files load with all three at 0
+- ***SAMPLER DIALS SAVE IN .pchx (2026-10-10)*** - protocol notes §24. Open a .pchx saved earlier today, set Rel/Vel/Pitch, save, reopen: they stay
+- ***OLD BACKUPS WITH CLKDIVS (2026-10-10)*** - protocol notes §25. Load the old BCHydro_DZLW.prf2 backup onto the G2 from the editor: it should play as the flash copy does (no pad wobble, sequences complete)
+- Plug-in Settings > Multi-threading (2026-10-11): off puts the voices back on the audio thread with the FX pass; check whether the AU/VST3 clicks go with it, and that a reopened project keeps the setting per instance
+- Topbar "Not G2" mark cached, rebuilt only on a module add/remove or a 2-Out To change (2026-10-11, patchWrite notes §4): check it on adding/deleting a Sampler, a 2-Out To moved to/from Out 5/6+ by dial, menu, undo/redo and variation copy, and patch load/clear. All parameter writes now go through set_param_value() (dataBase notes §11) - check dials, toggles, radio buttons, Push, menus and G2-side edits still update as before
+- Performances from files keep their Keyboard switches, Hold, key ranges and Key Range (2026-10-11, protocol notes §26): load Jupiter (SC) in the app and the plug-in, play both halves of the split; save it and reload; a plug-in project reopened keeps the split. Also check a perf sent to the G2 from the editor arrives with the same switches, category and clock keyboard trigger (the writer changed: real section length, category, performance pages, clock keyboard trigger, bank/patch and MIDI channel bytes as read; protocol notes §26)
+- 4-In set to from Bus no longer crashes the engine build (2026-10-11): BeatBox loaded and played
+- Old-format conversion (2026-10-12, protocol notes §28): open the factory BCHydro_DZLW.prf2 (format 19) in the editor with the G2 connected - the sequenced voices should no longer slide in pitch, in the engine or on the G2 after the push; also in the plug-in
+- Laika (2026-10-12, sound-engine-notes §222): plays in the engine through slot C's delay and reverb from A and B on Bus 1/2 - compare by ear with the G2
+- BeatBox (2026-10-12): loads from the factory file with all four slots in place (protocol notes §29) and plays by itself in the engine - A's sequencer playing B and C's drums by NoteSend to NoteRcv on This, B and C sending to D's effects by 4-Out to Bus (sound-engine-notes §223-225); compare by ear with the G2 (CT thinks the G2 itself may not sound - check)
+- A 4-Out set to Out now also plays its inputs 3 and 4 on Out 3/4 (sound-engine-notes §223) - check a patch with one in G2Alike's Out 3/4 bus
+- RedMonday_DZ (format 19) opened from the file with the G2 connected loads without the failure (2026-10-12: the conversion no longer pads SeqNote to 39 parameters, protocol notes §28)
+- Keys A-D select slots (Controls > Keys A-D Select Slots) and R starts/stops the clock: the topbar follows, the G2 follows, the choice survives a restart; switching back to Keys Play Notes plays again; the plug-in editor A-D/R in Live
