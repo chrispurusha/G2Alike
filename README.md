@@ -256,10 +256,12 @@ The plug-in inherits exactly what the sound engine can do. [Docs/engine-module-s
 
 See [THIRD_PARTY.md](./THIRD_PARTY.md) for open-source acknowledgments.
 
-### An alternative...
+### Alternatives...
 
 There are at least 2 other editors in development. The one linked below is a different approach by
 someone I'm in touch with, who has contributed to this project and I have been having technical discussions
 with. Different approaches is a good thing I'd say!
 
 [Burpy's Editor](https://github.com/JanBurp/NordModularG2-Editor)
+
+Usual Suspects have announced a full G2 host emulation, with editor. Good news indeed. I'm hoping that my system will still be useful though, since there are several advantages which US won't be able to address. My implementation is fully Mac native (Windows and Linux to follow) and modifiable, so there's scope for improvements and extra features. My implementation also runs many instances, with 0 latency. The future is bright!
