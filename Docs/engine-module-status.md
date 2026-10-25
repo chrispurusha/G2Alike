@@ -3,15 +3,7 @@
 What the local sound engine does with each module type the palette offers, by palette group, under
 the names the palette itself shows - and, for each, what it has been checked against. Section numbers
 are `sound-engine-reference.md`'s, where each module's model is described.
-
-| state | meaning |
-|---|---|
-| **Confirmed on the G2** | compared with a G2 (a capture, its meters, or a stage patch played against it) and it agrees |
-| **Modelled** | a full model in the reference, not yet compared with a G2 |
-| **Approximate** | follows the manual's description; a full model is still to come |
-| **Partial** | audible, but something about it is known to be missing - the Open column says what |
-| **No sound** | nothing to render (a name, or a module whose output leaves by MIDI) |
-| **Not implemented** | not modelled: it contributes nothing and is pruned from the chain |
+The first table below defines the states and counts the modules in each.
 
 Modelled is not the same as checked. A model that has never been put beside a G2 has not been
 checked, however complete it looks; the comparison is what found the DrumSynth click, the OscDual
@@ -43,25 +35,35 @@ noise floor. It is where to look first when a module disagrees with a G2 at low 
 loop, or at a threshold. The classification comes from reading each model and is editorial, in
 `kPrecision` beside `kEvidence`; the run fails if a module has no row.
 
+| state | meaning | modules |
+|---|---|---|
+| **Confirmed on the G2** | compared with a G2 (a capture, its meters, or a stage patch played against it) and it agrees | 74 |
+| **Modelled** | a full model in the reference, not yet compared with a G2 | 92 |
+| **Approximate** | follows the manual's description; a full model is still to come | 0 |
+| **Partial** | audible, but something about it is known to be missing - the Open column says what | 0 |
+| **No sound** | nothing to render (a name, or a module whose output leaves by MIDI) | 4 |
+| **Not implemented** | not modelled: it contributes nothing and is pruned from the chain | 0 |
+| **Total** | every module type the palette offers | 170 |
+
 | Group | Confirmed on the G2 | Modelled | Approximate | Partial | No sound | Not implemented |
 |---|---|---|---|---|---|---|
 | **Oscillators** | Osc A, Osc B, Osc C, Osc D, Osc Shape B, Osc Dual, Noise Osc, Noise, Osc Percussion, Drum Synth, FM Operator, DX Router | Osc Phase Mod, Osc Shape A, Metallic Noise, Osc String, Driver, Resonator, Osc Master | - | - | - | - |
 | **Filters** | Nord Filter, Classic Filter, Multi Filter, Comb Filter, Eq 2-band, Eq 3-band, Eq Peak | LP Filter, HP Filter, Phase Filter, Static Filter, FltVoice, WahWah, Vocoder | - | - | - | - |
 | **Envelopes** | Envelope ADSR, Envelope AHD, Envelope H, Envelope Mod AHD, Envelope Mod ADSR | Envelope ADR, Envelop ADDSR, Envelope D, Envelope Multi | - | - | - | - |
-| **LFOs** | LFO A, LFO Shp A, Clock Generator | LFO B, LFO C | - | - | - | - |
+| **LFOs** | LFO A, LFO C, LFO Shp A, Clock Generator | LFO B | - | - | - | - |
 | **Mixers** | Mixer 1-1 A, Mixer 1-1 S, Mixer 2-1 A, Mixer 4-1 A, Mixer 4-1 B, Mixer 4-1 C, Mixer 4-1 S, Mixer 2-1 B, Mixer 8-1 A, Mixer 8-1 B, MixFader, MixStereo, Fade 1-2, Fade 2-1, X-Fade, Pan | - | - | - | - | - |
-| **Level** | Constant, LevAmp | ConstSwM, ConstSwT, CompLev, CompSig, LevAdd, LevConv, LevMod, LevMult, MinMax, ModAmt, NoiseGate, EnvFollow, Red2Blue, Blue2Red | - | - | - | - |
+| **Level** | Constant, LevAmp, LevMult, ModAmt | ConstSwM, ConstSwT, CompLev, CompSig, LevAdd, LevConv, LevMod, MinMax, NoiseGate, EnvFollow, Red2Blue, Blue2Red | - | - | - | - |
 | **Shapers** | OverDrive | Saturate, Clip, ShpExp, WaveWrap, ShpStatic, Rect | - | - | - | - |
-| **Delays** | Delay A, Delay B | Delay Single A, Delay Single B, Delay Stereo, Delay Clock, DlyShiftReg | Delay Dual, Delay Quad, Delay Eight | - | - | - |
+| **Delays** | Delay Dual, Delay Quad, Delay A, Delay B, Delay Eight | Delay Single A, Delay Single B, Delay Stereo, Delay Clock, DlyShiftReg | - | - | - | - |
 | **Effects** | Compressor, Chorus, Reverb | Digitizer, FreqShift, Flanger, Phaser, PShift, Scratch | - | - | - | - |
-| **In/Out** | 2 Outputs, 4 Outputs, 2 Inputs, FX Input, Keyboard, Monophonic Keyboard, Status | 4 Inputs, Note Detector | Device | - | Name Bar | - |
+| **In/Out** | 2 Outputs, 4 Outputs, 2 Inputs, FX Input, Keyboard, Monophonic Keyboard, Status | 4 Inputs, Device, Note Detector | - | - | Name Bar | - |
 | **Switches** | - | SwOnOffM, SwOnOffT, Sw2-1, Sw2-1M, Sw4-1, Sw8-1, Sw1-2, Sw1-2M, Sw1-4, Sw1-8, ValSw2-1, ValSw1-2, Mux8-1, Mux1-8, Mux8-1X, S&H, T&H, WindSw | - | - | - | - |
-| **Logic** | Pulse, ClkDiv | Invert, Delay, Gate, 8Counter, BinCounter, ADConv, DAConv | FlipFlop | - | - | - |
+| **Logic** | Pulse, FlipFlop, ClkDiv | Invert, Delay, Gate, 8Counter, BinCounter, ADConv, DAConv | - | - | - | - |
 | **Sequencers** | Sequencer Event, Sequencer Values, Sequencer Level, Sequencer Note | Sequencer Controlled | - | - | - | - |
 | **Random** | - | Random A, Random B, Rnd Clock A, Rnd Clock B, Rnd Trig, Rnd Pattern | - | - | - | - |
-| **Note** | - | Note Quantiser, Key Quantiser, Partial Quantiser, Note Scaler, Glide, Pitch Tracker, Zero Crossing Counter, Level Scaler | - | - | - | - |
-| **MIDI** | CtrlSend | CtrlRcv, NoteRcv | - | NoteSend | PCSend, NoteZone, Automate | - |
-| **Total 170** | **65** | **95** | **5** | **1** | **4** | **0** |
+| **Note** | Glide | Note Quantiser, Key Quantiser, Partial Quantiser, Note Scaler, Pitch Tracker, Zero Crossing Counter, Level Scaler | - | - | - | - |
+| **MIDI** | CtrlSend, NoteSend | CtrlRcv, NoteRcv | - | - | PCSend, NoteZone, Automate | - |
+| **Total 170** | **74** | **92** | **0** | **0** | **4** | **0** |
 
 ### Oscillators
 
@@ -126,7 +128,7 @@ loop, or at a threshold. The classification comes from reading each model and is
 |---|---|---|---|---|---|
 | LFO A | Confirmed on the G2 | §28 | Hi rate measured | BPM and Clk not checked on the G2 | Doubles: phase in doubles |
 | LFO B | Modelled | §28, §28.4, §54 | - | - | Doubles: phase in doubles |
-| LFO C | Modelled | §28 | - | never captured | Doubles: phase in doubles |
+| LFO C | Confirmed on the G2 | §28, §28.7 | Hi 64-127 and Lo 100/127 rate within 0.09%; Sine/Tri/Saw/Sqr shape and harmonics within 0.7 dB; every Output Type, level within 0.2 dB (10-25) | Sub and BPM ranges, the Rate input and Mono not compared | Doubles: phase in doubles |
 | LFO Shp A | Confirmed on the G2 | §28.6 | Rate Sub, Lo, Hi within 0.013% (09-07) | BPM and Clk not checked; waves not captured | Doubles: phase in doubles |
 | Clock Generator | Confirmed on the G2 | §59 | Master clock within 7-17 ppm; engine within 1-4 ms over 66 s (10-09) | - | Integer words: phase and tempo words |
 
@@ -164,9 +166,9 @@ loop, or at a threshold. The classification comes from reading each model and is
 | LevAmp | Confirmed on the G2 | paramCurves notes §29 | 33 dial positions (08-30); 127 as 0x7FFFFF settled BCHydro_DZLW (10-09) | - | Doubles |
 | LevConv | Modelled | §31 | - | - | Doubles |
 | LevMod | Modelled | §69.3 | - | - | Integer words |
-| LevMult | Modelled | §74 | - | - | Doubles |
+| LevMult | Confirmed on the G2 | §74 | an OscB sine times a Constant at 8 values, -64 to +64 units: gain within 0.04 dB and the sign right (10-25) | - | Doubles |
 | MinMax | Modelled | §43 | - | - | Doubles |
-| ModAmt | Modelled | §29 | parameter display only (param-validation) | - | Doubles |
+| ModAmt | Confirmed on the G2 | §29 | an OscB times a Constant through it, Exp and Lin, m and 1-m, Depth 32/64/100/127, Mod -64 to +64, Enable off: 66 settings within 0.04 dB, or at the rig's noise floor (10-25) | - | Doubles |
 | NoiseGate | Modelled | §70.6 | - | - | Integer words: follower and gate in words |
 | EnvFollow | Modelled | §69.4 | - | times at 24 kHz when not up-rated not modelled (notes §203) | Integer words: peak word and follower |
 | Red2Blue | Modelled | §68.8, notes §203 | - | - | Not affected: a copy, held at 24 kHz |
@@ -190,13 +192,13 @@ loop, or at a threshold. The classification comes from reading each model and is
 |---|---|---|---|---|---|
 | Delay Single A | Modelled | §52 | through DelayA only | - | Doubles: a 4-point read |
 | Delay Single B | Modelled | §52.1 | - | - | Doubles: a 4-point read |
-| Delay Dual | Approximate | §70.1, §52.1 | - | only the taps are fully modelled (§52.1) | Doubles: a 4-point read |
-| Delay Quad | Approximate | §70.1, §52.1 | - | as Delay Dual | Doubles: a 4-point read |
+| Delay Dual | Confirmed on the G2 | §70.1, §52.1 | noise through it, Ranges 5/25/500 ms, Time 0-127: each tap on the G2's sample, unity gain (10-25) | Time Mod inputs not compared; Range 2.7 s silences the patch on the G2 (the budget) | Doubles: a 4-point read |
+| Delay Quad | Confirmed on the G2 | §70.1, §52.1 | noise through it at 25 and 100 ms: the four taps and Main on the G2's sample, unity gain (10-25) | Time Mod inputs and Clk mode not compared | Doubles: a 4-point read |
 | Delay A | Confirmed on the G2 | §24 | FB, LP, dry/wet, Time and Clk (09; audio not kept) | - | Integer words: the tap, LP, HP and feedback on half-scale words |
 | Delay B | Confirmed on the G2 | §24 | as Delay A; HP at four settings | - | Integer words: the tap, LP, HP and feedback on half-scale words |
 | Delay Stereo | Modelled | §65 | - | X-FB never compared | Integer words: Delay B's tap on both lines |
 | Delay Clock | Modelled | §69.7 | - | - | Not affected: a copy on each clock |
-| Delay Eight | Approximate | §70.1, §52.1 | - | as Delay Dual | Doubles: a 4-point read |
+| Delay Eight | Confirmed on the G2 | §70.1, §52.1 | noise through it at 25 and 100 ms, Time 64-127: taps 1/3/4/8 on the G2's sample (10-25) | - | Doubles: a 4-point read |
 | DlyShiftReg | Modelled | §69.6 | - | - | Not affected: copies |
 
 ### Effects
@@ -224,7 +226,7 @@ loop, or at a threshold. The classification comes from reading each model and is
 | FX Input | Confirmed on the G2 | capture-inventory | Pad +6/0/-6/-12 dB (09-07) | - | Doubles |
 | Keyboard | Confirmed on the G2 | §26 | velocity through the Operators within 0.03 dB (10-03) | - | Not affected |
 | Monophonic Keyboard | Confirmed on the G2 | §35 | held-note return on 01 Mini Emulator (CT, 09-19) | Poly use is a guess | Not affected |
-| Device | Approximate | §70.13 | - | - | Not affected |
+| Device | Modelled | §70.13, §70.13a | - | the filtering and scaling not compared on the G2: move the wheel and the pedal on both | Not affected |
 | Status | Confirmed on the G2 | §70.13 | Patch Active is low, off the G2 (10-04) | - | Not affected |
 | Note Detector | Modelled | §69.11 | - | - | Not affected |
 | Name Bar | No sound | - | - | - | Not affected |
@@ -260,7 +262,7 @@ loop, or at a threshold. The classification comes from reading each model and is
 | Pulse | Confirmed on the G2 | §18 | 17 widths within two samples (09) | Plus/Minus edge (10-09) in to-test | Not affected |
 | Delay | Modelled | §46 | - | - | Not affected |
 | Gate | Modelled | §38.2 | - | - | Not affected |
-| FlipFlop | Approximate | §38.3 | - | - | Not affected |
+| FlipFlop | Confirmed on the G2 | §38.3 | D and RS walked step by step on the G2 by its LEDs: the input order (Clk, In, Rst), D on the clock's rise, RS toggle, S and Rst (10-25) | - | Not affected |
 | ClkDiv | Confirmed on the G2 | §38.4 | 14 pattern seq steps once a bar, as on the G2 (10-07) | - | Not affected |
 | 8Counter | Modelled | §68.6 | - | - | Not affected |
 | BinCounter | Modelled | §68.6 | - | - | Not affected |
@@ -296,7 +298,7 @@ loop, or at a threshold. The classification comes from reading each model and is
 | Key Quantiser | Modelled | §41 | - | - | Integer words: the reference model's integer arithmetic |
 | Partial Quantiser | Modelled | §69.5 | - | - | Integer words |
 | Note Scaler | Modelled | §60 | - | - | Saturating doubles: saturated as a word |
-| Glide | Modelled | §36 | - | - | Doubles |
+| Glide | Confirmed on the G2 | §36, §36.1 | Log at Time 32/64/96 within 0.3%, Lin at 32/64/80/96 within 0.02%, a square through it into an OscB's pitch (10-25) | the Glide On input and the button off not compared | Doubles |
 | Pitch Tracker | Modelled | §70.7 | - | - | Doubles |
 | Zero Crossing Counter | Modelled | §70.7a | - | - | Doubles |
 | Level Scaler | Modelled | §70.12 | - | - | Saturating doubles: gain and output saturated |
@@ -305,9 +307,9 @@ loop, or at a threshold. The classification comes from reading each model and is
 
 | Module | State | Reference | On the G2 | Open | Fixed point |
 |---|---|---|---|---|---|
-| CtrlSend | Confirmed on the G2 | §62.3 | 1:2 BCHydro_DZLW's variation switching, within 1-4 ms (10-09) | MIDI channels 1-16 dropped | Saturating doubles: the signal saturated as a word, then the controller value |
+| CtrlSend | Confirmed on the G2 | §62.3 | 1:2 BCHydro_DZLW's variation switching, within 1-4 ms (10-09) | This and channels 1-16 leave by MIDI, which the engine has no output for (§62.2) | Saturating doubles: the signal saturated as a word, then the controller value |
 | PCSend | No sound | - | - | nothing leaves by MIDI | Not affected |
-| NoteSend | Partial | §62 | 18 Unreal Dreams' pitches and band balance (09-28) | MIDI channels 1-16 dropped | Not affected |
+| NoteSend | Confirmed on the G2 | §62, §62.2 | 18 Unreal Dreams' pitches and band balance (09-28); Slot A plays, This and channels 3/5 do not (10-25) | This and channels 1-16 leave by MIDI, which the engine has no output for | Not affected |
 | CtrlRcv | Modelled | §70.13 | - | in the plug-in only notes arrive | Not affected |
 | NoteRcv | Modelled | §70.13 | - | - | Not affected |
 | NoteZone | No sound | - | - | nothing leaves by MIDI | Not affected |
@@ -333,9 +335,9 @@ individual checks; `capture-inventory.md` the rigs and what is already on disk.
 | One slow full-scale ramp through each mode | Saturate, Clip, ShpExp, WaveWrap, ShpStatic, Rect | memoryless, so one ramp is the whole transfer function; all six are Approximate |
 | Noise through each filter, as FltMulti was (§10.3) | LP, HP, Nord, Classic, Static Filter | the filters most stage patches use; no response ever captured |
 | A gate train through each envelope | Envelope ADR, ADDSR, D, Multi; Mod ADSR's Attack and Sustain mod | their stage structure has never been heard against a G2 |
-| Rate at a few dials, and BPM/Clk against the master clock | LFO B, LFO C, and BPM/Clk on LFO A and LFO Shp A | LFO C is in many patches and never captured |
+| Rate at a few dials, and BPM/Clk against the master clock | LFO B, and BPM/Clk on LFO A, LFO C and LFO Shp A | LFO C's Hi and Lo done 10-25 (reference §28.7); its Sub and BPM are left |
 | A Constant into each jack | FM Operator's AMod and Pitch (§14.6) | added 2026-10-09; nothing on file exercises them |
-| Model fully, then capture | LevMult, Delay Dual/Quad/Eight, FlipFlop, Device, Eq 3-band's mid width | Approximate or Partial |
+| Model fully, then capture | Delay Dual/Quad/Eight, FlipFlop, Device, Eq 3-band's mid width | Approximate or Partial |
 
 
 ## Notes

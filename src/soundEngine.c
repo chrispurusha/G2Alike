@@ -2092,11 +2092,21 @@ static uint32_t         gPulseCountBank[SOUND_ENGINE_MAX_ENGINES][MAX_VOICES][MA
 // §36 - one Glide module's slewed output, per voice. `primed` is what makes the FIRST value it
 // ever sees arrive whole instead of being glided up from zero.
 static double           gGlideOutBank[SOUND_ENGINE_MAX_ENGINES][MAX_VOICES][MAX_ENGINE_NODES];
-#define gGlideOut       (gGlideOutBank[SE])
+#define gGlideOut              (gGlideOutBank[SE])
 static bool             gGlidePrimedBank[SOUND_ENGINE_MAX_ENGINES][MAX_VOICES][MAX_ENGINE_NODES];
-#define gGlidePrimed    (gGlidePrimedBank[SE])
+#define gGlidePrimed           (gGlidePrimedBank[SE])
 static double           gGlideTickBank[SOUND_ENGINE_MAX_ENGINES][MAX_VOICES][MAX_ENGINE_NODES];
-#define gGlideTick      (gGlideTickBank[SE])
+#define gGlideTick             (gGlideTickBank[SE])
+// §70.13a - the Device module's seven controls, filtered once per engine as the instrument does
+#define DEVICE_CONTROLS        (7u)
+#define DEVICE_PITCH_STICK     (4u)
+#define DEVICE_TICK_SAMPLES    (94.0)    // at 96 kHz
+static double           gDeviceLevelBank[SOUND_ENGINE_MAX_ENGINES][DEVICE_CONTROLS];
+#define gDeviceLevel           (gDeviceLevelBank[SE])
+static double           gDeviceTickBank[SOUND_ENGINE_MAX_ENGINES];
+#define gDeviceTick            (gDeviceTickBank[SE])
+static bool             gDevicePrimedBank[SOUND_ENGINE_MAX_ENGINES];
+#define gDevicePrimed          (gDevicePrimedBank[SE])
 
 // §38 - what a logic module remembers between samples: the edge detectors' last input, the latched
 // output, and the divider's count. `logicPrev` holds Clk in bit 0 and the D/S input in bit 1.
@@ -2562,6 +2572,8 @@ static double glide_time_seconds(double setting) {
 // models those tables - agreement with the reference model's values is better than 1% across the
 // dial, and within a few steps at the very top where §17.3 already says the closed form parts from
 // the table.
+#define GLIDE_Q23    (8388608.0)    // §36.1 - both table words are 24-bit fractions, rounded down
+
 static double glide_tick_coeff(double setting, bool lin) {
     double ticks = adr_time_seconds(setting) * ENV_TICK_HZ;
 
@@ -2570,11 +2582,12 @@ static double glide_tick_coeff(double setting, bool lin) {
     }
 
     if (lin == true) {
-        return GLIDE_LIN_STEP_SCALE * DSP_FULL_SCALE / ticks;    // §36.1 - a constant step
+        // §36.1 - a tenth of the envelope's Lin attack word, a constant step in engine units
+        return GLIDE_LIN_STEP_SCALE * floor(GLIDE_Q23 / ticks) / DSP_WORD_PER_ENGINE;
     }
     // TWICE the envelope's decay approach, which is what makes the dial's printed Time the time to
     // close the gap to 1% of it rather than the envelope's own reading of the same number.
-    return 2.0 * (1.0 - exp(-log(100.0) / ticks));
+    return 2.0 * (GLIDE_Q23 - floor(GLIDE_Q23 * exp(-log(100.0) / ticks))) / GLIDE_Q23;
 }
 
 // A parameter's value with every morph applied. morphRange is a SIGNED 8-bit offset from the dialled
@@ -5411,7 +5424,7 @@ static uint32_t input_connectors(tNodeKind kind, tModuleType moduleType, bool st
         case eNodeSink:
         case eNodeCompLev:          // §48 - A
         case eNodeNoteQuant:        // §49 - In
-        case eNodeFlipFlop:         // §38.3 - Clk, Rst, In
+        case eNodeFlipFlop:         // §38.3 - Clk, In, Rst
         case eNodeClkDiv:           // §38.4 - Clk, Rst
         case eNodeDrumSynth:        // §39 - Trig, Vel, Pitch
         {
@@ -6851,14 +6864,14 @@ static int32_t add_node(tSoundEngineParams * params, tModule * module, uint32_t 
         }
         case eNodeNoteSend:
         {
-            // §62 - Vel v x 2^14, Note v x 2^15 + 2^14 (a half to round with); midiChanStrMap 16 is This,
-            // 17-20 Slot A-D (§62.2). Channels 1-16 would leave by MIDI, and are dropped.
+            // §62 - Vel v x 2^14, Note v x 2^15 + 2^14 (a half to round with); midiChanStrMap 17-20 are
+            // Slot A-D (§62.2). Channels 1-16 and This (16, the slot's own channel) leave by MIDI only
             uint32_t channel = (uint32_t)module->param[variation][2].value;
 
             node->depth    = floor(param_value(module, variation, 0)) * 16384.0;
             node->constant = (floor(param_value(module, variation, 1)) * 32768.0) + 16384.0;
-            node->active   = (channel >= 16u) && (channel <= 20u);
-            node->select   = (channel == 16u) ? (module->key.slot % MAX_SLOTS) : ((channel - 17u) % MAX_SLOTS);
+            node->active   = (channel >= 17u) && (channel <= 20u);
+            node->select   = (channel >= 17u) ? ((channel - 17u) % MAX_SLOTS) : 0u;
             break;
         }
         case eNodeCtrlSend:
@@ -6868,8 +6881,8 @@ static int32_t add_node(tSoundEngineParams * params, tModule * module, uint32_t 
 
             node->constant = floor(param_value(module, variation, 0));
             node->depth    = floor(param_value(module, variation, 1)) * 16384.0;
-            node->active   = (channel >= 16u) && (channel <= 20u);
-            node->select   = (channel == 16u) ? (module->key.slot % MAX_SLOTS) : ((channel - 17u) % MAX_SLOTS);
+            node->active   = (channel >= 17u) && (channel <= 20u);   // §62.2 - This leaves by MIDI, as NoteSend's
+            node->select   = (channel >= 17u) ? ((channel - 17u) % MAX_SLOTS) : 0u;
             break;
         }
         case eNodeNoteScaler:
@@ -11846,11 +11859,11 @@ static double lfo_step(uint32_t voice, uint32_t node, const tEngineNode * spec, 
             }                                      // PosInv
             case 2:
             {
-                return -unipolar;
-            }                                      // Neg
+                return unipolar - 1.0;
+            }                                      // Neg - §28.7
             case 3:
             {
-                return unipolar - 1.0;
+                return -unipolar;
             }                                      // NegInv
             case 4:
             {
@@ -12311,9 +12324,17 @@ static double glide_step(uint32_t voice, uint32_t node, double input, double gat
                 current += (gap > 0.0) ? spec->glideCoeff : -spec->glideCoeff;
             }
         } else {
-            current += (input - current) * spec->glideCoeff;
+            // §36.1 - c x |gap| in whole words, rounded down, plus one
+            double gap  = input - current;
+            double step = (floor(fabs(gap) * DSP_WORD_PER_ENGINE * spec->glideCoeff) + 1.0) / DSP_WORD_PER_ENGINE;
+
+            if (fabs(gap) <= step) {
+                current = input;
+            } else {
+                current += (gap > 0.0) ? step : -step;
+            }
         }
-        gGlideOut[voice][node]   = current;
+        gGlideOut[voice][node] = current;
     }
     return current;
 }
@@ -12865,37 +12886,41 @@ static void multi_tap_step(const tEngineNode * spec, double input, const double 
     uint32_t       write = gDelayWrite[l];
     double         maxS  = spec->timeSeconds;
 
+    double         step  = delay_step_samples(maxS);
+    double         toNow = gSampleRate / G2_ENGINE_SAMPLE_RATE;
+
     gDelayLine[l][write] = (float)input;
 
     if (spec->select == 2u) {
-        double spacing = delay_time_seconds(maxS / 8.0, bx[0]);
+        double spacing = floor(bx[0] * step / 16.0);    // §52.1 - tap 8 at Time 127 is half the Range
 
         for (uint32_t k = 0; k < 8u; k++) {
-            out[k] = ring_read(gDelayLine[l], DELAY_LINE_SAMPLES, write, spacing * (double)(k + 1u) * gSampleRate);
+            out[k] = ring_read(gDelayLine[l], DELAY_LINE_SAMPLES, write, spacing * (double)(k + 1u) * toNow);
         }
     } else {
         uint32_t taps  = (spec->select == 0u) ? 2u : 4u;
         uint32_t first = (spec->select == 0u) ? 0u : 1u;
 
         for (uint32_t k = 0; k < taps; k++) {
-            double seconds = 0.0;
+            double back = 0.0;
 
             if (bx[8] != 0.0) {
-                seconds = clk_sync_beats(bx[k]) * (60.0 / bx[9]);
+                double seconds = clk_sync_beats(bx[k]) * (60.0 / bx[9]);
 
                 while ((seconds > maxS) && (seconds > 0.0)) {
                     seconds *= 0.5;
                 }
+                back = seconds * gSampleRate;
             } else {
                 double dial = fmin(127.0, fmax(0.0, bx[k] + (mods[k] * UNITS_PER_FULL_SCALE * bx[4u + k] / 64.0)));
 
-                seconds = delay_time_seconds(maxS, dial);
+                back = dial * step * toNow;    // §52.1 - Time x step, not DelayA's one more
             }
-            out[first + k] = delay_ring_lagrange(gDelayLine[l], write, seconds * gSampleRate);    // §52.1
+            out[first + k] = delay_ring_lagrange(gDelayLine[l], write, back);    // §52.1
         }
 
         if (spec->select == 1u) {
-            out[0] = ring_read(gDelayLine[l], DELAY_LINE_SAMPLES, write, maxS * gSampleRate);
+            out[0] = ring_read(gDelayLine[l], DELAY_LINE_SAMPLES, write, 127.0 * step * toNow);    // §52.1
         }
     }
     gDelayWrite[l] = (write + 1u) % DELAY_LINE_SAMPLES;
@@ -14534,32 +14559,33 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         }
         case eNodeFlipFlop:
         {
-            // §38.3 - Clk, Rst, In. Outputs are NotQ then Q, in the module's own order.
-            bool    clock    = logic_high(a);
-            bool    reset    = logic_high(signal_in(spec, value, 1));
-            bool    data     = logic_high(signal_in(spec, value, 2));
-            uint8_t prev     = gLogicPrev[voice][n];
-            bool    clkRise  = (clock == true) && ((prev & LOGIC_PREV_CLOCK) == 0u);
-            bool    dataRise = (data == true) && ((prev & LOGIC_PREV_DATA) == 0u);
+            // §38.3 - Clk, In, Rst. Outputs are NotQ then Q, in the module's own order.
+            bool clock   = logic_high(a);
+            bool data    = logic_high(signal_in(spec, value, 1));
+            bool reset   = logic_high(signal_in(spec, value, 2));
+            bool clkRise = (clock == true) && ((gLogicPrev[voice][n] & LOGIC_PREV_CLOCK) == 0u);
+            bool before  = gLogicState[voice][n];
 
-            if (reset == true) {
-                // Rst has priority in both types, and in D-type it also holds the clock off.
-                gLogicState[voice][n] = false;
-            } else if (spec->logicToggled == true) {
-                // Set-Reset: a rising edge on S sets. With S and Rst both low a clock TOGGLES,
-                // and a constant high on either stops that - which the tests above already do.
-                if (dataRise == true) {
-                    gLogicState[voice][n] = true;
-                } else if ((data == false) && (clkRise == true)) {
+            if (spec->logicToggled == true) {
+                // Set-Reset: a clock edge toggles, S (a level) sets, and Rst, last, clears
+                if (clkRise == true) {
                     gLogicState[voice][n] = (gLogicState[voice][n] == false);
+                }
+
+                if (data == true) {
+                    gLogicState[voice][n] = true;
                 }
             } else if (clkRise == true) {
                 gLogicState[voice][n] = data;   // D-type: clock the D input through
             }
-            gLogicPrev[voice][n] = (uint8_t)((clock ? LOGIC_PREV_CLOCK : 0u)
-                                             | (data ? LOGIC_PREV_DATA : 0u));
-            value[n][0]          = logic_level(gLogicState[voice][n] == false); // NotQ
-            value[n][1]          = logic_level(gLogicState[voice][n]);          // Q
+
+            if (reset == true) {
+                gLogicState[voice][n] = false;
+            }
+            gLogicPrev[voice][n] = (uint8_t)(clock ? LOGIC_PREV_CLOCK : 0u);
+            value[n][0]          = logic_level(gLogicState[voice][n] == false);   // NotQ
+            // §38.3 - D-type's Q is the state before this step
+            value[n][1]          = logic_level((spec->logicToggled == true) ? gLogicState[voice][n] : before);
             break;
         }
         case eNodeKeyQuant:
@@ -14793,14 +14819,10 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         case eNodeDevice:
         {
             // §70.13 - Wheel, Aftertouch, Control pedal, Sustain, Pitch stick, Global wheels 1 and 2
-            value[n][0] = (double)atomic_load(&gMorphMilli[MORPH_GROUP_WHEEL]) / 1000.0;
-            value[n][1] = (double)atomic_load(&gMorphMilli[MORPH_GROUP_AFTERTOUCH]) / 1000.0;
-            value[n][2] = (double)atomic_load(&gMorphMilli[5]) / 1000.0;
-            value[n][3] = logic_level(atomic_load(&gSustainPedal));
-            value[n][4] = (double)atomic_load(&gBendMilli) / 1000.0;
-            // the G2X global wheels arrive as CC 96 and CC 97 on the slot's channel (manual, MIDI CC list)
-            value[n][5] = midi_cc_level(atomic_load(&gMidiCcValue[MIDI_ROW_THIS][MIDI_CC_GLOBAL_WHEEL_1]));
-            value[n][6] = midi_cc_level(atomic_load(&gMidiCcValue[MIDI_ROW_THIS][MIDI_CC_GLOBAL_WHEEL_2]));
+            for (uint32_t d = 0; d < DEVICE_CONTROLS; d++) {
+                value[n][d] = gDeviceLevel[d];   // §70.13a
+            }
+
             break;
         }
         case eNodeCtrlRcv:
@@ -15707,6 +15729,52 @@ static void stage_smooth(const tSoundEngineParams * p, double rampSamples, tSmoo
     }
 }
 
+// §70.13a - each control's target in engine units: 127 is one unit, the pitch stick +-1
+static void device_targets(double * target) {
+    SE_LOCAL;
+
+    target[0] = (double)atomic_load(&gMorphMilli[MORPH_GROUP_WHEEL]) / 1000.0;
+    target[1] = (double)atomic_load(&gMorphMilli[MORPH_GROUP_AFTERTOUCH]) / 1000.0;
+    target[2] = (double)atomic_load(&gMorphMilli[5]) / 1000.0;
+    target[3] = (double)atomic_load(&gMorphMilli[MORPH_GROUP_SUSTAIN]) / 1000.0;
+    target[4] = (double)atomic_load(&gBendMilli) / 1000.0;
+    // the G2X global wheels arrive as CC 96 and CC 97 on the slot's channel (manual, MIDI CC list)
+    target[5] = (double)atomic_load(&gMidiCcValue[MIDI_ROW_THIS][MIDI_CC_GLOBAL_WHEEL_1]) / 127.0;
+    target[6] = (double)atomic_load(&gMidiCcValue[MIDI_ROW_THIS][MIDI_CC_GLOBAL_WHEEL_2]) / 127.0;
+}
+
+// §70.13a - every 94 samples each control moves an eighth-of-a-sixteenth of the way, in whole words
+static void device_filters_tick(void) {
+    SE_LOCAL;
+
+    double target[DEVICE_CONTROLS];
+
+    device_targets(target);
+
+    if (gDevicePrimed == false) {
+        memcpy(gDeviceLevel, target, sizeof(target));
+        gDevicePrimed = true;
+        return;
+    }
+    gDeviceTick -= G2_ENGINE_SAMPLE_RATE / gSampleRate;
+
+    if (gDeviceTick > 0.0) {
+        return;
+    }
+    gDeviceTick += DEVICE_TICK_SAMPLES;
+
+    for (uint32_t d = 0; d < DEVICE_CONTROLS; d++) {
+        double now  = floor(gDeviceLevel[d] * DSP_WORD_PER_ENGINE);
+        double gap  = floor(target[d] * DSP_WORD_PER_ENGINE) - now;
+        double step = floor(gap / ((d == DEVICE_PITCH_STICK) ? 16.0 : 128.0));
+
+        if (gap == 0.0) {
+            continue;
+        }
+        gDeviceLevel[d] = (now + ((step == 0.0) ? 1.0 : step)) / DSP_WORD_PER_ENGINE;
+    }
+}
+
 static void stage_voices(const tSoundEngineParams * p, const tStageCtx * ctx, double value[][NODE_OUTPUTS], tSmoothWhich smooth) {
     SE_LOCAL;
 
@@ -15714,6 +15782,8 @@ static void stage_voices(const tSoundEngineParams * p, const tStageCtx * ctx, do
     double   voiceSum[MAX_ENGINE_NODES][NODE_OUTPUTS]; // notes §221 - [k][0] per planned pair, unless unplanned
     double   meterValue[MAX_ENGINE_NODES][2];          // the metered voice's own output - notes §191
     bool     ctlTick    = ctl_tick(&gCtlPhaseVoice);   // notes §203
+
+    device_filters_tick();                             // §70.13a - once a sample, before any voice reads them
 
     // One event per sample. A chord's worth of note-ons arriving together therefore lands over
     // consecutive samples rather than all but the last being thrown away, and every note takes

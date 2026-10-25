@@ -250,3 +250,14 @@ constant: restore the block, `reverb_step()`, the IR renderer and the node field
 | 156 | Reverb Dry/Wet mix words (§20.5) | each ramp SQUARED: `rvDry = trunc(dry * dry * RV_COEF) / RV_COEF`, likewise wet | each ramp CUBED in 16-bit halves (`rv_mix_cube()`) - measured on the G2 | `c158300` `src/soundEngine.c` `reverb_build()` |
 | 157 | An Operator envelope on a voice that was idle when its note came (§14.2a) | strikes from where the voice last stopped (0 if never played) | first set to its rest level, L4 plus the note's offset, then strikes | `c158300` `src/soundEngine.c` `dx_step()`, `voice_start_note()` |
 | 158 | Oscillator Pitch Type Freq, and Partial's sub-audio end (§6.1a) | absolute: Kbt forced off (`osc_base_pitch()`'s `absolute`) | the pitch at E4, Kbt from the button - measured on the G2 | `c158300` `src/soundEngine.c` `osc_base_pitch()`, `set_osc_pitch()`, the OscShp build |
+
+## 2026-10-25
+
+| # | What | Old | New | Old code at |
+|---|---|---|---|---|
+| 159 | LFO Output Type Neg and NegInv (§28.7), every LFO with an Output Type | Neg `-unipolar`, NegInv `unipolar - 1.0` | Neg `unipolar - 1.0`, NegInv `-unipolar` - measured on the G2 (LFO C saw) | `3c7c365` `src/soundEngine.c` the LFO step's Output Type switch |
+| 160 | Glide module's per-tick step (§36.1a) | Log `current += gap * c` with c from the unrounded closed form; Lin `0.1 * DSP_FULL_SCALE / ticks` | Log `floor(c x gap words) + 1` word, c from the decay word rounded down; Lin `0.1 * floor(2^23 / ticks)` words - measured on the G2 | `3c7c365` `src/soundEngine.c` `glide_tick_coeff()`, `glide_step()` |
+| 161 | DelayDual/Quad tap, Quad Main, DlyEight taps (§52.1a) | Dual/Quad `delay_time_seconds()` (Time x step + 1); Main `maxS * gSampleRate`; Eight `k x delay_time_seconds(maxS / 8, Time)` | Time x step; 127 x step; `k x floor(Time x step / 16)` - measured on the G2 | `3c7c365` `src/soundEngine.c` the multi-tap delay step |
+| 162 | FlipFlop inputs and latch steps (§38.3) | inputs Clk, Rst, In (`connectorLocationList` and the engine); RS set on S's rising edge, Rst first; D-type Q the new state | Clk, In, Rst; RS: toggle, then S as a level, then Rst; D-type Q the state before the step - walked on the G2 | `3c7c365` `src/moduleResources.h` FlipFlop's input rows, `src/soundEngine.c` the FlipFlop step |
+| 163 | Device module's outputs (§70.13a) | each control raw (morph fraction, bend, CC v/128), sustain `logic_level(gSustainPedal)` | each filtered every 94 samples by (target - level) >> 7 words (pitch stick >> 4), 127 = one unit, sustain a level | `3c7c365` `src/soundEngine.c` the Device step |
+| 164 | NoteSend and CtrlSend to This (§62.2) | the module's own slot: `active` for channel 16..20, `select` the slot | leaves by MIDI only, as channels 1-16 - measured on the G2 | `3c7c365` `src/soundEngine.c` the NoteSend and CtrlSend builds |

@@ -1770,6 +1770,21 @@ and CosBell (the shared polynomial, §28.5). The engine's earlier waves were gue
 ignored Shape, TriBell was a plain triangle, Tri>Sqr a tanh (notes §158), and none had its phase.
 The Dir input is §28.4's.
 
+**28.7 Output Type, and LFO C on the G2 (2026-10-25).** With u the wave made unipolar, (w + 1)/2: Pos u,
+PosInv 1 - u, **Neg u - 1, NegInv -u**, Bip w, BipInv -w - the envelopes' law (§17.6). Neg is Pos moved
+down, not Pos mirrored: on the G2 a Neg saw ramps the same way as a Pos one. The engine had Neg and NegInv
+the other way round until this date; the one switch serves every LFO with an Output Type.
+
+Measured on LFO C at Range Hi, straight into a 2-Out (the outputs are AC-coupled, so direction and shape
+survive and DC does not; the rig was checked non-inverting with a Constant stepped 0 to +1):
+- Rate: Hi 64, 88, 100, 112 and 127 within 0.02% (10.30 to 392.0 Hz); Lo 100 and 127 within 0.09%.
+  Below ~5 Hz the AC coupling distorts the zero crossings and a rate is not readable this way.
+- Waves at Hi 112: Sine, Tri, Saw and Square correlate 0.99-1.00 with the engine, harmonics 2-8 within
+  0.7 dB. The Bip saw FALLS and jumps up, on both. RndSt and Rnd step once a cycle on both.
+- Level: every wave and Output Type within 0.2 dB of the day's rig offset.
+- The engine's square, rendered at 48 kHz, shows even harmonics at -62 dB the G2's lacks (below -105):
+  a duty error of a sample or so at that rate, not a law.
+
 ## 29. ModAmt
 
 Added 2026-09-19. Parameters, validated against the G2 (param-validation.md): 0 Depth, 1 Enable,
@@ -1799,6 +1814,11 @@ bypassed), with it OFF the output is cleared (silent). Enable on runs the module
 only for the crossfade form - the plain multiplier with Enable off makes nothing, which is also what it
 makes at Depth 0. Until 2026-09-27 the engine passed In in both (revert record row 79). The stage
 patches are unaffected: 02 Big Pad's two ModAmts with Enable off both have m/1-m on.
+
+**29.5 Confirmed on the G2 (2026-10-25)**, with LevMult's rig (§74): Exp and Lin, m and 1-m, Depth 32, 64,
+100 and 127, Mod -64, -32, +32 and +64 units, and Enable off in both forms - 66 settings within 0.04 dB,
+the sign right in each. Where the output is under -34 dB of the input, the rig's noise floor (-44 dB)
+adds to it in RMS and accounts for the reading exactly.
 
 ## 30. SwOnOffT
 
@@ -1937,6 +1957,18 @@ CONFIRMED by running the reference model tick by tick (2026-09-27): a Lin glide 
 61 501 ticks at Time 64, 3 258 at 32 and 524 288 at the top - 2.5 x the dial's Time each, as above - and
 Log reaches 99% in the one-pole's time.
 
+**36.1a The rounding, measured on the G2 (2026-10-25).** In words (one engine unit is 0x200000):
+- Log: c = 2 x (0x800000 - the decay word), the decay word rounded DOWN as the envelope's is; each tick
+  the step is **floor(c x |gap|) + 1**, and the glide lands on the target once the gap is no larger.
+- Lin: a tenth of the Lin attack word floor(2^23 / ticks), kept fractional.
+
+Until this date the engine took both from the unrounded closed form and left out the +1. Lin was then up
+to 0.9% fast and Log ran slow at long Times, where c x |gap| is only a few words near the end of a glide
+and the extra word is a fifth of the step: 3.5% at Time 96. Measured with an LFO square through the Glide
+into an OscB's pitch, Lin at Time 32/64/80/96 now agrees within 0.02%, Log at 32/64/96 within 0.3%. Of
+the three readings of the Log step - no extra word, the product kept whole plus one, and the product
+floored plus one - only the last fits the G2 (within 0.07% at Time 64 and 96; the others are 3% off).
+
 Both run at the envelope tick rate (24 kHz), because on the instrument this IS an envelope segment.
 The engine builds both from `adr_time_seconds()`, which is where 17 already models those tables, so
 there is no new table: it agrees with the reference model's values to better than 1% across the
@@ -2020,14 +2052,21 @@ types are drop-downs, so they are read raw and cannot be morphed.
 
 ## 38.3 FlipFlop
 
-Clk, Rst and In; the outputs are **NotQ then Q**, in the module's own connector order, and NotQ is
-always the inverse of Q (manual p.235).
+The inputs are **Clk, In, Rst** in the instrument's connector order - In is input 1 and Rst input 2
+(the editor had the two the other way round until 2026-10-25, so a patch read off a G2 wired its D into
+the reset). The outputs are **NotQ then Q** (manual p.235). Each step:
 
-- **D-type**: the state on In is clocked to Q on the POSITIVE EDGE of Clk. While Rst is HIGH, Q is
-  held low and clocking is ignored until Rst goes low again.
-- **Set-Reset**: In becomes S. A positive edge on S sets Q. **Rst has priority over S.** With S and
-  Rst both low, a clock on Clk TOGGLES Q - and a constant HIGH on either stops the toggling, since
-  both have priority over Clk.
+- **D-type**: on a rising edge of Clk (the last reading at or below zero, this one above) the state
+  becomes In > 0; then Rst > 0 clears it. NotQ is the new state inverted; **Q is the state before the
+  step**, so for one step after a change the two agree.
+- **RS-type**: a rising edge of Clk toggles the state; then **S (In) high sets it - a level, every
+  step, not an edge**; then Rst high clears it, so **Rst has priority**. A constant high on S or Rst
+  therefore stops the toggling.
+
+Walked on the G2 2026-10-25 with Constants on In and Rst and an LFO square on Clk, read off the module's
+LEDs: D follows In at the next clock and not before, RS toggles on the clock, S sets, Rst clears and wins
+over S. Until that date the engine read In and Rst swapped, set RS on S's rising edge only, and gave Q
+with no step's delay (revert record row 162).
 
 ## 38.4 ClkDiv
 
@@ -2430,9 +2469,18 @@ DelayDual and DelayQuad, is the MODULATED tap: it adds the Time M word x the inp
 clamps to the dial's range, and reads between samples with a four-point Lagrange interpolator (the
 fraction's top nine bits pick one of 512 coefficient sets, which are Lagrange's to the word). The
 engine now reads those taps with Lagrange (`delay_ring_lagrange()`); DlySingle used a Hermite cubic and
-Dual/Quad a linear read until then (revert record row 80). DlyEight's taps are whole samples at k x Time/8
-for k = 1..8 (its Time word is the dial / 8), so tap 8 sits at the dialled Time; DelayQuad's Main output
-is the far end of the line, the full Range.
+Dual/Quad a linear read until then (revert record row 80).
+
+**52.1a Where the taps sit, measured on the G2 (2026-10-25).** With step = round(Range x 96000 / 127)
+samples, a Dual or Quad tap is **Time x step** samples back - DelayA's tap (§24) is one more, these are
+not; Time 0 is the input itself. DelayQuad's Main is **127 x step**, a few samples past the Range (9652
+for 100 ms). DlyEight's tap k is **k x floor(Time x step / 16)** whole samples, so tap 8 at Time 127 is
+HALF the Range: its Time word is the dial / 8, and the spacing a sixteenth of the dialled time. Noise
+through each, the tap on one channel and the dry on the other, cross-correlated: every tap of all three
+on the G2's own sample (16 taps at 25, 100 and 500 ms), unity gain. Until this date the engine had the
+extra sample on Dual and Quad, Main at the bare Range, and DlyEight's taps at twice their distance
+(revert record row 161). A DelayDual at Range 2.7 s silenced the whole patch on the G2 - the patch no
+longer fits (g2-budget-estimate-design.md); the engine plays it.
 
 ## 53. OscPM
 
@@ -2580,8 +2628,13 @@ Vel In x 2 per unit, both clipped to 0-127. A NoteSend to "This" or to its own s
 own voices - which is how 18 Unreal Dreams plays itself from its sequencers; other channels would
 leave by MIDI and are dropped.
 
-**62.2 To another slot (2026-10-08).** Slot A-D sends the note to that slot's own voices, and This to the
-module's own slot - each straight into that slot's note queue. Before this date a NoteSend to another
+**62.2 To a slot (2026-10-08; This corrected 2026-10-25).** Slot A-D sends the note to that slot's own
+voices, straight into its note queue. **This is not a slot: it is the slot's own MIDI channel, and like
+channels 1-16 it leaves by MIDI only** - the G2 does not play its own outgoing notes. Measured 2026-10-25:
+a NoteSend gated by an LFO in slot A, with a voice there - Slot A plays it at -35 dBFS, This, channel 3 (the
+channel slot A receives on) and channel 5 leave it silent (-75 dBFS, the floor). 18 Unreal Dreams' five
+NoteSends are on Slot A, not This. CtrlSend's This is the same, so it does not select its own slot's
+variation either (revert record row 164). Before this date a NoteSend to another
 slot was dropped, and This went through the KEYBOARD's routing, so in a performance it played every slot
 with Keyboard on. Checked offline: 18 Unreal Dreams in slot A (its own output muted), SimpleLead in slot B -
 with the NoteSends on Slot B, B plays A's sequence at -29 dB; on This or on the empty Slot C, silence. A
@@ -2589,7 +2642,7 @@ slot that is not active renders nothing, as on the instrument, so its notes are 
 would leave by MIDI and are still dropped.
 
 **62.3 CtrlSend, and controller 70 (2026-10-09).** A CtrlSend sends its controller to a slot (Channel as
-NoteSend's: This or Slot A-D; 1-16 would leave by MIDI and are dropped) whenever its value changes - the
+NoteSend's: Slot A-D; This and 1-16 leave by MIDI and are dropped, §62.2) whenever its value changes - the
 Value dial plus the Value input, NoteSend's Vel arithmetic, 0-127 - and on a rising Send input (manual
 p.256). The last value sent starts at 0 (the reference model), so a CtrlSend at 0 sends nothing at start and
 one at any other value sends it at once. Its input is TRUNCATED to a whole word before the >> 14, as the
@@ -3004,6 +3057,13 @@ been compared with the instrument yet.
   Device gives the wheel, aftertouch, control pedal (morph group 5), sustain, pitch stick, and the G2X
   global wheels 1 and 2, which arrive as MIDI CC 96 and 97 on the slot's channel (the manual's fixed CC
   list).
+- **70.13a Device's controls are filtered (2026-10-25, the instrument's law).** Each control is held as a
+  word, 127 being one unit (v x 0x200000 / 127 - so v/127, where CtrlRcv's Val is v/128); the pitch stick
+  is +-1 unit over the MIDI bend's +-8192. Every 94 samples at 96 kHz (about 1021 times a second) each
+  moves toward its value by (target - level) >> 7 words, at least one - a one-pole of about 125 ms - and
+  the pitch stick by >> 4, about 16 ms. Sustain is a level like the others, not a logic step. The engine
+  read every control raw, sustain as a gate, until this date (revert record row 163). Rendered: a wheel
+  step through Device into an OscB's pitch reaches 63% in about 130 ms and 99% in 560 ms.
   CtrlRcv and NoteRcv (the reference model, 2026-10-02) take MIDI as it arrives, before any channel
   filter. Channel 1-16 is that channel, This the slot's own (the editor's MIDI input channel, or any when
   it is set to all), Keyb the keys that play the voices. CtrlRcv: each arrival of its controller sets Val
@@ -3083,3 +3143,8 @@ division rounding. Not yet captured off the G2.
 The instrument's (2026-10-09): a single stage that multiplies its two inputs and shifts left two - in engine units,
 Out = In x Mod, saturated at the word (+-4 units, notes §196). An unpatched input reads zero, so a LevMult
 with either jack empty is silent. The engine's plain product is exactly this.
+
+Confirmed on the G2 2026-10-25: an OscB sine into In and a Constant into Mod, the OscB also straight out
+as the reference, so the gain is a ratio within one capture. At Constant 0, 32, 48, 72, 80, 96 and 127 the
+gain is (v - 64)/64 within 0.04 dB on both - 127 reads as 64 units, a gain of exactly 1 - and a negative
+Mod inverts.

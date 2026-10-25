@@ -3,6 +3,8 @@ G2Alike - TO TEST
 Built, not yet checked against real hardware or a real user session.
 Confirmed -> delete the line. Check failed -> move it to todo.md.
 
+- ***DEVICE CONTROLS FILTERED (2026-10-25)*** - reference §70.13a. On the G2 and in the engine, a Device's Wheel into an OscB's pitch: flick the mod wheel and compare the glide (about 125 ms to 63%); the same for sustain, which is now a smoothed level, and the pitch stick (about 16 ms).
+- ***FLIPFLOP IN AND RST WERE SWAPPED; MULTI-TAP DELAYS ON THE G2'S SAMPLE (2026-10-25)*** - reference §38.3, §52.1a. A patch read off the G2 with a FlipFlop used to feed its In into the reset: load one of yours that uses a FlipFlop (or a DelayDual/Quad/Eight) and A/B it with the G2 by ear. The FlipFlop's face still shows Rst and In where they were; check that the cable ends land on the jacks the G2 editor shows.
 - ***REVERB DRY/WET CUBED; IDLE DX VOICES AT REST (2026-10-16)*** - reference §20.5, §14.2a; patch-ab-log.md. By ear against the G2: Bassic FM4, BassVaria NL3 and BriteTine have the G2's amount of reverb; Backtalk DX's notes after the first sound like the first; AdditiveG2's tones all there (Freq mode tracks the key, §6.1a)
 - ***PLUG-IN: MODULE BAR ON REOPEN (2026-10-16)*** - g2Draw.c notes §6. In a DAW: open G2Alike's editor, show the Module Bar, close the editor, reopen it - the patch starts below the bar, not under it
 - ***METER FALLS FROM THE TOP WITHOUT A HOLD (2026-10-16)*** - moduleGraphics.c notes §33. A hot signal that reaches 11, then drops: the meter falls through the yellows a row at a time, nothing left lit above it; only a clip keeps the red lit for a second
@@ -1254,3 +1256,4 @@ from a capture, so they are the ones most likely to be right.
 - A 4-Out set to Out now also plays its inputs 3 and 4 on Out 3/4 (sound-engine-notes §223) - check a patch with one in G2Alike's Out 3/4 bus
 - RedMonday_DZ (format 19) opened from the file with the G2 connected loads without the failure (2026-10-12: the conversion no longer pads SeqNote to 39 parameters, protocol notes §28)
 - Keys A-D select slots (Controls > Keys A-D Select Slots) and R starts/stops the clock: the topbar follows, the G2 follows, the choice survives a restart; switching back to Keys Play Notes plays again; the plug-in editor A-D/R in Live
+- Plug-in in Live, Controls > Keys Play Notes (the default): with the editor focused, A-K play Live's computer keyboard and V/C set its velocity; Keys A-D Select Slots: A-D pick slots again

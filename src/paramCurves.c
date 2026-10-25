@@ -645,11 +645,14 @@ double delay_range_max_seconds(tModuleType moduleType, uint32_t rangeValue) {
     return table[(rangeValue < count) ? rangeValue : (count - 1)];
 }
 
+// notes §20 - one Time dial step of a delay Range, in samples at the instrument's rate
+double delay_step_samples(double maxSeconds) {
+    return round((maxSeconds * G2_ENGINE_SAMPLE_RATE) / 127.0);
+}
+
 // notes §20
 double delay_time_seconds(double maxSeconds, double paramValue) {
-    double step = round((maxSeconds * G2_ENGINE_SAMPLE_RATE) / 127.0);
-
-    return ((paramValue * step) + 1.0) / G2_ENGINE_SAMPLE_RATE;
+    return ((paramValue * delay_step_samples(maxSeconds)) + 1.0) / G2_ENGINE_SAMPLE_RATE;
 }
 
 // notes §21

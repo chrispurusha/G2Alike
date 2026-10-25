@@ -50,6 +50,7 @@
 
 #include "g2View.h"      // cursor_is_captured() — the hidden-pointer safety net
 #include "g2Input.h"
+#include "virtualKeyboard.h"
 #include "textEdit.h"     // the name fields and patch notes - notes §26
 
 // notes §3
@@ -411,15 +412,20 @@ bool g2_input_key(int character, bool cmdHeld) {
     // p64). It stands aside while a name is being typed, as every bare-letter shortcut must — the
     // application gets that from where its branch sits in key_callback()'s chain, and this one has
     // to ask outright.
-    if (((character == 'v') || (character == 'V')) && (any_name_edit_active() == false) && !front_panel_active()) {
+    // virtualKeyboard notes §12: with Keys Play Notes, A-D and V are the host's - Live's computer keyboard plays
+    // A-K and uses V for velocity - so they are not taken here and reach it
+    bool hostNotes = note_entry_keys_play_notes();
+
+    if (  ((character == 'v') || (character == 'V')) && !hostNotes && (any_name_edit_active() == false)
+       && !front_panel_active()) {
         split_view_toggle_voice_area_only();
         return true;
     }
 
-    // A-D (slots) and R (clock Run/Stop); the plug-in has no note entry for them to clash with
+    // A-D (slots) and R (clock Run/Stop)
     int letter = ((character >= 'A') && (character <= 'Z')) ? (character - 'A' + 'a') : character;
 
-    if ((any_name_edit_active() == false) && (letter >= 'a') && (letter <= 'd')) {
+    if (!hostNotes && (any_name_edit_active() == false) && (letter >= 'a') && (letter <= 'd')) {
         topbar_select_slot((uint32_t)(letter - 'a'));
         return true;
     }

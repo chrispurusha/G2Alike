@@ -190,6 +190,7 @@ int delay_time_clk_param_index(tModuleType moduleType);
 double delay_range_max_seconds(tModuleType moduleType, uint32_t rangeValue);
 
 double delay_time_seconds(double maxSeconds, double paramValue);
+double delay_step_samples(double maxSeconds);
 uint32_t clk_sync_index(double paramValue);
 double clk_sync_beats(double paramValue);
 

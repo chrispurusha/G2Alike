@@ -73,6 +73,10 @@ Measure a control module through something that turns it into sound - an OscA's 
 - **The G2's outputs roll off** above ~15 kHz (sound-engine-notes §199): compare below 16 kHz, or render with the
   G2 Output Filter on.
 - **Check every 2-Out's destination** before a capture: a second module on the same outputs sums in.
+- **ADDMODULE straight after NEWPATCH can be lost**: it answers OK, but the G2's reply to the new patch
+  replaces the local copy and the module is gone. `DUMP` after building, before cabling.
+- **A wave's direction needs the rig's polarity**: step a Constant 0 to +1 into the 2-Out and see which
+  way the AC-coupled edge goes first (non-inverting on 2026-10-25).
 
 ## 5. What to validate next
 
@@ -81,15 +85,11 @@ compared with the G2. Settings in brackets are the first grid to try.
 
 | Module | Stage patches | Rig and method |
 |---|---|---|
-| LFO C | 9 | at Hi range into an OscA's pitch or straight out: rate at a few Rate dials per Range (period by zero crossings), each Wave's harmonics at audio rate |
-| Glide | 7 | Keyboard Note > Glide > OscA pitch, two MIDI notes legato (ch 3): the pitch's trajectory, Glide 32/64/96, each mode |
-| LevMult | 6 | OscA sine into In, a Constant into Mod: output against the Constant (-64, -32, 0, 32, 64) |
 | S&H | 6 | OscA (slow) into In, an LFO square as clock, the output into an OscA's pitch: held values and timing |
-| ModAmt | 5 | as LevMult, each mode and Inv |
 | LP Filter, HP Filter | 4, 2 | `filter_response.py` as the Nord Filter (Freq 50/85, each slope) |
 | Envelope ADR | 4 | Keyboard Gate > EnvADR > LevAmp on an OscA: stage times as EnvAHD's check (sound-engine-reference §17.11a) |
 | KeyQuant, SwOnOffT | 4 each | through an OscA's pitch / a LevAmp |
-| Phaser, LFO B, Envelope D | 3 each | Phaser by `filter_response.py`; the others as LFO C and Envelope ADR |
+| Phaser, LFO B, Envelope D | 3 each | Phaser by `filter_response.py`; LFO B as LFO C was (reference §28.7), Envelope D as Envelope ADR |
 
 **One cheap sweep that covers many aspects:** every module's Bypass/On-Off. The audit (`./tools/do-modulestatus
 --aspects`) shows almost no Modes / On-Off aspect compared on the G2. A session that toggles Bypass on each module
@@ -97,3 +97,12 @@ type in turn, with a source through it, and notes pass, silent or hold settles 1
 
 Done so far, for reference: DrumSynth Kick 1-5 (bands within 0.5 dB, level within 0.3 dB), Nord Filter (36
 settings within 1.44 dB, mean under 0.4), Compressor (8 levels within 0.01 dB) - all 2026-10-11.
+LFO C (2026-10-25, reference §28.7): straight into a 2-Out at Hi range, rate within 0.02%, every wave and
+Output Type; it found Neg and NegInv swapped. Its Sub and BPM ranges are left - too slow for the AC-coupled
+outputs, so through an OscA's pitch.
+Glide (2026-10-25, reference §36.1a): an LFO C square through it into an OscB's PitchVar, Log and Lin at
+several Times; it found the step's rounding. Glide On and the button off are left.
+LevMult (2026-10-25, reference §74): an OscB times a Constant, the OscB on the other channel as the
+reference; within 0.04 dB at 8 values. ModAmt the same way, 66 settings (reference §29.5).
+**The noise floor** in a ratio rig like that one is -44 dB of the reference: a reading below about -34 dB
+is the signal and the floor added in RMS, so compare sqrt(engine^2 + floor^2) there, not the engine alone.

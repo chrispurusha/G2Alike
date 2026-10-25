@@ -3616,8 +3616,8 @@ const tConnectorLocation connectorLocationList[] = {
     {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 88 Ctrl
     // 91 FlipFlop
     {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocLeft },    // 91 Clock
-    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 15,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocLeft },    // 91 Reset
-    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 35,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "In",            labelLocLeft },    // 91 In
+    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 35,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "In",            labelLocLeft },    // 91 In - the G2's input 1 (CT 2026-10-25)
+    {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 15,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Rst",           labelLocLeft },    // 91 Reset - input 2
     {moduleTypeFlipFlop,    connectorDirOut, connectorTypeLogic,   {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "NotQ",          labelLocRight},    // 91 NotQ
     {moduleTypeFlipFlop,    connectorDirOut, connectorTypeLogic,   {{ 80,  -10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Q",             labelLocRight},    // 91 Q
     // 92 FltClassic

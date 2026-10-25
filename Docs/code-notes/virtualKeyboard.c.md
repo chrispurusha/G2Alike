@@ -116,4 +116,8 @@ master clock. A and D are notes here (C and E), so **Controls** chooses between 
 default, everything as before) or *Keys A-D Select Slots*, which turns note entry off altogether - a keyboard
 missing its C and E would be no use - and lets A-D select slots. R is not a note key, so it works either way. The
 choice is kept in the prefs (`keysPlayNotes`). Switching releases any note the keys hold, Shift-latched ones
-included, since no key could reach them afterwards. The plug-in has no note entry, so its A-D and R always act.
+included, since no key could reach them afterwards. The plug-in has the same two items (2026-10-23, CT: in Live its A and D were taking the keys Live's own computer
+keyboard plays). It has no note entry, so there *Keys Play Notes* means the host's notes: A-D, and V (the
+voice-area toggle, which Live uses for velocity), are not taken and reach the host. *Keys A-D Select Slots* is
+the old behaviour. R acts either way. The plug-in keeps the choice in its own prefs, apart from the application's,
+and defaults to playing notes like the application.

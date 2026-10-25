@@ -125,7 +125,7 @@ static const tEvidence kEvidence[] = {
     // LFOs
     {"LFO A",                 eConfirmed,   "§28",                       "Hi rate measured", "BPM and Clk not checked on the G2"},
     {"LFO B",                 eModelled,    "§28, §28.4, §54",           "-", "-"},
-    {"LFO C",                 eModelled,    "§28",                       "-", "never captured"},
+    {"LFO C",                 eConfirmed,   "§28, §28.7",                "Hi 64-127 and Lo 100/127 rate within 0.09%; Sine/Tri/Saw/Sqr shape and harmonics within 0.7 dB; every Output Type, level within 0.2 dB (10-25)", "Sub and BPM ranges, the Rate input and Mono not compared"},
     {"LFO Shp A",             eConfirmed,   "§28.6",                     "Rate Sub, Lo, Hi within 0.013% (09-07)", "BPM and Clk not checked; waves not captured"},
     {"Clock Generator",       eConfirmed,   "§59",                       "Master clock within 7-17 ppm; engine within 1-4 ms over 66 s (10-09)", "-"},
     // Mixers
@@ -155,9 +155,9 @@ static const tEvidence kEvidence[] = {
     {"LevAmp",                eConfirmed,   "paramCurves notes §29",     "33 dial positions (08-30); 127 as 0x7FFFFF settled BCHydro_DZLW (10-09)", "-"},
     {"LevConv",               eModelled,    "§31",                       "-", "-"},
     {"LevMod",                eModelled,    "§69.3",                     "-", "-"},
-    {"LevMult",               eModelled,    "§74",                       "-", "-"},
+    {"LevMult",               eConfirmed,   "§74",                       "an OscB sine times a Constant at 8 values, -64 to +64 units: gain within 0.04 dB and the sign right (10-25)", "-"},
     {"MinMax",                eModelled,    "§43",                       "-", "-"},
-    {"ModAmt",                eModelled,    "§29",                       "parameter display only (param-validation)", "-"},
+    {"ModAmt",                eConfirmed,   "§29",                       "an OscB times a Constant through it, Exp and Lin, m and 1-m, Depth 32/64/100/127, Mod -64 to +64, Enable off: 66 settings within 0.04 dB, or at the rig's noise floor (10-25)", "-"},
     {"NoiseGate",             eModelled,    "§70.6",                     "-", "-"},
     {"EnvFollow",             eModelled,    "§69.4",                     "-", "times at 24 kHz when not up-rated not modelled (notes §203)"},
     {"Red2Blue",              eModelled,    "§68.8, notes §203",         "-", "-"},
@@ -173,13 +173,13 @@ static const tEvidence kEvidence[] = {
     // Delays
     {"Delay Single A",        eModelled,    "§52",                       "through DelayA only", "-"},
     {"Delay Single B",        eModelled,    "§52.1",                     "-", "-"},
-    {"Delay Dual",            eApproximate, "§70.1, §52.1",              "-", "only the taps are fully modelled (§52.1)"},
-    {"Delay Quad",            eApproximate, "§70.1, §52.1",              "-", "as Delay Dual"},
+    {"Delay Dual",            eConfirmed,   "§70.1, §52.1",              "noise through it, Ranges 5/25/500 ms, Time 0-127: each tap on the G2's sample, unity gain (10-25)", "Time Mod inputs not compared; Range 2.7 s silences the patch on the G2 (the budget)"},
+    {"Delay Quad",            eConfirmed,   "§70.1, §52.1",              "noise through it at 25 and 100 ms: the four taps and Main on the G2's sample, unity gain (10-25)", "Time Mod inputs and Clk mode not compared"},
     {"Delay A",               eConfirmed,   "§24",                       "FB, LP, dry/wet, Time and Clk (09; audio not kept)", "-"},
     {"Delay B",               eConfirmed,   "§24",                       "as Delay A; HP at four settings", "-"},
     {"Delay Stereo",          eModelled,    "§65",                       "-", "X-FB never compared"},
     {"Delay Clock",           eModelled,    "§69.7",                     "-", "-"},
-    {"Delay Eight",           eApproximate, "§70.1, §52.1",              "-", "as Delay Dual"},
+    {"Delay Eight",           eConfirmed,   "§70.1, §52.1",              "noise through it at 25 and 100 ms, Time 64-127: taps 1/3/4/8 on the G2's sample (10-25)", "-"},
     {"DlyShiftReg",           eModelled,    "§69.6",                     "-", "-"},
     // Effects
     {"Compressor",            eConfirmed,   "§25",                       "a steady sine at 8 levels, -47 to -19 dB, 04 Chris' Pad's settings: gain equal to the G2's within 0.01 dB (10-11)", "attack/release timing and SideChain not compared on the G2"},
@@ -199,7 +199,7 @@ static const tEvidence kEvidence[] = {
     {"FX Input",              eConfirmed,   "capture-inventory",         "Pad +6/0/-6/-12 dB (09-07)", "-"},
     {"Keyboard",              eConfirmed,   "§26",                       "velocity through the Operators within 0.03 dB (10-03)", "-"},
     {"Monophonic Keyboard",   eConfirmed,   "§35",                       "held-note return on 01 Mini Emulator (CT, 09-19)", "Poly use is a guess"},
-    {"Device",                eApproximate, "§70.13",                    "-", "-"},
+    {"Device",                eModelled,    "§70.13, §70.13a",           "-", "the filtering and scaling not compared on the G2: move the wheel and the pedal on both"},
     {"Status",                eConfirmed,   "§70.13",                    "Patch Active is low, off the G2 (10-04)", "-"},
     {"Note Detector",         eModelled,    "§69.11",                    "-", "-"},
     {"Name Bar",              eNoSound,     "-",                         "-", "-"},
@@ -227,7 +227,7 @@ static const tEvidence kEvidence[] = {
     {"Pulse",                 eConfirmed,   "§18",                       "17 widths within two samples (09)", "Plus/Minus edge (10-09) in to-test"},
     {"Delay",                 eModelled,    "§46",                       "-", "-"},
     {"Gate",                  eModelled,    "§38.2",                     "-", "-"},
-    {"FlipFlop",              eApproximate, "§38.3",                     "-", "-"},
+    {"FlipFlop",              eConfirmed,   "§38.3",                     "D and RS walked step by step on the G2 by its LEDs: the input order (Clk, In, Rst), D on the clock's rise, RS toggle, S and Rst (10-25)", "-"},
     {"ClkDiv",                eConfirmed,   "§38.4",                     "14 pattern seq steps once a bar, as on the G2 (10-07)", "-"},
     {"8Counter",              eModelled,    "§68.6",                     "-", "-"},
     {"BinCounter",            eModelled,    "§68.6",                     "-", "-"},
@@ -251,18 +251,18 @@ static const tEvidence kEvidence[] = {
     {"Key Quantiser",         eModelled,    "§41",                       "-", "-"},
     {"Partial Quantiser",     eModelled,    "§69.5",                     "-", "-"},
     {"Note Scaler",           eModelled,    "§60",                       "-", "-"},
-    {"Glide",                 eModelled,    "§36",                       "-", "-"},
+    {"Glide",                 eConfirmed,   "§36, §36.1",                "Log at Time 32/64/96 within 0.3%, Lin at 32/64/80/96 within 0.02%, a square through it into an OscB's pitch (10-25)", "the Glide On input and the button off not compared"},
     {"Pitch Tracker",         eModelled,    "§70.7",                     "-", "-"},
     {"Zero Crossing Counter", eModelled,    "§70.7a",                    "-", "-"},
     {"Level Scaler",          eModelled,    "§70.12",                    "-", "-"},
     // MIDI
-    {"CtrlSend",              eConfirmed,   "§62.3",                     "1:2 BCHydro_DZLW's variation switching, within 1-4 ms (10-09)", "MIDI channels 1-16 dropped"},
+    {"CtrlSend",              eConfirmed,   "§62.3",                     "1:2 BCHydro_DZLW's variation switching, within 1-4 ms (10-09)", "This and channels 1-16 leave by MIDI, which the engine has no output for (§62.2)"},
     {"PCSend",                eNoSound,     "-",                         "-", "nothing leaves by MIDI"},
     {"CtrlRcv",               eModelled,    "§70.13",                    "-", "in the plug-in only notes arrive"},
     {"NoteRcv",               eModelled,    "§70.13",                    "-", "-"},
     {"NoteZone",              eNoSound,     "-",                         "-", "nothing leaves by MIDI"},
     {"Automate",              eNoSound,     "-",                         "-", "nothing leaves by MIDI"},
-    {"NoteSend",              ePartial,     "§62",                       "18 Unreal Dreams' pitches and band balance (09-28)", "MIDI channels 1-16 dropped"},
+    {"NoteSend",              eConfirmed,   "§62, §62.2",                "18 Unreal Dreams' pitches and band balance (09-28); Slot A plays, This and channels 3/5 do not (10-25)", "This and channels 1-16 leave by MIDI, which the engine has no output for"},
 };
 
 // notes §2 - the arithmetic each module's model runs in, against 24-bit words
@@ -1078,15 +1078,15 @@ static const tAspectEvidence kAspectEvidence[] = {
     {"LFO A", eAspectInputs, eModelled, "§50", "-", "the rate jacks not compared"},
     {"LFO A", eAspectModes, eModelled, "§28", "-", "Wave, OutType, Kbt and Mode not compared; waves not captured"},
     {"LFO B", eAspectCore, eModelled, "§28, §28.4, §54", "-", "never captured"},
-    {"LFO C", eAspectCore, eModelled, "§28", "-", "never captured"},
+    {"LFO C", eAspectCore, eConfirmed, "§28", "Sine/Tri/Saw/Sqr at 165 Hz: correlation 0.99-1.00, harmonics within 0.7 dB, the saw falling on both (10-25)", "-"},
     {"LFO B", eAspectTiming, eModelled, "§28, §28.4, §54", "-", "-"},
-    {"LFO C", eAspectTiming, eModelled, "§28", "-", "-"},
+    {"LFO C", eAspectTiming, eConfirmed, "§28", "rate at Hi 64-127 within 0.02%, Lo 100/127 within 0.09%; RndSt/Rnd step once a cycle (10-25)", "Sub and BPM not compared"},
     {"LFO B", eAspectDials, eModelled, "§28, §28.4, §54", "-", "-"},
-    {"LFO C", eAspectDials, eModelled, "§28", "-", "-"},
+    {"LFO C", eAspectDials, eModelled, "§28", "Rate (10-25)", "Range Sub and BPM not compared"},
     {"LFO B", eAspectInputs, eModelled, "§28, §28.4, §54", "-", "-"},
     {"LFO C", eAspectInputs, eModelled, "§28", "-", "-"},
     {"LFO B", eAspectModes, eModelled, "§28, §28.4, §54", "-", "-"},
-    {"LFO C", eAspectModes, eModelled, "§28", "-", "-"},
+    {"LFO C", eAspectModes, eConfirmed, "§28, §28.7", "all six waves and all six Output Types; Neg/NegInv corrected (10-25)", "Mono not compared"},
     {"LFO Shp A", eAspectCore, eModelled, "§28.6", "-", "waves not captured"},
     {"LFO Shp A", eAspectTiming, eModelled, "§28.6", "Rate Sub, Lo and Hi within 0.013% (09-07)", "BPM and Clk not checked"},
     {"LFO Shp A", eAspectDials, eModelled, "§28.4, §28.6", "Rate (09-07)", "Shape, Phase and the mod amounts not compared"},
@@ -1270,6 +1270,47 @@ static int print_aspects(const char * paramNames) {
     return result;
 }
 
+// The doc's state table, with how many modules are in each state; the last row is Not implemented
+static const char * kStateMeaning[STATE_COUNT + 1] = {
+    "compared with a G2 (a capture, its meters, or a stage patch played against it) and it agrees",
+    "a full model in the reference, not yet compared with a G2",
+    "follows the manual's description; a full model is still to come",
+    "audible, but something about it is known to be missing - the Open column says what",
+    "nothing to render (a name, or a module whose output leaves by MIDI)",
+    "not modelled: it contributes nothing and is pruned from the chain",
+};
+
+static void print_state_table(void) {
+    uint32_t n[STATE_COUNT + 1] = {0};
+    uint32_t all                = 0;
+
+    for (uint32_t g = 0; g < GROUP_COUNT; g++) {
+        tModuleType types[256];
+        uint32_t    count = palette_group_modules(kGroups[g].group, types, 256);
+
+        for (uint32_t i = 0; i < count; i++) {
+            tModule module = {0};
+            int     e      = evidence_index(module_name(types[i]));
+
+            module.type = types[i];
+
+            if (sound_engine_models_module(&module) == false) {
+                n[STATE_COUNT]++;
+            } else if (e >= 0) {
+                n[kEvidence[e].state]++;
+            }
+            all++;
+        }
+    }
+    printf("| state | meaning | modules |\n");
+    printf("|---|---|---|\n");
+
+    for (uint32_t s = 0; s <= STATE_COUNT; s++) {
+        printf("| **%s** | %s | %u |\n", (s < STATE_COUNT) ? kStateName[s] : "Not implemented", kStateMeaning[s], (unsigned)n[s]);
+    }
+    printf("| **Total** | every module type the palette offers | %u |\n\n", (unsigned)all);
+}
+
 int main(int argc, char ** argv) {
     uint32_t total[STATE_COUNT + 1]       = {0};    // the last is Not implemented
     bool     evidenceSeen[EVIDENCE_COUNT] = {false};
@@ -1282,6 +1323,7 @@ int main(int argc, char ** argv) {
     if ((argc > 1) && (strcmp(argv[1], "--aspects") == 0)) {
         return print_aspects((argc > 2) ? argv[2] : "Docs/param-validation.md");
     }
+    print_state_table();
     printf("| Group | Confirmed on the G2 | Modelled | Approximate | Partial | No sound | Not implemented |\n");
     printf("|---|---|---|---|---|---|---|\n");
 

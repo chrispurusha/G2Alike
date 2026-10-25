@@ -591,9 +591,7 @@ static void action_dial_mode_horizontal(int index) {
     synthlib_save_dial_mode(synthlib_dial_mode());
 }
 
-#ifndef SYNTHLIB_PLUGIN_BUILD
-
-// virtualKeyboard notes §12
+// virtualKeyboard notes §12 - in the plug-in, "notes" means the host's: A-D and V are left to it
 static void action_keys_play_notes(int index) {
     (void)index;
     note_entry_set_keys_play_notes(true);
@@ -603,17 +601,14 @@ static void action_keys_select_slots(int index) {
     (void)index;
     note_entry_set_keys_play_notes(false);
 }
-#endif
 
 void open_controls_menu(tCoord anchor) {
     static tMenuItem items[]      = {
         {"* Rotary",              (tRgb)RGB_GREY_3, action_dial_mode_rotary,     0, NULL, 0, 0.0},
         {"* Vertical",            (tRgb)RGB_GREY_3, action_dial_mode_vertical,   0, NULL, 0, 0.0},
         {"* Horizontal",          (tRgb)RGB_GREY_3, action_dial_mode_horizontal, 0, NULL, 0, 0.0},
-#ifndef SYNTHLIB_PLUGIN_BUILD
         {"Keys Play Notes",       (tRgb)RGB_GREY_3, action_keys_play_notes,      0, NULL, 0, 0.0},
         {"Keys A-D Select Slots", (tRgb)RGB_GREY_3, action_keys_select_slots,    0, NULL, 0, 0.0},
-#endif
         {NULL,                    (tRgb)RGB_BLACK,  NULL,                        0, NULL, 0, 0.0},
     };
 
@@ -626,12 +621,10 @@ void open_controls_menu(tCoord anchor) {
         items[i].label = ((int)synthlib_dial_mode() == i) ? checked[i] : unchecked[i];
     }
 
-#ifndef SYNTHLIB_PLUGIN_BUILD
     bool             notes        = note_entry_keys_play_notes();
 
     items[3].label = notes ? "* Keys Play Notes" : "Keys Play Notes";
     items[4].label = notes ? "Keys A-D Select Slots" : "* Keys A-D Select Slots";
-#endif
 
     open_context_menu(anchor, items, 0, 0.0);
 }
