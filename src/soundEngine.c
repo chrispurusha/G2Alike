@@ -660,7 +660,6 @@ static double lfo_shape_dial(double v) {
 #define FLTVOICE_PARAM_RES         (8)
 #define FLTVOICE_PARAM_ACTIVE      (9)
 #define FLTVOICE_VOWELS            (9)    // vowelStrMap: A, E, I, O, U, Y, AA, AE, OE
-#define FLTVOICE_FINE_OFFSET       (-0.5) // §56.1 - the fine table starts at -50 cents, and the module reads it from there
 #define FREQSHIFT_PARAM_SHIFT      (0)    // §57 - FreqShift, Mod, Range, Bypass
 #define FREQSHIFT_PARAM_MOD        (1)
 #define FREQSHIFT_PARAM_RANGE      (2)
@@ -698,6 +697,8 @@ static double lfo_shape_dial(double v) {
 #define SCRATCH_SMOOTH_IN          (0.0100002)      // §70.3 - 0x147ae
 #define SCRATCH_SMOOTH_POLE        (0.99)           // §70.3 - 0x7eb852
 #define KARPLUS_LINE               (7000.0)         // §70.4 - OscString's line, in 96 kHz samples
+#define KARPLUS_PERIOD_CYCLES      (2.0)            // §70.4 - 2^25 / increment: two of the oscillators' cycles
+#define KARPLUS_LOOP_EXTRA         (1.0)            // §70.4 - the loop is one sample longer than the period
 #define KARPLUS_DECAY_A            (2.070135)       // §70.4 - the Decay law's three constants
 #define KARPLUS_DECAY_B            (11.050795)
 #define KARPLUS_DECAY_R            (0.9869)
@@ -5140,9 +5141,13 @@ static void lfo_phase_build(tEngineNode * node, tModule * module, uint32_t varia
     node->lfoShapeMod  = (p->shapeMod >= 0)
                          ? wave_shape_word(param_value(module, variation, (uint32_t)p->shapeMod) / 127.0) : 0.0;
 
-    // LfoB's Sine and Tri read half a word behind LfoA's for the same counter; its Saw and Sqr do not
-    if (isB && ((uint32_t)node->wave < 2u)) {
-        node->lfoPhase -= 0.25;
+    // §28.4a - where LfoB's waves sit on the counter, against LfoA's reading of them
+    if (isB) {
+        static const double kLfoBWaveOffset[4] = {-0.5, -0.25, 0.5, 0.5};    // Sine, Tri, Saw, Sqr
+
+        if ((uint32_t)node->wave < 4u) {
+            node->lfoPhase += kLfoBWaveOffset[(uint32_t)node->wave];
+        }
     }
 }
 
@@ -5376,7 +5381,7 @@ static uint32_t input_connectors(tNodeKind kind, tModuleType moduleType, bool st
         case eNodeDlySingle:        // §52 - In, then B's Time mod
         case eNodeOscPM:            // §53 - PitchVar, Sync, Phase M, Pitch
         case eNodeFltVoice:         // §56 - In, Vowel, FreqMod
-        case eNodeFreqShift:        // §57 - Mod, In
+        case eNodeFreqShift:        // §57 - In, Mod
         case eNodeSeq16:            // §58 - Clk, Rst, Loop, Park, then the two rows' inputs
         case eNodeClkGen:           // §59 - Rst
         case eNodeNoteScaler:       // §60 - In
@@ -10239,7 +10244,7 @@ static double fltvoice_step(uint32_t voice, uint32_t n, const tEngineNode * spec
                                       + (vowelIn * spec->modAmount * 2.0));
     double          semi = phaser_sat((((spec->shape >= 127.0) ? 1.0 : ((spec->shape - 64.0) / 64.0)) / 1.0)
                                       + (freqIn * spec->depth * 2.0)) * 32.0;
-    double          mult = exp2((semi + FLTVOICE_FINE_OFFSET) / 12.0);    // §56.1
+    double          mult = exp2(semi / 12.0);    // §56.1
     const int32_t * mid  = kFltVoiceVowels[spec->vowel[1]];
     const int32_t * side = kFltVoiceVowels[spec->vowel[(pos < 0.0) ? 0 : 2]];
     double          span = fabs(pos);
@@ -11944,6 +11949,8 @@ static void fltmulti_step(uint32_t voice, uint32_t node, const tEngineNode * spe
     }
 }
 
+#define FLTSTATIC_HP_FEEDBACK    (0.9)    // §10.4a
+
 // §10.4 - FltMulti's filter (§10.2) with FltStatic's damping and drive, one output by FilterType.
 static double fltstatic_step(double * state, double input, double tuning, double resDial, tFilterShape shape,
                              bool gainComp) {
@@ -11975,7 +11982,12 @@ static double fltstatic_step(double * state, double input, double tuning, double
         }
         case eFilterShapeHighPass:
         {
-            return high;
+            // §10.4a - the high output through (1 - F/2)(1 + z^-1) / (1 + 0.9 z^-1)
+            double out = (bandScale * (high + state[3])) - (FLTSTATIC_HP_FEEDBACK * state[4]);
+
+            state[3] = high;
+            state[4] = out;
+            return out;
         }
         default:
         {
@@ -13073,7 +13085,7 @@ static double pitch_shift_step(const tEngineNode * spec, uint32_t voice, double 
 
 static double osc_frequency_hz(const tEngineNode * spec, double voicePitch, double pitchDirect, double pitchVar);
 
-// §70.4 - OscString: the line read 96000/f samples back (a 4-point read), through the Damp one-pole s;
+// §70.4 - OscString: the line read 2 x 96000/f samples back (a 4-point read), through the Damp one-pole s;
 // the line takes In + Decay x s, Out is s (0 with the module off, the loop running on)
 static double karplus_step(uint32_t voice, uint32_t n, const tEngineNode * spec, double excite, double pitchIn,
                            double pitchVar, double voicePitch) {
@@ -13087,8 +13099,9 @@ static double karplus_step(uint32_t voice, uint32_t n, const tEngineNode * spec,
     float *  ring   = gString[voice][l];
     uint32_t write  = gStringWrite[voice][l];
     double   hz     = osc_frequency_hz(spec, voicePitch, pitchIn, pitchVar);
-    double   period = (hz > 0.0) ? fmin(G2_ENGINE_SAMPLE_RATE / hz, KARPLUS_LINE - 2.0) : (KARPLUS_LINE - 2.0);
-    double   delay  = fmin(fmax(period, 2.0) * gSampleRate / G2_ENGINE_SAMPLE_RATE, (double)(STRING_SAMPLES - 4u));
+    double   period = (hz > 0.0) ? fmin(KARPLUS_PERIOD_CYCLES * G2_ENGINE_SAMPLE_RATE / hz, KARPLUS_LINE - 2.0) : (KARPLUS_LINE - 2.0);
+    double   delay  = fmin(fmax(period + KARPLUS_LOOP_EXTRA, 2.0) * gSampleRate / G2_ENGINE_SAMPLE_RATE,
+                           (double)(STRING_SAMPLES - 4u));
     double * lp     = &gLadder[voice][n][0];
     double   back   = ring_read_lagrange(ring, STRING_SAMPLES, write, delay - 1.0);
 
@@ -13130,7 +13143,7 @@ static void resonator_step(uint32_t voice, uint32_t n, const tEngineNode * spec,
     const double * mix    = kResonatorMix[spec->select];
     double         scale  = gSampleRate / G2_ENGINE_SAMPLE_RATE;
     double         hz     = osc_frequency_hz(spec, voicePitch, pitchIn, pitchVar);
-    double         period = (hz > 0.0) ? fmin(G2_ENGINE_SAMPLE_RATE / hz, KARPLUS_LINE - 2.0) : (KARPLUS_LINE - 2.0);
+    double         period = (hz > 0.0) ? fmin(KARPLUS_PERIOD_CYCLES * G2_ENGINE_SAMPLE_RATE / hz, KARPLUS_LINE - 2.0) : (KARPLUS_LINE - 2.0);
     double         span   = fmax(period - RESONATOR_TRIM, 0.0);
     double         len[2] = {span * spec->bx[2], span * (1.0 - spec->bx[2])};
     double         line[2];
@@ -13657,14 +13670,15 @@ static double driver_step(const tEngineNode * spec, double in1, double in2) {
     double a = in2 / DSP_FULL_SCALE;
 
     if (spec->select == DRIVER_TYPE_BOW) {
-        double v = fmin(8.0 * spec->bx[0] * fabs(b - a + spec->bx[1]), 1.0);
+        double v = fmin(8.0 * spec->bx[0] * fabs(b - a - spec->bx[1]), 1.0);   // §70.5a
         double f = fmin(3.0 * (1.0 - v) * (1.0 - v) * (1.0 - v), 1.0);
 
-        return dsp_saturate(f * (b - a) * DSP_FULL_SCALE);
+        return dsp_saturate(f * (a - b) * DSP_FULL_SCALE);
     }
-    double r = fmin(fmax(spec->bx[1] - (4.0 * spec->bx[0] * (a - b)), -1.0), 1.0);
+    // §70.5a - the reed takes In2 negated
+    double r = fmin(fmax(spec->bx[1] + (4.0 * spec->bx[0] * (b + a)), -1.0), 1.0);
 
-    return fmin(fmax(b + (r * (a - b)), -1.0), 1.0) * DSP_FULL_SCALE;
+    return fmin(fmax(-a + (r * (b + a)), -1.0), 1.0) * DSP_FULL_SCALE;
 }
 
 // §70.12 - the key (Note plus, with Kbt, the keyboard) less BrkPnt, in keys, times the slope word of its
@@ -14736,9 +14750,8 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         }
         case eNodePShift:
         {
-            // PShift's inputs are PitchVar then In; Scratch's In then Mod
-            value[n][0] = (spec->select == 0u) ? pitch_shift_step(spec, voice, signal_in(spec, value, 1), a)
-                          : pitch_shift_step(spec, voice, a, signal_in(spec, value, 1));
+            // §70.3 - In then its modulation, on PShift as on Scratch
+            value[n][0] = pitch_shift_step(spec, voice, a, signal_in(spec, value, 1));
             break;
         }
         case eNodeOscString:
@@ -15055,8 +15068,8 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         }
         case eNodeFreqShift:
         {
-            // §57 - Mod is input 0, In input 1; Down and Up
-            freqshift_step(voice, spec, signal_in(spec, value, 1), a, &value[n][0], &value[n][1]);
+            // §57 - In is input 0, Mod input 1; Down and Up
+            freqshift_step(voice, spec, a, signal_in(spec, value, 1), &value[n][0], &value[n][1]);
             break;
         }
         case eNodeFltVoice:

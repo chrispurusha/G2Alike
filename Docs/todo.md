@@ -76,6 +76,7 @@ USER REQUESTS (reported 2026-08-22; none blocking)
 
 
 MODULES AND GRAPHICS
+- Connector positions that differ from the original faces (2026-10-25, a position check of every face; EnvMulti fixed the same day - its In and AM jacks were swapped on our face): Keyboard, ValSw1-2, Sw1-2 and Sw1-8 outputs; Driver, Resonator and RndClkB inputs (FreqShift and PShift fixed the same day: their In and mod inputs were swapped in meaning too); PitchTrack outputs - the jack for each connector number sits elsewhere on our face. Driver and Resonator behave right by number on the G2, so only their faces move; the others need their meaning checked too (FlipFlop's was wrong, reference §38.3)
 - Mix4-1S: the G2 sends 8 parameters where the module tables hold 9 (logged loading the patch library, 2026-09-25)
 - Re-lay out the remaining families by rule (module-layout-rules.md "common face", tools/relayout.py) - Level group done 2026-09-13; next the delays and the pitch/FX group still on port coordinates
 - A drag-and-drop layout mode in the editor that snaps to the grid and writes the rows back - for what the rules cannot settle
@@ -108,6 +109,7 @@ FILTERS
 - Re-check FltComb FB 127 and FltPhase FB 127 with the level-tracking test, as FltClassic/FltNord were
 
 SOUND ENGINE
+- DrumSynth noise more prominent on the engine than on the G2 (CT 2026-10-25): check its noise path for a feedback or filter stage the engine lacks - FltStatic's HP turned out to have one (reference §10.4a)
 - Engine headroom: no attenuation anywhere for polyphony, so a pad at full voices sits on the rail at the default 0 dB. Decide whether the Out module, the output stage or nothing should scale with voice count - the G2 itself does not clip here
 - Voice count: the engine gives a Poly patch voiceCount+1 voices capped at MAX_VOICES (32) - CONFIRMED right (02 Big Pad asks for and gets 14, 2026-09-19) - but the G2 assigns by DSP load and reports what it actually got ("15 (16)", 2026-08-29), so the topbar should show a requested/assigned pair
 - Only the FIRST node a patch morphs on both axes gets a pair table (MAX_PAIR_NODES 1, reference §26.2.3) - raise it if a patch ever needs two

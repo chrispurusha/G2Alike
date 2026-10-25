@@ -3441,8 +3441,8 @@ const tConnectorLocation connectorLocationList[] = {
     {moduleTypeFltNord,     connectorDirIn,  connectorTypeControl, {{ 47,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },    // Res
     // 52 EnvMulti
     {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeLogic,   {{  3,   10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "Gate",          labelLocRight},    // 52 Gate
+    {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeControl, {{-10,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},    // 52 In - input 1 on the G2 (2026-10-25)
     {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeControl, {{ 17,   10}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopLeft,     "AM",            labelLocRight},    // 52 AM
-    {moduleTypeEnvMulti,    connectorDirIn,  connectorTypeControl, {{-10,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocRight},    // 52 In
     {moduleTypeEnvMulti,    connectorDirOut, connectorTypeControl, {{ -3,   14}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    "Env",           labelLocLeft },    // 52 Env
     {moduleTypeEnvMulti,    connectorDirOut, connectorTypeControl, {{ -3,    7}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 52 Out
     // 53 SandH
@@ -3639,8 +3639,8 @@ const tConnectorLocation connectorLocationList[] = {
     {moduleTypeOscA,        connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 97  PitchVar
     {moduleTypeOscA,        connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 97 Out
     // 98 FreqShift
+    {moduleTypeFreqShift,   connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 98 In - input 0 on the G2 (2026-10-25)
     {moduleTypeFreqShift,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 98 Mod
-    {moduleTypeFreqShift,   connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 98 In
     {moduleTypeFreqShift,   connectorDirOut, connectorTypeAudio,   {{-17,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Down",          labelLocLeft },    //98 Down
     {moduleTypeFreqShift,   connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "Up",            labelLocLeft },    // 98 Up
     // 99 Unknown
@@ -3965,8 +3965,8 @@ const tConnectorLocation connectorLocationList[] = {
     {moduleTypeDXRouter,    connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },   // 164 Out
     // 166 Unknown
     // 167 PShift
+    {moduleTypePShift,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 167 In - input 0 on the G2 (2026-10-25)
     {moduleTypePShift,      connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "--",            labelLocRight},    // 167 PitchVar
-    {moduleTypePShift,      connectorDirIn,  connectorTypeAudio,   {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 167 In
     {moduleTypePShift,      connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 167 Out
     // 168 Unknown
     // 169 ModAHD

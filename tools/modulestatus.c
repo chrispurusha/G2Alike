@@ -81,50 +81,50 @@ static const tEvidence kEvidence[] = {
     {"Osc B",                 eConfirmed,   "§6.3, §6.6-§6.8",           "5 waves x 8 pitches, harmonics within 0.1 dB (09-17); DualSaw below zero 0.1 dB (10-08)", "FM and Sync not compared on the G2; Shape 127's one-sample click not modelled; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
     {"Osc C",                 eConfirmed,   "§6.3, §6.1a",               "Saw, Sqr50/25/10, Tri at 440-3520 Hz (09-17); Freq mode tracks the key: AdditiveG2 within 1.4 dB per octave (10-16)", "FM not compared on the G2"},
     {"Osc D",                 eConfirmed,   "§6.3, §6.1a",               "level and harmonics against OscA (09-12)", "Pitch Type: Freq tracking heard on Osc C (10-16), not on Osc D"},
-    {"Osc Phase Mod",         eModelled,    "§53",                       "in Bassic and Basslines FM4: held balance within 2 dB per octave (10-16)", "Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
-    {"Osc Shape A",           eModelled,    "§27, §6.7",                 "through OscShpB's captures only", "no OscShpA capture of its own; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
+    {"Osc Phase Mod",         eConfirmed,   "§53",                       "Sine and Tri at 330 Hz phase-modulated by a 262 Hz sine, PhM 32-127: every sideband within 0.37 dB, level on the rig offset (10-25); Bassic and Basslines FM4 (10-16)", "Sync not compared; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
+    {"Osc Shape A",           eConfirmed,   "§27, §6.7",                 "all six waves at Shape 0/64/127 at 330 Hz: harmonics within 0.08 dB, level on the rig offset; Sine3 all harmonics and Sine4 odd, as OscShpB's (10-25)", "Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
     {"Osc Shape B",           eConfirmed,   "§27, §6.7",                 "every wave, Shape Mod -1..+1, harmonics within 0.16 dB (10-02); Sine3/4 within 0.001 (09-17)", "Pulse at exactly +-1: click -33 dB against the G2's -41; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
     {"Osc Dual",              eConfirmed,   "§12.4, §12.5",              "levels, duty, phase (09-12); PW and Phase mod (10-03)", "Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
     {"Noise Osc",             eConfirmed,   "§8.2-§8.5",                 "09-12 capture agrees 110 Hz-1 kHz (the old model's fit)", "level above 1 kHz not re-captured since the §8 model; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only"},
     {"Noise",                 eConfirmed,   "§7.2a",                     "09-12 capture reproduced through the desk's shelf to a constant", "-"},
     {"Sampler",               ePartial,     "notes §213",                "engine only - the G2 has no such module", "velocity layers untested (no layered file); E-mu banks: first preset only, no layered voices; .npno pianos not read"},
-    {"Metallic Noise",        eModelled,    "§66",                       "-", "no capture"},
+    {"Metallic Noise",        eConfirmed,   "§66",                       "Colour 0/64/127 x Freq 0/64/127: third-octave balance within 0.63 dB (mean 0.28 at most), level on the rig offset (10-25)", "the FreqMod and ColourMod inputs not compared"},
     {"Osc Percussion",        eConfirmed,   "§40",                       "8 takes: levels 0.1 dB, decay 2 ms, pitch exact (09-25)", "-"},
     {"Drum Synth",            eConfirmed,   "§39",                       "Master Freq 0.2% (09-21); noise, click, oscillator energies within 0.8 dB (09-25)", "level curve set by §39.3, not fitted to the 09-20 sweeps"},
-    {"Osc String",            eModelled,    "§70.4",                     "-", "-"},
+    {"Osc String",            eConfirmed,   "§70.4",                     "noise through it, Decay 64-120, Damp 0-64: resonances within 3.7 cents and 0.6 dB at Decay 64; pitch at Tune 64/100/112 within 1.2 cents, level within 0.4 dB (10-25)", "peak heights at Decay 100-120 narrower than the measurement resolves"},
     {"FM Operator",           eConfirmed,   "§14.2-§14.6",               "envelope, level, FM depth, feedback, level and rate scaling, velocity (10-03); an idle voice starts from L4: Backtalk DX repeated notes as the G2 within 0.7 dB (10-16)", "AMod and Pitch inputs (§14.6) not yet compared (to-test); Gate/Note/Vel jacks read from the voice"},
     {"DX Router",             eConfirmed,   "§14.1, §14.5",              "Main level 8.8 dB against 8.45 (10-03); Backtalk DX held tone within 1-2 dB per octave (10-16)", "Out1-Out6 not used outside the node"},
-    {"Driver",                eModelled,    "§70.5",                     "-", "-"},
-    {"Resonator",             eModelled,    "§70.4a",                    "-", "-"},
-    {"Osc Master",            eModelled,    "§51",                       "-", "-"},
+    {"Driver",                eConfirmed,   "§70.5, §70.5a",             "Reed and Bow, Stiffness and Embouchure 32/96, In2 0 and +32 units, a sine on In1: 16 settings within 0.06 dB per harmonic and 0.03 dB in level (10-25)", "-Lip- and -Mallet- share the Reed and were not played"},
+    {"Resonator",             eConfirmed,   "§70.4a",                    "noise through all five Algs at Decay 100, Damp 32, Pos 64: resonances within 4 cents (Tube3 one at 14), peaks within 1.7 dB mean, level within 0.3 dB; Tune 100 to 0.7 cents (10-25)", "Pos and the pitch inputs not swept"},
+    {"Osc Master",            eConfirmed,   "§51",                       "through an OscB's Pitch input: Coarse 40-76, Cent 0-127, Pitch M 0-127 with a Constant on PitchVar - within 0.74 cents (10-25)", "-"},
     // Filters
-    {"LP Filter",             eModelled,    "§22",                       "FM input at 2 semitones a unit only (notes §160)", "no response captured"},
-    {"HP Filter",             eModelled,    "§22",                       "-", "no response captured"},
+    {"LP Filter",             eConfirmed,   "§22",                       "noise through it, Freq 50/85/110, all six slopes: mean within 0.22 dB, worst 0.87 at 252 Hz (10-25); FM at 2 semitones a unit (notes §160)", "Kbt and the Mod input not compared"},
+    {"HP Filter",             eConfirmed,   "§22",                       "noise through it, Freq 50/85, slopes 6/12/24/36: mean within 0.09 dB, worst 0.55 (10-25)", "Kbt and the Mod input not compared"},
     {"Nord Filter",           eConfirmed,   "§23",                       "noise through LP/BP/HP/BR, 12 and 24 dB, Freq 50 and 85, Res 0 and 100: within 1.44 dB, mean 0.06-0.35 (10-11)", "Pitch, FM and Res mod not compared"},
     {"Classic Filter",        eConfirmed,   "§21",                       "04 Chris' Pad within 0.5 dB 100 Hz-12 kHz; a high-Res test patch's peak within 0.04 semitone (09-28)", "Env and the dB/Oct tap not compared since the 09-14 law"},
     {"Multi Filter",          eConfirmed,   "§10",                       "54 noise responses within 0.5-0.6 dB (09-12); FreqM within 1% (10-08)", "GComp off not captured"},
-    {"Phase Filter",          eModelled,    "§67",                       "-", "-"},
+    {"Phase Filter",          eConfirmed,   "§67",                       "noise through it, all three types, 2 and 6 notches, FB 20/64/100: mean within 0.11 dB (10-25)", "the Pitch, Spread and FM inputs not compared"},
     {"Comb Filter",           eConfirmed,   "§13.4",                     "noise through all three Types (09-12); Pitch attenuator (10-08)", "-"},
-    {"Static Filter",         eModelled,    "§10.4",                     "peak heights only (2026-08)", "HP tap term not modelled; a noise capture per type"},
-    {"FltVoice",              eModelled,    "§56",                       "-", "-"},
-    {"WahWah",                eModelled,    "§69.9",                     "-", "-"},
-    {"Vocoder",               eModelled,    "§70.8",                     "-", "-"},
+    {"Static Filter",         eConfirmed,   "§10.4, §10.4a",             "noise through LP, BP and HP at Freq 50/85, Res 0/64/110, GC off and on: 21 settings, mean within 0.28 dB, worst 1.13 on the Res 110 peak (10-25)", "-"},
+    {"FltVoice",              eConfirmed,   "§56, §56.1",                "noise through it, vowels A/E/I, Freq 64/100, Res 0/64/127: formants within 18 cents, peaks within 0.8 dB (10-25); the Freq law from 63 to 66 to 2 cents", "Res 127 peak 3 dB under; between the formants 1.3-2.8 dB"},
+    {"WahWah",                eConfirmed,   "§69.9",                     "noise through it at Sweep 0/64/127: mean within 0.24 dB, worst 1.4 in the lowest band at Sweep 0 (10-25)", "the Sweep input not compared"},
+    {"Vocoder",               eConfirmed,   "§70.8",                     "a 110 Hz saw carrier and a sine modulator at 300 Hz, 1 kHz and 3 kHz, Emphasis off and on: the harmonics that pass within 0.15 dB, level within 0.08 (10-25)", "BandSel routing other than straight, and Monitor, not compared"},
     {"Eq 2-band",             eConfirmed,   "§11.2",                     "43 noise settings across the EQs, 0.53 dB mean (09-12)", "high shelf changed 10-09 (0.3-0.7 dB near 3 kHz), not re-captured"},
     {"Eq 3-band",             eConfirmed,   "§11",                       "0.66 dB mean, 1.42 worst (09-12)", "the 1.42 dB setting (mid -13.5 dB at 8 kHz) not explained by the model"},
     {"Eq Peak",               eConfirmed,   "§11.3, §11.5",              "0.57 dB mean (09-12)", "-"},
     // Envelopes
     {"Envelope ADSR",         eConfirmed,   "§17.1-§17.8",               "time law and curves agree with the 08-24 and 09-07 captures (not kept); release at LogExp R14 and LinExp R20 within one 50 ms window (10-16)", "-"},
     {"Envelope AHD",          eConfirmed,   "§17.11a",                   "Hold 16-80, within 1% (10-08)", "-"},
-    {"Envelope ADR",          eModelled,    "§17.9",                     "-", "stages never heard against the G2"},
-    {"Envelop ADDSR",         eModelled,    "§17.9",                     "-", "stages never heard against the G2; release fixed 10-09 (§17.9a)"},
+    {"Envelope ADR",          eConfirmed,   "§17",                       "an OscB through it on a held key, Decay and Release modes and the Exp shape: the curve within 0.1 dB on average through the hold and the release (10-25)", "-"},
+    {"Envelop ADDSR",         eConfirmed,   "§17",                       "an OscB through it on a held key: within 0.5 dB on average, the release within 0.4 (10-25)", "-"},
     {"Envelope H",            eConfirmed,   "§17.9a",                    "Hold 12-64 within 0.1 ms (10-08)", "-"},
-    {"Envelope D",            eModelled,    "§17.9",                     "no KB: an untriggered EnvD silent, as in 14 CS80project72 (09-27)", "decay never compared"},
-    {"Envelope Multi",        eModelled,    "§17.11",                    "-", "-"},
+    {"Envelope D",            eConfirmed,   "§17",                       "Decay 60 and 90, triggered by the Keyboard Gate: within 0.1 dB on average (10-25)", "-"},
+    {"Envelope Multi",        eConfirmed,   "§17.11",                    "its defaults, a fall from full to nothing and a rise to full: within 0.2 dB on average; its In is input 1 - our face had In and AM swapped, fixed (10-25)", "-"},
     {"Envelope Mod AHD",      eConfirmed,   "§17.9a, §17.10",            "Hold within 0.3% (10-08)", "time-mod jacks not checked"},
     {"Envelope Mod ADSR",     eConfirmed,   "§17.10",                    "Decay mod at -32..+32 units (09-20)", "Attack and Sustain mod not checked; +32 units 4.1 s against 3.6"},
     // LFOs
     {"LFO A",                 eConfirmed,   "§28",                       "Hi rate measured", "BPM and Clk not checked on the G2"},
-    {"LFO B",                 eModelled,    "§28, §28.4, §54",           "-", "-"},
+    {"LFO B",                 eConfirmed,   "§28, §28.4a",               "Hi range, all four waves and Phase 0-96 against its Snc output: to 0.002 cycle; rate 0.001%, harmonics 0.5 dB, level 0.07 dB (10-25)", "Lo, Sub, BPM and Clk ranges, the Rate and Phase inputs not compared"},
     {"LFO C",                 eConfirmed,   "§28, §28.7",                "Hi 64-127 and Lo 100/127 rate within 0.09%; Sine/Tri/Saw/Sqr shape and harmonics within 0.7 dB; every Output Type, level within 0.2 dB (10-25)", "Sub and BPM ranges, the Rate input and Mono not compared"},
     {"LFO Shp A",             eConfirmed,   "§28.6",                     "Rate Sub, Lo, Hi within 0.013% (09-07)", "BPM and Clk not checked; waves not captured"},
     {"Clock Generator",       eConfirmed,   "§59",                       "Master clock within 7-17 ppm; engine within 1-4 ms over 66 s (10-09)", "-"},
@@ -163,13 +163,13 @@ static const tEvidence kEvidence[] = {
     {"Red2Blue",              eModelled,    "§68.8, notes §203",         "-", "-"},
     {"Blue2Red",              eModelled,    "§68.8",                     "-", "-"},
     // Shapers
-    {"Saturate",              eModelled,    "paramCurves notes §33", "-", "one ramp per mode would capture it"},
-    {"Clip",                  eModelled,    "paramCurves notes §36", "-", "one ramp per mode would capture it"},
+    {"Saturate",              eConfirmed,   "paramCurves notes §33",     "a 330 Hz sine through it at two drives (the input on the other channel), Amount 64/127, curves 1 and 4: every harmonic within 0.38 dB, level within 0.03 (10-25)", "the Mod input not compared"},
+    {"Clip",                  eConfirmed,   "paramCurves notes §36",     "a 330 Hz sine through it at two drives (the input on the other channel), Clip level 32/96, Asym and Sym: every harmonic within 0.38 dB, level within 0.03 (10-25)", "the Mod input not compared"},
     {"OverDrive",             eConfirmed,   "§71",                       "energy above 6 kHz in 14 CS80project72: -41.5 against -41.6 dB (10-04)", "-"},
-    {"ShpExp",                eModelled,    "paramCurves notes §32", "-", "one ramp per mode would capture it"},
-    {"WaveWrap",              eModelled,    "§73, paramCurves notes §34", "-", "one ramp per mode would capture it"},
-    {"ShpStatic",             eModelled,    "paramCurves notes §31", "-", "one ramp per mode would capture it"},
-    {"Rect",                  eModelled,    "paramCurves notes §30", "-", "one ramp per mode would capture it"},
+    {"ShpExp",                eConfirmed,   "paramCurves notes §32",     "a 330 Hz sine through it at two drives (the input on the other channel), Amount 127, all four curves: every harmonic within 0.38 dB, level within 0.03 (10-25)", "the Mod input not compared"},
+    {"WaveWrap",              eConfirmed,   "§73, paramCurves notes §34", "a 330 Hz sine through it at two drives (the input on the other channel), Amount 32/96: every harmonic within 0.38 dB, level within 0.03 (10-25)", "the Mod input not compared"},
+    {"ShpStatic",             eConfirmed,   "paramCurves notes §31",     "a 330 Hz sine through it at two drives (the input on the other channel), all four modes: every harmonic within 0.38 dB, level within 0.03 (10-25)", "the Mod input not compared"},
+    {"Rect",                  eConfirmed,   "paramCurves notes §30",     "a 330 Hz sine through it at two drives (the input on the other channel), all four modes: every harmonic within 0.38 dB, level within 0.03 (10-25)", "the Mod input not compared"},
     // Delays
     {"Delay Single A",        eModelled,    "§52",                       "through DelayA only", "-"},
     {"Delay Single B",        eModelled,    "§52.1",                     "-", "-"},
@@ -183,12 +183,12 @@ static const tEvidence kEvidence[] = {
     {"DlyShiftReg",           eModelled,    "§69.6",                     "-", "-"},
     // Effects
     {"Compressor",            eConfirmed,   "§25",                       "a steady sine at 8 levels, -47 to -19 dB, 04 Chris' Pad's settings: gain equal to the G2's within 0.01 dB (10-11)", "attack/release timing and SideChain not compared on the G2"},
-    {"Digitizer",             eModelled,    "§69.8",                     "-", "-"},
-    {"FreqShift",             eModelled,    "§57",                       "-", "-"},
+    {"Digitizer",             eConfirmed,   "§69.8",                     "a 330 Hz sine at Rate 32/96, Bits 3/11: every line within 0.8 dB (10-25)", "the Rate input not compared"},
+    {"FreqShift",             eConfirmed,   "§57",                       "a 330 Hz sine, Shift 32/80/127 in each Range: Up and Down within 0.1 Hz and 0.3 dB, the other sideband within 0.2 dB at -64; In is input 0 - ours had In and Mod swapped, fixed (10-25)", "the Mod input not compared"},
     {"Flanger",               eModelled,    "§70.2",                     "-", "-"},
     {"Chorus",                eConfirmed,   "§19",                       "tap spans, rate, mix (09-07); unity at Amount 0 (09-14); no tail once its input stops, as the G2 (10-16)", "-"},
     {"Phaser",                eModelled,    "§55",                       "-", "-"},
-    {"PShift",                eModelled,    "§70.3",                     "-", "-"},
+    {"PShift",                eConfirmed,   "§70.3",                     "a 330 Hz sine at Semi 52/76/100: the shifted line exact in frequency and within 0.2 dB, its neighbours too; In is input 0 - ours had In and PitchVar swapped, fixed (10-25)", "the PitchVar input and Fine not compared"},
     {"Reverb",                eConfirmed,   "§20",                       "19 captures: onsets, stereo, Time law (09); Dry/Wet 96/64/48/24 within 1 dB of the cubed law (10-16)", "captured decays 6-12% long (their fits)"},
     {"Scratch",               eModelled,    "§70.3",                     "-", "-"},
     // In/Out
@@ -1242,22 +1242,43 @@ static int print_aspects(const char * paramNames) {
     // notes §1 - by state as well, which is where the gaps show
     uint32_t stateTotal[STATE_COUNT + 1] = {0};
 
-    printf("\n| Aspect | Modules | Confirmed on the G2 | Modelled | Approximate | Partial | No sound | Unknown |\n"
-           "|---|---|---|---|---|---|---|---|\n");
+    for (uint32_t a = 0; a < ASPECT_COUNT; a++) {
+        for (uint32_t st = 0; st <= STATE_COUNT; st++) {
+            stateTotal[st] += aspectState[a][st];
+        }
+    }
+    printf("\n| Aspect | Modules |");
+
+    for (uint32_t st = 0; st <= STATE_COUNT; st++) {
+        if (stateTotal[st] > 0u) {
+            printf(" %s |", (st < STATE_COUNT) ? kStateName[st] : "Unknown");   // empty states left out
+        }
+    }
+    printf("\n|---|---|");
+
+    for (uint32_t st = 0; st <= STATE_COUNT; st++) {
+        if (stateTotal[st] > 0u) {
+            printf("---|");
+        }
+    }
+    printf("\n");
 
     for (uint32_t a = 0; a < ASPECT_COUNT; a++) {
         printf("| %s | %u |", kAspectName[a], (unsigned)aspectTotal[a]);
 
         for (uint32_t st = 0; st <= STATE_COUNT; st++) {
-            printf(" %u |", (unsigned)aspectState[a][st]);
-            stateTotal[st] += aspectState[a][st];
+            if (stateTotal[st] > 0u) {
+                printf(" %u |", (unsigned)aspectState[a][st]);
+            }
         }
         printf("\n");
     }
     printf("| **%u aspects over %u modules, %u with evidence** | |", (unsigned)all, (unsigned)modules, (unsigned)evidenced);
 
     for (uint32_t st = 0; st <= STATE_COUNT; st++) {
-        printf(" **%u** |", (unsigned)stateTotal[st]);
+        if (stateTotal[st] > 0u) {
+            printf(" **%u** |", (unsigned)stateTotal[st]);
+        }
     }
     printf("\n");
 
@@ -1270,6 +1291,10 @@ static int print_aspects(const char * paramNames) {
     return result;
 }
 
+static const char * state_name(uint32_t s) {
+    return (s < STATE_COUNT) ? kStateName[s] : "Not implemented";
+}
+
 // The doc's state table, with how many modules are in each state; the last row is Not implemented
 static const char * kStateMeaning[STATE_COUNT + 1] = {
     "compared with a G2 (a capture, its meters, or a stage patch played against it) and it agrees",
@@ -1280,9 +1305,9 @@ static const char * kStateMeaning[STATE_COUNT + 1] = {
     "not modelled: it contributes nothing and is pruned from the chain",
 };
 
-static void print_state_table(void) {
-    uint32_t n[STATE_COUNT + 1] = {0};
-    uint32_t all                = 0;
+// A state no module is in is left out of both tables, so the columns stay the ones in use
+static void print_state_table(uint32_t * n) {
+    uint32_t all = 0;
 
     for (uint32_t g = 0; g < GROUP_COUNT; g++) {
         tModuleType types[256];
@@ -1306,7 +1331,9 @@ static void print_state_table(void) {
     printf("|---|---|---|\n");
 
     for (uint32_t s = 0; s <= STATE_COUNT; s++) {
-        printf("| **%s** | %s | %u |\n", (s < STATE_COUNT) ? kStateName[s] : "Not implemented", kStateMeaning[s], (unsigned)n[s]);
+        if (n[s] > 0u) {
+            printf("| **%s** | %s | %u |\n", state_name(s), kStateMeaning[s], (unsigned)n[s]);
+        }
     }
     printf("| **Total** | every module type the palette offers | %u |\n\n", (unsigned)all);
 }
@@ -1323,9 +1350,24 @@ int main(int argc, char ** argv) {
     if ((argc > 1) && (strcmp(argv[1], "--aspects") == 0)) {
         return print_aspects((argc > 2) ? argv[2] : "Docs/param-validation.md");
     }
-    print_state_table();
-    printf("| Group | Confirmed on the G2 | Modelled | Approximate | Partial | No sound | Not implemented |\n");
-    printf("|---|---|---|---|---|---|---|\n");
+    uint32_t inState[STATE_COUNT + 1] = {0};
+
+    print_state_table(inState);
+    printf("| Group |");
+
+    for (uint32_t s = 0; s <= STATE_COUNT; s++) {
+        if (inState[s] > 0u) {
+            printf(" %s |", state_name(s));
+        }
+    }
+    printf("\n|---|");
+
+    for (uint32_t s = 0; s <= STATE_COUNT; s++) {
+        if (inState[s] > 0u) {
+            printf("---|");
+        }
+    }
+    printf("\n");
 
     for (uint32_t g = 0; g < GROUP_COUNT; g++) {
         tModuleType types[256];
@@ -1360,7 +1402,9 @@ int main(int argc, char ** argv) {
         printf("| **%s** |", kGroups[g].name);
 
         for (uint32_t s = 0; s <= STATE_COUNT; s++) {
-            printf(" %s |", cell(line[s]));
+            if (inState[s] > 0u) {
+                printf(" %s |", cell(line[s]));
+            }
             total[s] += n[s];
         }
         printf("\n");
@@ -1374,7 +1418,9 @@ int main(int argc, char ** argv) {
         printf("| **Total %u** |", (unsigned)all);
 
         for (uint32_t s = 0; s <= STATE_COUNT; s++) {
-            printf(" **%u** |", (unsigned)total[s]);
+            if (inState[s] > 0u) {
+                printf(" **%u** |", (unsigned)total[s]);
+            }
         }
         printf("\n");
     }

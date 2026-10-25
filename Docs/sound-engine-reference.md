@@ -451,9 +451,17 @@ FilterType, and its own damping and drive:
   a unity peak while d² >= 1/2 (drive 2d², up to Res 37), and HP, whose drive is × (1 - F/2 - F²/4).
 - **GC** multiplies the drive by d, as FltMulti's GComp does - except BP while d² >= 1/2.
 - **Checked** against the reference model's arithmetic run sample by sample (Freq 30-100, Res 0-110, GC off and
-  on): LP and BP within 0.1 dB, HP within 0.3 dB below 2 kHz and about 1 dB at Res 110 or 4 kHz - its HP
-  tap has a term the engine does not model. Very low corners differ by the G2's fixed-point
-  error, which is not modelled either.
+  on): LP and BP within 0.1 dB. Very low corners differ by the G2's fixed-point error, which is not
+  modelled.
+- **10.4a The HP output (2026-10-25).** The instrument averages the input over two samples before the
+  filter, which for LP and BP is the same as the engine's output taps, but its HP is not `high`: it is
+  high through (1 - F/2)(1 + z^-1) / (1 + 0.9 z^-1) - out = (1 - F/2)(high + high') - 0.9 out'. Against the
+  instrument's arithmetic run sample by sample (Freq 30-100, Res 0-110, GC off and on): within 1e-4 a sample,
+  0.1 dB from half the corner up and 0.04 dB above it. Until this date the engine gave `high` alone, 0.3-1 dB
+  out (revert record row 165).
+- **Confirmed on the G2 (2026-10-25)** with noise through it: LP, BP and HP at Freq 50 and 85, Res 0, 64 and
+  110, and GC on at 85/64 - 21 settings within 0.28 dB on average, worst 1.13 dB in the band that holds the
+  Res 110 peak.
 
 Until 2026-09-13 the engine ran FltStatic as a separate state-variable section, tuned about π times
 (1.65 octaves) above its dial, always low-pass whatever FilterType said, with d = 1 - Res/127 (revert
@@ -1322,6 +1330,11 @@ is unity at Nyquist.
 cutoff for 12 dB/oct at 4.4 kHz, and 4.8 dB at 24 dB/oct at 7.9 kHz, where it was 10 dB low at 4× the
 cutoff. Its FltLP also went through the ladder's soft knee, compressing a full-scale input.
 
+**22.5 Confirmed on the G2 (2026-10-25).** Noise through each, the filtered and the dry on the two channels:
+FltLP at Freq 50, 85 and 110 in all six slopes agrees within 0.22 dB on average (worst 0.87 dB, one band at
+252 Hz on the steepest two); FltHP at 50 and 85, slopes 6, 12, 24 and 36 dB, within 0.09 dB (worst 0.55). The
+Freq dial's coefficient is the table the instrument reads to 0.01% at every position.
+
 ## 23. FltNord
 
 This filter, adopted 2026-09-14 (from the reference model, run sample by sample). It is not a
@@ -1614,6 +1627,11 @@ and 127. g is the Shape word, dial/128 with 127 counting as 1 (`wave_shape_word(
 | Pulse | high for (1 - g)/2 of the cycle, never under one sample, with the DC taken out: the ±1 square minus (2d - 1), d the duty | within 0.2 dB; at Shape 127 the instrument's two one-sample edges leave a spike, which the one-sample floor reproduces to 2 dB |
 | SymPulse | high, low, then silent | matches |
 
+**27.1a OscShpA on the G2 (2026-10-25).** OscShpA's six waves are OscShpB's Sine1-4, TriSaw and SymPulse:
+each at Shape 0, 64 and 127, at 330 Hz, matches the G2 harmonic by harmonic within 0.08 dB and in level
+on the day's rig offset. Sine3 carries every harmonic and Sine4 only the odd ones on both modules. At
+Shape 127 SymPulse is silent on both.
+
 **27.2 Sine2.** With s the Shape word, limited so the positive lobe keeps at least four samples:
 - the positive half-sine takes (1 - s)/2 of the cycle and the negative half the rest; within each, a
   linear phase x from 0 to 1 and back goes through the odd polynomial 1.5704x - 0.6419x^3 + 0.0716x^5
@@ -1743,6 +1761,15 @@ counter stage with inputs that LfoA's and LfoC's simpler counter lacks:
   1.0 is unity). Unpatched it reads that constant, so the LFO runs forward; a negative input runs it
   backwards, 0 stops it, and a value above 1 speeds it up - it is a rate multiplier, not a switch.
 The random waves still draw on the counter itself (§28.3), not the offset read.
+
+**28.4a Where LfoB's waves sit, measured on the G2 (2026-10-25).** Out against its own Snc output (which ignores
+Phase, §54), folded on Snc's rising edge: Tri and Sine both start at zero going up, the Saw jumps just after the
+edge and the Square is high for the half that follows. The Phase word is a per-wave offset - a quarter cycle for
+Sine and Tri, a half for Saw and Square - plus v/128 cycles. Against LfoA's reading of the same counter that puts
+LfoB's Sine half a cycle back, its Tri a quarter back and its Saw and Square half a cycle on. With those, every
+wave and Phase 0, 32, 64 and 96 agree with the G2 to 0.002 cycle; rate within 0.001%, harmonics within 0.5 dB,
+level within 0.07 dB. Until this date the engine had Sine a quarter cycle early and Saw and Square half a cycle
+out (revert record row 170).
 
 **28.5 The sine is the oscillator's polynomial (2026-09-28).** The LFO's sine stage carries the same words as the oscillator's sine stage (0x800000, 0x648035, 0xadd4d5, 0x92aa9), so the LFO sine is `wave_sine_polynomial()` on
 the folded phase, not libm `sin()` - within 1.5e-4 (-77 dB) of it, read a quarter cycle on to keep the
@@ -2453,7 +2480,8 @@ ignored.
 Added 2026-09-25 from the reference model. No sound: its output is the pitch an oscillator would play -
 (key - E4) when KBT is on + (Coarse - 64) semitones (whatever the tune mode shows) + (Cent - 64)/128
 semitone + Pitch + PitchVar x Pitch M - saturated. It drives the Pitch inputs of oscillators and LFOs
-(08 Ice Pad drives an LfoC with it).
+(08 Ice Pad drives an LfoC with it). Confirmed on the G2 2026-10-25 through an OscB's Pitch input: Coarse,
+Cent 0-127 and Pitch M 0-127 with a Constant on PitchVar, all within 0.74 cents.
 
 ## 52. DlySingleA and DlySingleB
 
@@ -2493,8 +2521,10 @@ folded phase, x = 2|p| - 1 with p the phase over -1..1: x (1.5704 - 0.6459 x^2 +
 increment: OscPM's triangle is the same part OscC and OscD use, so it takes their correction and limit
 (§6.3, `OSC_CORNER_LIMIT_PARTS`), applied 2026-09-27 (revert record row 86). Sync as the other oscillators' (§6.6).
 
-The DX operators use the same phase-modulation stage, which puts their FM depth (§14.3, a guess of one
-cycle per full-scale input) in question - todo.md.
+Confirmed on the G2 2026-10-25: Sine and Tri at 330 Hz, phase-modulated by a 262 Hz sine at PhM 32, 64, 96
+and 127 - every sideband within 0.37 dB and the level on the rig offset.
+
+The DX operators' FM has its own scale, 3.27 cycles a unit, settled and confirmed on the G2 (§14.3).
 
 ## 54. LFO Snc output
 
@@ -2529,14 +2559,26 @@ low-pass and the other three's band-pass. Each vowel is four (frequency, gain) w
 instrument's table (A, E, I, O, U, Y, AA, AE, OE); gains are scaled by Level (Type II attenuator)/2.
 Res is the instrument's squared-linear word, 0.132 at 0 falling to 0 at 127. Bypass passes the input.
 
-**56.1 The Freq shift is half a semitone flat (settled 2026-09-27).** The control stage turns the shift
-into a multiplier with two of the DSP's built-in tables: the semitone table (entry 188 is 1.0) by the whole
-semitones, and the cent table by the remaining fraction in 128 steps of 50/64 cent. The cent table's
-first entry is -50 cents, and the part indexes it from there, so every shift comes out 50 cents below
-(v - 64)/2: the formants sit a quarter tone under the vowel table's words at Freq 64, and reach them at
-Freq 65. The engine took the table's zero as 0 cents until 2026-09-27 (revert record row 84).
+**56.1 The Freq shift is exact (corrected 2026-10-25).** The control stage turns the shift into a multiplier
+with the DSP's semitone table (entry 188 is 1.0) for the whole semitones and its cent table for the
+remaining fraction, in 128 steps of 50/64 cent. The cent table the DSP holds begins at 0 cents: of the
+192-entry table, the part of it from 0 cents up is what reaches the DSP. So the formants sit on the vowel
+table's words at Freq 64 and move (v - 64)/2 semitones from there. Measured on the G2: the second formant of
+E at Freq 63, 64, 65 and 66 lies -49.6, +3.7, +48.6 and +98.7 cents from its table word. From 2026-09-27
+the engine read the table from its -50 cent end and put every formant a quarter tone low (revert record
+row 84); restored in row 166.
+
+**56.2 Confirmed on the G2 (2026-10-25).** Noise through it, vowels A-E-I (Vowel 0, 64, 127), Freq 64 and
+100, Res 0, 64 and 127, compared at the same resolution on both sides: every formant within 18 cents of the
+G2's (most within 5) and its peak within 0.8 dB at Res 0 and 64. Still open: at Res 127 the second formant
+is 3 dB under the G2's, and between the formants the response differs by 1.3-2.8 dB on average.
 
 ## 57. FreqShift
+
+**57.0 The inputs (2026-10-25).** In is input 0 and the Shift modulation input 1, as on the G2 - an oscillator into
+input 0 comes out shifted, into input 1 silence. The editor and the engine had them the other way round, so a
+patch read off a G2 fed its audio into the modulation (revert record row 171). PShift is the same: In 0, PitchVar
+1. Confirmed: Shift 32, 80 and 127 in each Range, Up and Down within 0.1 Hz and 0.3 dB.
 
 Added 2026-09-26 from the reference model. A Bode shifter: two chains of four allpass sections in
 z^-2, (c + z^-2)/(1 + c z^-2), the second hearing the input a sample late, make a Hilbert pair; two
@@ -2720,7 +2762,8 @@ Parameters: 0 Time L, 1 Time R, 2 FB L, 3 FB R, 4 X-FB L, 5 X-FB R, 6 Time/Clk, 
 
 ## 66. MetNoise
 
-Added 2026-09-27 from the reference model; no capture yet.
+Added 2026-09-27 from the reference model. Confirmed on the G2 2026-10-25: Colour 0, 64 and 127 at Freq 0, 64
+and 127, third-octave balance within 0.63 dB and the level on the rig offset.
 - **Frequency.** f = Freq v x 2^14 (127 = 2^21) plus FreqMod In x Mod (v x 2^16, 127 full), shifted up
   two and floored at zero; then w = (0.41421 + 0.58579 f)^2 (from 0.1716 to 1, the square root of 2's
   own constants).
@@ -2883,9 +2926,12 @@ been compared with the instrument yet.
     reads 880 +- 40). That is the structure itself, not the engine.
 - **70.4 OscString** (the reference model, 2026-10-03). A 7000-sample line (13.7 Hz at the
   lowest), pitched by the oscillators' Pitch stage (§6):
-  - **Period.** 2^25 / increment, which is exactly 96000/f samples. It is read with a 4-point Lagrange
-    at 1/512 sample. the module adds two samples and the read sits two samples in, so the loop is exactly
-    one period with Damp at 0.
+  - **Period.** 2^25 / increment - with the oscillators' cycle of 2^24, that is **two** periods, 2 x 96000/f
+    samples, so the string sounds an octave below the oscillators at the same dials (164.6 Hz at Tune 64
+    with KBT off). It is read with a 4-point Lagrange at 1/512 sample, and **the loop is one sample longer**
+    than that with Damp at 0. Measured on the G2 2026-10-25: the lowest resonance at Tune 64, 100 and 112
+    within 1.2 cents of the G2's, where the engine had been an octave high and then one sample short
+    (revert record rows 167, 168).
   - **Loop.** The read passes a one-pole s += Damp x (read - s), with Damp = (127 - v)/128 (v = 0 gives
     1, no damping; 127 freezes it). The line takes In + Decay x s, and Out is s. With the module off the
     loop runs on and Out is 0. Every word saturates.
@@ -2896,7 +2942,7 @@ been compared with the instrument yet.
     the string is about 1 sample long, +8 cents flat at A4 and +34 cents at A7.
 - **70.4a Resonator** (the reference model, 2026-10-03). Two delay lines meeting at a junction, every
   96 kHz sample, in words (a quarter of an engine unit); every stored word saturates.
-  - **Lengths.** The period is OscString's (96000/f samples, the oscillators' pitch dials); less six samples, it
+  - **Lengths.** The period is OscString's (2 x 96000/f samples, the oscillators' pitch dials, §70.4); less six samples, it
     is split Pos : 1 - Pos (Pos v/128, 127 = 1) between line 1 and line 2. Each line reads through a 4-point
     Lagrange; with the averager's two samples the loop is exactly one period.
   - **Junction.** Line 1 takes 0.97 (a L1 + b L2 + c Exc); line 2 takes Decay x four half-sample averages
@@ -2926,6 +2972,13 @@ been compared with the instrument yet.
   - **Bow**: v = 8 Stiff |In1 - In2 + Emb|, saturated at 1; out = min(3 (1 - v)^3, 1) (In1 - In2) - a
     friction curve, full stick near zero relative velocity.
   - Every stored word saturates, so out stays within a word.
+  - **70.5a The signs, measured on the G2 (2026-10-25).** A sine on In1 and a Constant on In2, each Type at
+    Stiffness and Embouchure 32 and 96, In2 at 0 and +32 units: the Reed takes In2 **negated** -
+    r = Emb + 4 Stiff (In1 + In2), out = -In2 + r (In1 + In2) - and the Bow is
+    v = 8 Stiff |In1 - In2 - Emb|, out = 3(1 - v)^3 (capped at 1) x (In2 - In1). Both fit all sixteen
+    settings within 0.04 dB per harmonic and 0.03 dB in level. The engine had the Reed as above with In2
+    not negated and the two inputs the other way round, and the Bow's Embouchure added: right only
+    with In2 at zero, and the Reed out by up to 9 dB even then (revert record row 169).
 - **70.6 NoiseGate** (the reference model, 2026-10-02): a follower, a gate, an attack-hold-release
   envelope and a VCA. Out is In x the envelope; Env is the envelope.
   - The follower, every 96 kHz sample, in words: stage 1 jumps up to |In| and falls towards it by
@@ -2964,7 +3017,8 @@ been compared with the instrument yet.
   ticks between rising crossings (the last reading at or below 0, this one above) WHOLE, and the Calc stage
   turns the count into 12 log2((24 000 / count) / 82.41 Hz) units - the table's law to 0.01 units. So the
   reading steps: 440 Hz, 54.5 ticks, reads 28.9 or 29.4 by turns, not 29.0 (revert record row 88).
-- **70.8 Vocoder** (the reference model, 2026-10-03). Two stages: converters every 96 kHz
+- **70.8 Vocoder** (the reference model, 2026-10-03; confirmed on the G2 2026-10-25 with a 110 Hz saw carrier
+  and a sine modulator at 300 Hz, 1 kHz and 3 kHz, Emphasis off and on - within 0.15 dB). Two stages: converters every 96 kHz
   sample, and a band bank on the 24 kHz tick. Words are a quarter of an engine unit.
   - **Section.** Every filter is a chain of one form: w = 2(u - k1 w2 - k2 w1), y = w/2 + k3 w2 + k4 w1,
     i.e. (1 + 2k4 z^-1 + 2k3 z^-2)/(1 + 2k2 z^-1 + 2k1 z^-2). The first section takes k0 x the input;

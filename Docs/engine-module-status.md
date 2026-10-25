@@ -37,33 +37,30 @@ loop, or at a threshold. The classification comes from reading each model and is
 
 | state | meaning | modules |
 |---|---|---|
-| **Confirmed on the G2** | compared with a G2 (a capture, its meters, or a stage patch played against it) and it agrees | 74 |
-| **Modelled** | a full model in the reference, not yet compared with a G2 | 92 |
-| **Approximate** | follows the manual's description; a full model is still to come | 0 |
-| **Partial** | audible, but something about it is known to be missing - the Open column says what | 0 |
+| **Confirmed on the G2** | compared with a G2 (a capture, its meters, or a stage patch played against it) and it agrees | 88 |
+| **Modelled** | a full model in the reference, not yet compared with a G2 | 78 |
 | **No sound** | nothing to render (a name, or a module whose output leaves by MIDI) | 4 |
-| **Not implemented** | not modelled: it contributes nothing and is pruned from the chain | 0 |
 | **Total** | every module type the palette offers | 170 |
 
-| Group | Confirmed on the G2 | Modelled | Approximate | Partial | No sound | Not implemented |
-|---|---|---|---|---|---|---|
-| **Oscillators** | Osc A, Osc B, Osc C, Osc D, Osc Shape B, Osc Dual, Noise Osc, Noise, Osc Percussion, Drum Synth, FM Operator, DX Router | Osc Phase Mod, Osc Shape A, Metallic Noise, Osc String, Driver, Resonator, Osc Master | - | - | - | - |
-| **Filters** | Nord Filter, Classic Filter, Multi Filter, Comb Filter, Eq 2-band, Eq 3-band, Eq Peak | LP Filter, HP Filter, Phase Filter, Static Filter, FltVoice, WahWah, Vocoder | - | - | - | - |
-| **Envelopes** | Envelope ADSR, Envelope AHD, Envelope H, Envelope Mod AHD, Envelope Mod ADSR | Envelope ADR, Envelop ADDSR, Envelope D, Envelope Multi | - | - | - | - |
-| **LFOs** | LFO A, LFO C, LFO Shp A, Clock Generator | LFO B | - | - | - | - |
-| **Mixers** | Mixer 1-1 A, Mixer 1-1 S, Mixer 2-1 A, Mixer 4-1 A, Mixer 4-1 B, Mixer 4-1 C, Mixer 4-1 S, Mixer 2-1 B, Mixer 8-1 A, Mixer 8-1 B, MixFader, MixStereo, Fade 1-2, Fade 2-1, X-Fade, Pan | - | - | - | - | - |
-| **Level** | Constant, LevAmp, LevMult, ModAmt | ConstSwM, ConstSwT, CompLev, CompSig, LevAdd, LevConv, LevMod, MinMax, NoiseGate, EnvFollow, Red2Blue, Blue2Red | - | - | - | - |
-| **Shapers** | OverDrive | Saturate, Clip, ShpExp, WaveWrap, ShpStatic, Rect | - | - | - | - |
-| **Delays** | Delay Dual, Delay Quad, Delay A, Delay B, Delay Eight | Delay Single A, Delay Single B, Delay Stereo, Delay Clock, DlyShiftReg | - | - | - | - |
-| **Effects** | Compressor, Chorus, Reverb | Digitizer, FreqShift, Flanger, Phaser, PShift, Scratch | - | - | - | - |
-| **In/Out** | 2 Outputs, 4 Outputs, 2 Inputs, FX Input, Keyboard, Monophonic Keyboard, Status | 4 Inputs, Device, Note Detector | - | - | Name Bar | - |
-| **Switches** | - | SwOnOffM, SwOnOffT, Sw2-1, Sw2-1M, Sw4-1, Sw8-1, Sw1-2, Sw1-2M, Sw1-4, Sw1-8, ValSw2-1, ValSw1-2, Mux8-1, Mux1-8, Mux8-1X, S&H, T&H, WindSw | - | - | - | - |
-| **Logic** | Pulse, FlipFlop, ClkDiv | Invert, Delay, Gate, 8Counter, BinCounter, ADConv, DAConv | - | - | - | - |
-| **Sequencers** | Sequencer Event, Sequencer Values, Sequencer Level, Sequencer Note | Sequencer Controlled | - | - | - | - |
-| **Random** | - | Random A, Random B, Rnd Clock A, Rnd Clock B, Rnd Trig, Rnd Pattern | - | - | - | - |
-| **Note** | Glide | Note Quantiser, Key Quantiser, Partial Quantiser, Note Scaler, Pitch Tracker, Zero Crossing Counter, Level Scaler | - | - | - | - |
-| **MIDI** | CtrlSend, NoteSend | CtrlRcv, NoteRcv | - | - | PCSend, NoteZone, Automate | - |
-| **Total 170** | **74** | **92** | **0** | **0** | **4** | **0** |
+| Group | Confirmed on the G2 | Modelled | No sound |
+|---|---|---|---|
+| **Oscillators** | Osc A, Osc B, Osc C, Osc D, Osc Phase Mod, Osc Shape A, Osc Shape B, Osc Dual, Noise Osc, Noise, Metallic Noise, Osc Percussion, Drum Synth, Osc String, FM Operator, DX Router, Driver, Resonator, Osc Master | - | - |
+| **Filters** | LP Filter, HP Filter, Nord Filter, Classic Filter, Multi Filter, Phase Filter, Comb Filter, Static Filter, FltVoice, WahWah, Vocoder, Eq 2-band, Eq 3-band, Eq Peak | - | - |
+| **Envelopes** | Envelope ADSR, Envelope AHD, Envelope H, Envelope Mod AHD, Envelope Mod ADSR | Envelope ADR, Envelop ADDSR, Envelope D, Envelope Multi | - |
+| **LFOs** | LFO A, LFO C, LFO Shp A, Clock Generator | LFO B | - |
+| **Mixers** | Mixer 1-1 A, Mixer 1-1 S, Mixer 2-1 A, Mixer 4-1 A, Mixer 4-1 B, Mixer 4-1 C, Mixer 4-1 S, Mixer 2-1 B, Mixer 8-1 A, Mixer 8-1 B, MixFader, MixStereo, Fade 1-2, Fade 2-1, X-Fade, Pan | - | - |
+| **Level** | Constant, LevAmp, LevMult, ModAmt | ConstSwM, ConstSwT, CompLev, CompSig, LevAdd, LevConv, LevMod, MinMax, NoiseGate, EnvFollow, Red2Blue, Blue2Red | - |
+| **Shapers** | OverDrive | Saturate, Clip, ShpExp, WaveWrap, ShpStatic, Rect | - |
+| **Delays** | Delay Dual, Delay Quad, Delay A, Delay B, Delay Eight | Delay Single A, Delay Single B, Delay Stereo, Delay Clock, DlyShiftReg | - |
+| **Effects** | Compressor, Chorus, Reverb | Digitizer, FreqShift, Flanger, Phaser, PShift, Scratch | - |
+| **In/Out** | 2 Outputs, 4 Outputs, 2 Inputs, FX Input, Keyboard, Monophonic Keyboard, Status | 4 Inputs, Device, Note Detector | Name Bar |
+| **Switches** | - | SwOnOffM, SwOnOffT, Sw2-1, Sw2-1M, Sw4-1, Sw8-1, Sw1-2, Sw1-2M, Sw1-4, Sw1-8, ValSw2-1, ValSw1-2, Mux8-1, Mux1-8, Mux8-1X, S&H, T&H, WindSw | - |
+| **Logic** | Pulse, FlipFlop, ClkDiv | Invert, Delay, Gate, 8Counter, BinCounter, ADConv, DAConv | - |
+| **Sequencers** | Sequencer Event, Sequencer Values, Sequencer Level, Sequencer Note | Sequencer Controlled | - |
+| **Random** | - | Random A, Random B, Rnd Clock A, Rnd Clock B, Rnd Trig, Rnd Pattern | - |
+| **Note** | Glide | Note Quantiser, Key Quantiser, Partial Quantiser, Note Scaler, Pitch Tracker, Zero Crossing Counter, Level Scaler | - |
+| **MIDI** | CtrlSend, NoteSend | CtrlRcv, NoteRcv | PCSend, NoteZone, Automate |
+| **Total 170** | **88** | **78** | **4** |
 
 ### Oscillators
 
@@ -73,37 +70,37 @@ loop, or at a threshold. The classification comes from reading each model and is
 | Osc B | Confirmed on the G2 | §6.3, §6.6-§6.8 | 5 waves x 8 pitches, harmonics within 0.1 dB (09-17); DualSaw below zero 0.1 dB (10-08) | FM and Sync not compared on the G2; Shape 127's one-sample click not modelled; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase accumulator in doubles |
 | Osc C | Confirmed on the G2 | §6.3, §6.1a | Saw, Sqr50/25/10, Tri at 440-3520 Hz (09-17); Freq mode tracks the key: AdditiveG2 within 1.4 dB per octave (10-16) | FM not compared on the G2 | Doubles: phase accumulator in doubles |
 | Osc D | Confirmed on the G2 | §6.3, §6.1a | level and harmonics against OscA (09-12) | Pitch Type: Freq tracking heard on Osc C (10-16), not on Osc D | Doubles: phase accumulator in doubles |
-| Osc Phase Mod | Modelled | §53 | in Bassic and Basslines FM4: held balance within 2 dB per octave (10-16) | Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase and Phase M in doubles; the sine is the module's polynomial |
-| Osc Shape A | Modelled | §27, §6.7 | through OscShpB's captures only | no OscShpA capture of its own; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase accumulator in doubles |
+| Osc Phase Mod | Confirmed on the G2 | §53 | Sine and Tri at 330 Hz phase-modulated by a 262 Hz sine, PhM 32-127: every sideband within 0.37 dB, level on the rig offset (10-25); Bassic and Basslines FM4 (10-16) | Sync not compared; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase and Phase M in doubles; the sine is the module's polynomial |
+| Osc Shape A | Confirmed on the G2 | §27, §6.7 | all six waves at Shape 0/64/127 at 330 Hz: harmonics within 0.08 dB, level on the rig offset; Sine3 all harmonics and Sine4 odd, as OscShpB's (10-25) | Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase accumulator in doubles |
 | Osc Shape B | Confirmed on the G2 | §27, §6.7 | every wave, Shape Mod -1..+1, harmonics within 0.16 dB (10-02); Sine3/4 within 0.001 (09-17) | Pulse at exactly +-1: click -33 dB against the G2's -41; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase accumulator in doubles |
 | Osc Dual | Confirmed on the G2 | §12.4, §12.5 | levels, duty, phase (09-12); PW and Phase mod (10-03) | Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Doubles: phase accumulator in doubles |
 | Noise Osc | Confirmed on the G2 | §8.2-§8.5 | 09-12 capture agrees 110 Hz-1 kHz (the old model's fit) | level above 1 kHz not re-captured since the §8 model; Freq mode and Partial below 33 now track Kbt (§6.1a) - heard on Osc C only | Saturating doubles: 24-bit LFSR; the band-passes saturate at the word's +-1 |
 | Noise | Confirmed on the G2 | §7.2a | 09-12 capture reproduced through the desk's shelf to a constant | - | Doubles: xorshift draw, not the instrument's generator |
-| Metallic Noise | Modelled | §66 | - | no capture | Integer words: squares, Freq word and one-poles |
+| Metallic Noise | Confirmed on the G2 | §66 | Colour 0/64/127 x Freq 0/64/127: third-octave balance within 0.63 dB (mean 0.28 at most), level on the rig offset (10-25) | the FreqMod and ColourMod inputs not compared | Integer words: squares, Freq word and one-poles |
 | Osc Percussion | Confirmed on the G2 | §40 | 8 takes: levels 0.1 dB, decay 2 ms, pitch exact (09-25) | - | Saturating doubles: DSP words carried in doubles, saturated |
 | Drum Synth | Confirmed on the G2 | §39 | Master Freq 0.2% (09-21); noise, click, oscillator energies within 0.8 dB (09-25) | level curve set by §39.3, not fitted to the 09-20 sweeps | Saturating doubles: the integer words carried in doubles |
-| Osc String | Modelled | §70.4 | - | - | Doubles |
+| Osc String | Confirmed on the G2 | §70.4 | noise through it, Decay 64-120, Damp 0-64: resonances within 3.7 cents and 0.6 dB at Decay 64; pitch at Tune 64/100/112 within 1.2 cents, level within 0.4 dB (10-25) | peak heights at Decay 100-120 narrower than the measurement resolves | Doubles |
 | FM Operator | Confirmed on the G2 | §14.2-§14.6 | envelope, level, FM depth, feedback, level and rate scaling, velocity (10-03); an idle voice starts from L4: Backtalk DX repeated notes as the G2 within 0.7 dB (10-16) | AMod and Pitch inputs (§14.6) not yet compared (to-test); Gate/Note/Vel jacks read from the voice | Integer control: envelope, level and rate offsets in words; the operator in doubles |
 | DX Router | Confirmed on the G2 | §14.1, §14.5 | Main level 8.8 dB against 8.45 (10-03); Backtalk DX held tone within 1-2 dB per octave (10-16) | Out1-Out6 not used outside the node | Integer control: envelope, level and rate offsets in words; the operators in doubles |
-| Driver | Modelled | §70.5 | - | - | Doubles |
-| Resonator | Modelled | §70.4a | - | - | Doubles |
-| Osc Master | Modelled | §51 | - | - | Doubles |
+| Driver | Confirmed on the G2 | §70.5, §70.5a | Reed and Bow, Stiffness and Embouchure 32/96, In2 0 and +32 units, a sine on In1: 16 settings within 0.06 dB per harmonic and 0.03 dB in level (10-25) | -Lip- and -Mallet- share the Reed and were not played | Doubles |
+| Resonator | Confirmed on the G2 | §70.4a | noise through all five Algs at Decay 100, Damp 32, Pos 64: resonances within 4 cents (Tube3 one at 14), peaks within 1.7 dB mean, level within 0.3 dB; Tune 100 to 0.7 cents (10-25) | Pos and the pitch inputs not swept | Doubles |
+| Osc Master | Confirmed on the G2 | §51 | through an OscB's Pitch input: Coarse 40-76, Cent 0-127, Pitch M 0-127 with a Constant on PitchVar - within 0.74 cents (10-25) | - | Doubles |
 
 ### Filters
 
 | Module | State | Reference | On the G2 | Open | Fixed point |
 |---|---|---|---|---|---|
-| LP Filter | Modelled | §22 | FM input at 2 semitones a unit only (notes §160) | no response captured | Doubles |
-| HP Filter | Modelled | §22 | - | no response captured | Doubles |
+| LP Filter | Confirmed on the G2 | §22 | noise through it, Freq 50/85/110, all six slopes: mean within 0.22 dB, worst 0.87 at 252 Hz (10-25); FM at 2 semitones a unit (notes §160) | Kbt and the Mod input not compared | Doubles |
+| HP Filter | Confirmed on the G2 | §22 | noise through it, Freq 50/85, slopes 6/12/24/36: mean within 0.09 dB, worst 0.55 (10-25) | Kbt and the Mod input not compared | Doubles |
 | Nord Filter | Confirmed on the G2 | §23 | noise through LP/BP/HP/BR, 12 and 24 dB, Freq 50 and 85, Res 0 and 100: within 1.44 dB, mean 0.06-0.35 (10-11) | Pitch, FM and Res mod not compared | Doubles |
 | Classic Filter | Confirmed on the G2 | §21 | 04 Chris' Pad within 0.5 dB 100 Hz-12 kHz; a high-Res test patch's peak within 0.04 semitone (09-28) | Env and the dB/Oct tap not compared since the 09-14 law | Doubles |
 | Multi Filter | Confirmed on the G2 | §10 | 54 noise responses within 0.5-0.6 dB (09-12); FreqM within 1% (10-08) | GComp off not captured | Doubles |
-| Phase Filter | Modelled | §67 | - | - | Integer words: the six allpass stages in the accumulator |
+| Phase Filter | Confirmed on the G2 | §67 | noise through it, all three types, 2 and 6 notches, FB 20/64/100: mean within 0.11 dB (10-25) | the Pitch, Spread and FM inputs not compared | Integer words: the six allpass stages in the accumulator |
 | Comb Filter | Confirmed on the G2 | §13.4 | noise through all three Types (09-12); Pitch attenuator (10-08) | - | Saturating doubles: every word saturated |
-| Static Filter | Modelled | §10.4 | peak heights only (2026-08) | HP tap term not modelled; a noise capture per type | Doubles |
-| FltVoice | Modelled | §56 | - | - | Integer control: vowel table and resonance word; the resonators in doubles |
-| WahWah | Modelled | §69.9 | - | - | Integer words: sweep and filter words |
-| Vocoder | Modelled | §70.8 | - | - | Saturating doubles: the converters' and bands' words, saturated |
+| Static Filter | Confirmed on the G2 | §10.4, §10.4a | noise through LP, BP and HP at Freq 50/85, Res 0/64/110, GC off and on: 21 settings, mean within 0.28 dB, worst 1.13 on the Res 110 peak (10-25) | - | Doubles |
+| FltVoice | Confirmed on the G2 | §56, §56.1 | noise through it, vowels A/E/I, Freq 64/100, Res 0/64/127: formants within 18 cents, peaks within 0.8 dB (10-25); the Freq law from 63 to 66 to 2 cents | Res 127 peak 3 dB under; between the formants 1.3-2.8 dB | Integer control: vowel table and resonance word; the resonators in doubles |
+| WahWah | Confirmed on the G2 | §69.9 | noise through it at Sweep 0/64/127: mean within 0.24 dB, worst 1.4 in the lowest band at Sweep 0 (10-25) | the Sweep input not compared | Integer words: sweep and filter words |
+| Vocoder | Confirmed on the G2 | §70.8 | a 110 Hz saw carrier and a sine modulator at 300 Hz, 1 kHz and 3 kHz, Emphasis off and on: the harmonics that pass within 0.15 dB, level within 0.08 (10-25) | BandSel routing other than straight, and Monitor, not compared | Saturating doubles: the converters' and bands' words, saturated |
 | Eq 2-band | Confirmed on the G2 | §11.2 | 43 noise settings across the EQs, 0.53 dB mean (09-12) | high shelf changed 10-09 (0.3-0.7 dB near 3 kHz), not re-captured | Doubles |
 | Eq 3-band | Confirmed on the G2 | §11 | 0.66 dB mean, 1.42 worst (09-12) | the 1.42 dB setting (mid -13.5 dB at 8 kHz) not explained by the model | Doubles |
 | Eq Peak | Confirmed on the G2 | §11.3, §11.5 | 0.57 dB mean (09-12) | - | Doubles |

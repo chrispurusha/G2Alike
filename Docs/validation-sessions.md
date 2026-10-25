@@ -58,6 +58,18 @@ Measure a control module through something that turns it into sound - an OscA's 
 
 ## 4. Traps (each has cost a session)
 
+- **FM or PM at a 1:1 ratio depends on the two oscillators' phase.** Every sideband then lands on a harmonic,
+  and its size depends on where carrier and modulator started - random, and different on the G2 and the
+  engine: OscPM at PhM 64 read 14-19 dB out at 1:1 and 0.1 dB with the modulator four semitones down.
+  Measure FM at an inharmonic ratio and read the sidebands at fc +- k fm.
+- **An envelope needs the gate on the other channel.** DEVNOTE's hold is the shell's timing, 1.1-1.2 s for a
+  requested 1.0, so a release compared by the clock is out by a tenth of a second. Put the Keyboard Gate on
+  the second 2-Out input: the capture then carries its own gate edges, the engine is rendered with the hold
+  they show, and both curves are aligned on gate-on. Mask to the G2's noise floor (-62 dBFS on 2026-10-25),
+  since the engine falls to digital silence.
+- **A capture at 192 kHz needs a longer FFT.** The Fireface ran at 192 kHz on 2026-10-25, where 16384 points
+  give 11.7 Hz bins against the engine's 2.9 Hz: FltHP at Freq 50 read 1-3 dB out below 100 Hz, and 0.2 at
+  `--fft 65536`. Keep the bin widths comparable - 65536 at 192 kHz.
 - **FFT resolution at low frequencies.** At 4096 points a bin is 23 Hz at 96 kHz (the G2) and 12 Hz at 48 kHz
   (the engine), so third-octave bands below ~300 Hz hold one or two bins laid out differently on each side. It
   showed 2-4 dB on the Nord Filter at Freq 50 that were not there. 16384 points (the tool's default) cured it.
@@ -86,8 +98,6 @@ compared with the G2. Settings in brackets are the first grid to try.
 | Module | Stage patches | Rig and method |
 |---|---|---|
 | S&H | 6 | OscA (slow) into In, an LFO square as clock, the output into an OscA's pitch: held values and timing |
-| LP Filter, HP Filter | 4, 2 | `filter_response.py` as the Nord Filter (Freq 50/85, each slope) |
-| Envelope ADR | 4 | Keyboard Gate > EnvADR > LevAmp on an OscA: stage times as EnvAHD's check (sound-engine-reference §17.11a) |
 | KeyQuant, SwOnOffT | 4 each | through an OscA's pitch / a LevAmp |
 | Phaser, LFO B, Envelope D | 3 each | Phaser by `filter_response.py`; LFO B as LFO C was (reference §28.7), Envelope D as Envelope ADR |
 
