@@ -1893,8 +1893,9 @@ static void backdoor_dispatch(const char * cmd, const char * arg) {
             uint32_t n = ((frames - done) < WAV_BLOCK) ? (frames - done) : WAV_BLOCK;
 
             if (held && (done >= holdFrames)) {
+                // released at the note's own velocity, as the G2's virtual key releases (NoteDet's RVel reads it)
                 for (uint32_t k = 0; k < noteCount; k++) {
-                    sound_engine_note(notes[k], 0, false);
+                    sound_engine_note(notes[k], (uint8_t)((velocity < 1) ? 1 : ((velocity > 127) ? 127 : velocity)), false);
                 }
 
                 held = false;

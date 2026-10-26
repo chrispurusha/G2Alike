@@ -182,79 +182,81 @@ static bool filter_param_map(tModuleType type, tFilterParams * map) {
     }
 }
 
-#define FLT_PARAM_FREQ              (0)
-#define FLT_PARAM_ENV               (1) // modulation depth for the Env input, 0..200%
-#define FLT_PARAM_KBT               (2)
-#define FLTSTATIC_PARAM_GC          (4) // §10.4 - drive x damping
-#define FLTNORD_PARAM_FMLIN         (7) // §23.5
-#define FLTNORD_PARAM_RESM          (9) // §23.5
-#define FLT_PARAM_RES               (3)
-#define FLT_PARAM_SLOPE             (4)
-#define FLT_PARAM_ACTIVE            (5)
+#define FLT_PARAM_FREQ               (0)
+#define FLT_PARAM_ENV                (1) // modulation depth for the Env input, 0..200%
+#define FLT_PARAM_KBT                (2)
+#define FLTSTATIC_PARAM_GC           (4) // §10.4 - drive x damping
+#define FLTNORD_PARAM_FMLIN          (7) // §23.5
+#define FLTNORD_PARAM_RESM           (9) // §23.5
+#define FLT_PARAM_RES                (3)
+#define FLT_PARAM_SLOPE              (4)
+#define FLT_PARAM_ACTIVE             (5)
 
-#define ENV_PARAM_SHAPE             (0)
-#define ENV_PARAM_ATTACK            (1)
-#define ENV_PARAM_DECAY             (2)
-#define ENV_PARAM_SUSTAIN           (3)
-#define SAMPLER_LEVEL_UNITY         (64.0) // notes §226 - the Level dial's position that leaves the sample as it is
-#define SAMPLER_PARAM_VEL           (2)    // notes §213
-#define SAMPLER_PARAM_REL           (3)
+#define ENV_PARAM_SHAPE              (0)
+#define ENV_PARAM_ATTACK             (1)
+#define ENV_PARAM_DECAY              (2)
+#define ENV_PARAM_SUSTAIN            (3)
+#define SAMPLER_LEVEL_UNITY          (64.0) // notes §226 - the Level dial's position that leaves the sample as it is
+#define SAMPLER_PARAM_VEL            (2)    // notes §213
+#define SAMPLER_PARAM_REL            (3)
 // notes §213 - a Sampler keeps Vel and Rel in level[], which only mixers use, so the node needs no new words
-#define SAMPLER_LEVEL_VEL           (0)  // how far velocity scales its level, 0..1
-#define SAMPLER_LEVEL_REL           (1)  // seconds for a released note to fall 60 dB
-#define SAMPLER_PARAM_PITCH_MOD     (4)
-#define SAMPLER_IN_PITCH            (1)
-#define SAMPLER_IN_PITCH_VAR        (2)
+#define SAMPLER_LEVEL_VEL            (0) // how far velocity scales its level, 0..1
+#define SAMPLER_LEVEL_REL            (1) // seconds for a released note to fall 60 dB
+#define SAMPLER_PARAM_PITCH_MOD      (4)
+#define SAMPLER_IN_PITCH             (1)
+#define SAMPLER_IN_PITCH_VAR         (2)
 // notes §213a - Start, Delay and Attack, kept in level[] beside Vel and Rel
-#define SAMPLER_PARAM_START         (5)
-#define SAMPLER_PARAM_START_MOD     (6)
-#define SAMPLER_PARAM_DELAY         (7)
-#define SAMPLER_PARAM_DELAY_MOD     (8)
-#define SAMPLER_PARAM_ATTACK        (9)
-#define SAMPLER_LEVEL_START         (2)
-#define SAMPLER_LEVEL_START_MOD     (3)
-#define SAMPLER_LEVEL_DELAY         (4)
-#define SAMPLER_LEVEL_DELAY_MOD     (5)
-#define SAMPLER_LEVEL_ATTACK        (6)  // seconds
-#define SAMPLER_IN_START            (3)
-#define SAMPLER_IN_DELAY            (4)
+#define SAMPLER_PARAM_START          (5)
+#define SAMPLER_PARAM_START_MOD      (6)
+#define SAMPLER_PARAM_DELAY          (7)
+#define SAMPLER_PARAM_DELAY_MOD      (8)
+#define SAMPLER_PARAM_ATTACK         (9)
+#define SAMPLER_LEVEL_START          (2)
+#define SAMPLER_LEVEL_START_MOD      (3)
+#define SAMPLER_LEVEL_DELAY          (4)
+#define SAMPLER_LEVEL_DELAY_MOD      (5)
+#define SAMPLER_LEVEL_ATTACK         (6) // seconds
+#define SAMPLER_IN_START             (3)
+#define SAMPLER_IN_DELAY             (4)
 // notes §213b - Speed, Decay and Sustain
-#define SAMPLER_PARAM_SPEED         (10)
-#define SAMPLER_PARAM_SPEED_MOD     (11)
-#define SAMPLER_PARAM_DECAY         (12)
-#define SAMPLER_PARAM_SUSTAIN       (13)
-#define SAMPLER_LEVEL_SPEED         (7)
-#define SAMPLER_LEVEL_SPEED_MOD     (8)
-#define SAMPLER_LEVEL_DECAY         (9)  // seconds to fall 60 dB towards Sustain
-#define SAMPLER_LEVEL_SUSTAIN       (10) // 0..1
-#define SAMPLER_LEVEL_GRAIN_BANK    (11) // which of gSamplerGrain this Sampler uses
-#define SAMPLER_IN_SPEED            (5)
-#define SAMPLER_PARAM_KBT           (14) // notes §213c
-#define SAMPLER_PARAM_GRAIN         (15) // notes §213d - kept in shape, its amount in shapeModAmount
-#define SAMPLER_PARAM_GRAIN_MOD     (16)
-#define SAMPLER_IN_GRAIN            (6)
-#define SAMPLER_PARAM_SPRAY         (17)   // notes §213f - kept in fmAmount, its amount in fltFmAmount
-#define SAMPLER_PARAM_SPRAY_MOD     (18)
-#define SAMPLER_IN_SPRAY            (7)
-#define ENV_PARAM_RELEASE           (4)
-#define ENV_PARAM_OUT_TYPE          (5)  // posStrMap: Pos, PosInv, Neg, NegInv, Bip, BipInv
-#define ENV_INPUT_GATE              (1)  // node input: 0 is the audio, 1 the Gate jack, 2 AM
-#define ENV_INPUT_AM                (2)
-#define ENV_INPUT_MOD               (3)  // §17.10 - the time-mod jacks follow, one per modulated dial
+#define SAMPLER_PARAM_SPEED          (10)
+#define SAMPLER_PARAM_SPEED_MOD      (11)
+#define SAMPLER_PARAM_DECAY          (12)
+#define SAMPLER_PARAM_SUSTAIN        (13)
+#define SAMPLER_LEVEL_SPEED          (7)
+#define SAMPLER_LEVEL_SPEED_MOD      (8)
+#define SAMPLER_LEVEL_DECAY          (9)  // seconds to fall 60 dB towards Sustain
+#define SAMPLER_LEVEL_SUSTAIN        (10) // 0..1
+#define SAMPLER_LEVEL_GRAIN_BANK     (11) // which of gSamplerGrain this Sampler uses
+#define SAMPLER_IN_SPEED             (5)
+#define SAMPLER_PARAM_KBT            (14) // notes §213c
+#define SAMPLER_PARAM_GRAIN          (15) // notes §213d - kept in shape, its amount in shapeModAmount
+#define SAMPLER_PARAM_GRAIN_MOD      (16)
+#define SAMPLER_IN_GRAIN             (6)
+#define SAMPLER_PARAM_SPRAY          (17)  // notes §213f - kept in fmAmount, its amount in fltFmAmount
+#define SAMPLER_PARAM_SPRAY_MOD      (18)
+#define SAMPLER_IN_SPRAY             (7)
+#define ENV_PARAM_RELEASE            (4)
+#define ENV_PARAM_OUT_TYPE           (5)  // posStrMap: Pos, PosInv, Neg, NegInv, Bip, BipInv
+#define ENV_INPUT_GATE               (1)  // node input: 0 is the audio, 1 the Gate jack, 2 AM
+#define ENV_INPUT_AM                 (2)
+#define MODADSR_PARAM_SUSTAIN        (2u) // §17.10a
+#define MODADSR_PARAM_SUSTAIN_MOD    (6u)
+#define ENV_INPUT_MOD                (3)  // §17.10 - the time-mod jacks follow, one per modulated dial
 
-#define LEVAMP_PARAM_GAIN           (0)
-#define LEVAMP_PARAM_TYPE           (1) // 0 = lin, 1 = exp
+#define LEVAMP_PARAM_GAIN            (0)
+#define LEVAMP_PARAM_TYPE            (1) // 0 = lin, 1 = exp
 
 // notes §5
-#define OUT_PARAM_DESTINATION       (0)
-#define FXIN_PARAM_SOURCE           (0)                                // Fx-In's "In from": inFxStrMap, 0 = FX 1/2, 1 = FX 3/4
-#define OUT_PARAM_ACTIVE            (1)                                // 2toOut's Bypass, non-zero is on
-#define OUT_PARAM_PAD               (2)                                // padStrMap: 0 dB or +6 dB
+#define OUT_PARAM_DESTINATION        (0)
+#define FXIN_PARAM_SOURCE            (0)                                // Fx-In's "In from": inFxStrMap, 0 = FX 1/2, 1 = FX 3/4
+#define OUT_PARAM_ACTIVE             (1)                                // 2toOut's Bypass, non-zero is on
+#define OUT_PARAM_PAD                (2)                                // padStrMap: 0 dB or +6 dB
 
-#define OUT_TO_BUS_FIRST            (4u)                               // outToStrMap: "Bus 1/2", then "Bus 3/4"
-#define BUS_PAIRS                   (2u)                               // notes §222
-#define BUS_PAIR_FIRST              ((uint32_t)SOUND_ENGINE_OUT_PAIRS) // the pairs past the device's, never played
-#define BUS_CHANNELS                (2u * BUS_PAIRS)
+#define OUT_TO_BUS_FIRST             (4u)                               // outToStrMap: "Bus 1/2", then "Bus 3/4"
+#define BUS_PAIRS                    (2u)                               // notes §222
+#define BUS_PAIR_FIRST               ((uint32_t)SOUND_ENGINE_OUT_PAIRS) // the pairs past the device's, never played
+#define BUS_CHANNELS                 (2u * BUS_PAIRS)
 
 // notes §217 - the output pair a 2-Out's Out to names: the G2's two, then the engine's own; notes §222 - a Bus is one
 // of two pairs past those, shared with the other slots; FX is not an output
@@ -461,9 +463,9 @@ static const tMixSpec * mix_spec(tModuleType type) {
 
 // §38 - the Logic group. A logic input is HIGH above zero, and a logic HIGH output is 64 units,
 // which is LOGIC_HIGH_LEVEL (§16, §30).
-#define GATE_PARAM_TYPE_1       (0)      // gateTypeStrMap {AND, NAND, OR, NOR, XOR, NXOR}
-#define GATE_PARAM_TYPE_2       (1)
-#define FLIPFLOP_PARAM_TYPE     (0)      // flipFlopStrMap {D-type, RS-type}
+#define GATE_MODE_TYPE_1        (0u)     // gateTypeStrMap {AND, NAND, OR, NOR, XOR, NXOR}
+#define GATE_MODE_TYPE_2        (1u)
+#define FLIPFLOP_MODE_TYPE      (0u)     // flipFlopStrMap {D-type, RS-type}
 #define FLIPFLOP_TYPE_RS        (1)
 #define CLKDIV_PARAM_DIVIDER    (0)      // reads 1 to 128: the dial plus one
 #define CLKDIV_MODE_TOGGLED     (1)
@@ -604,6 +606,7 @@ static double lfo_shape_dial(double v) {
 #define RNDSTEP_SEED_SLOPE         (-0x2AAAAB)
 #define RNDSTEP_SHIFT              (10)        // its Y1
 #define RND_SHIFT_TAPS             (0x872B41u) // §70.9 - Rnd2's feedback taps
+#define RND_SHIFT_REFILL           (0xEF36D7u) // §70.9 - the word a shift to zero is replaced by
 #define RNDSTATE_START_LEVEL       (0.25)      // §70.9 - RndPattern State's Y5 in its frame
 #define SEQCTR_REST_WORD           (0x220000)  // §70.10 - Ctrl out of range: the rest pair's index
 #define SEQCTR_BIPOLAR_CENTRE      (0x100000)  // §70.10 - Pol bipolar: the centre subtracted before doubling
@@ -1099,7 +1102,7 @@ typedef struct {
     double          fltKbt;
     double          fltFmAmount;     // §23.5 - FltNord's FM lin dial
     double          fltResModAmount; // §23.5 - FltNord's Res M dial
-    double          modAmount;       // how far the Env input moves the cutoff, 0..2 (the dial's 0..200%)
+    double          modAmount;       // how far the Env input moves the cutoff, 0..2 (the dial's 0..200%); ModADSR's Sustain M (§17.10a)
 
     double          attack;          // envelope, in seconds
     double          decay;
@@ -4163,6 +4166,7 @@ static void env_stages_build(tEngineNode * node, tModule * module, uint32_t vari
     node->envStageCount   = 0;
     node->envSustainStage = -1;
     node->envSustainQ     = 0;
+    node->modAmount       = 0.0;
 
     if (env_stage_map(module->type, module->param[variation], &map, false) == false) {
         return;
@@ -4223,6 +4227,10 @@ static void env_stages_build(tEngineNode * node, tModule * module, uint32_t vari
         }
         node->envStageCount++;
         from = level;
+    }
+
+    if (module->type == moduleTypeModADSR) {
+        node->modAmount = dial_fraction(param_value(module, variation, MODADSR_PARAM_SUSTAIN_MOD));
     }
 
     if (module->type == moduleTypeEnvMulti) {
@@ -7063,14 +7071,14 @@ static int32_t add_node(tSoundEngineParams * params, tModule * module, uint32_t 
         }
         case eNodeGate:
         {
-            // §38.2 - two drop-downs, read raw: a drop-down cannot be morphed.
-            node->gateType[0] = (uint32_t)module->param[variation][GATE_PARAM_TYPE_1].value;
-            node->gateType[1] = (uint32_t)module->param[variation][GATE_PARAM_TYPE_2].value;
+            // §38.2 - the two Types are modes, not parameters: the module has none
+            node->gateType[0] = module->mode[GATE_MODE_TYPE_1].value;
+            node->gateType[1] = module->mode[GATE_MODE_TYPE_2].value;
             break;
         }
         case eNodeFlipFlop:
         {
-            node->logicToggled = (module->param[variation][FLIPFLOP_PARAM_TYPE].value == FLIPFLOP_TYPE_RS);
+            node->logicToggled = (module->mode[FLIPFLOP_MODE_TYPE].value == FLIPFLOP_TYPE_RS);   // §38.3 - a mode
             break;
         }
         case eNodeClkDiv:
@@ -11301,6 +11309,25 @@ static const tEnvSegment * env_stage_modulated(const tEngineNode * spec, const t
     return scratch;
 }
 
+// §17.10a - the stage that falls to the held one aims at S + In x Sustain M, re-read every tick,
+// floored at zero and saturated at full
+static const tEnvSegment * env_stage_sustain_modulated(const tEngineNode * spec, uint32_t index, const tEnvSegment * stage,
+                                                       double value[][NODE_OUTPUTS], tEnvSegment * scratch) {
+    uint32_t jack   = ENV_INPUT_MOD + MODADSR_PARAM_SUSTAIN;
+
+    if (  (spec->modAmount == 0.0) || (spec->in[jack] < 0) || (spec->envSustainStage < 0)
+       || (index + 1u != (uint32_t)spec->envSustainStage)) {
+        return stage;
+    }
+    double   target = (double)stage->target + (signal_in(spec, value, jack) * spec->modAmount * ENV_FULL_SCALE_STEPS);
+
+    if (stage != scratch) {
+        *scratch = *stage;
+    }
+    scratch->target = (int32_t)fmax(0.0, fmin((double)ENV_TOP, floor(target)));
+    return scratch;
+}
+
 static int32_t sat24(int64_t value) {
     return (int32_t)((value > ENV_TOP) ? ENV_TOP : ((value < -0x800000) ? -0x800000 : value));
 }
@@ -11388,6 +11415,8 @@ static double envelope_step(uint32_t voice, uint32_t node, const tEngineNode * s
         } else {
             tEnvSegment         scratch;
             const tEnvSegment * stage = env_stage_modulated(spec, &spec->envStage[index], value, &scratch);
+
+            stage = env_stage_sustain_modulated(spec, index, stage, value, &scratch);
 
             if (stage->sustain != 0u) {
                 q = env_segment(q, stage->half, stage->add, stage->target);
@@ -12498,8 +12527,9 @@ static void random_draw_with(double state[2], uint32_t * seed, double step, doub
     if (shiftReg == true) {
         // §70.9 - Rnd2: a 24-bit shift register, the bit falling off the top fed back through the taps
         uint32_t shifted = *seed << 1;
+        uint32_t word    = ((shifted & 0xFFFFFFu) == 0u) ? RND_SHIFT_REFILL : (shifted & 0xFFFFFFu);
 
-        *seed = (shifted & 0xFFFFFFu) ^ (((shifted & 0x1000000u) != 0u) ? RND_SHIFT_TAPS : 0u);
+        *seed = word ^ (((shifted & 0x1000000u) != 0u) ? RND_SHIFT_TAPS : 0u);
     } else {
         *seed = ((*seed * 0xB2D9Du) + 0x361963u) & 0xFFFFFFu;
     }
@@ -13052,12 +13082,15 @@ static double pitch_shift_step(const tEngineNode * spec, uint32_t voice, double 
         double step  = 0.0;
 
         if (spec->select == 1u) {
-            // Scratch: the ratio word through a one-pole of 0.99 a tick, the Mod input added unsmoothed;
-            // the level rises from silence over the first 3/1024 of it, and 4 x the ratio is the speed
-            st->ratio = fmin(fmax((SCRATCH_SMOOTH_IN * spec->bx[0]) + (SCRATCH_SMOOTH_POLE * st->ratio)
-                                  + (spec->bx[2] * mod / DSP_FULL_SCALE), -1.0), 1.0);
-            level     = fmin(fmax(64.0 * ((8.0 * fabs(st->ratio)) - (1.0 / 128.0)), 0.0), 1.0);
-            step      = SCRATCH_RATE_SCALE * (1.0 - (4.0 * fmin(fmax(8.0 * st->ratio, -1.0), 1.0)));
+            // Scratch: the ratio word through a one-pole of 0.99 a tick; the Mod input is added to the
+            // smoothed word for this tick only, never stored (§70.3). The level rises from silence over the
+            // first 3/1024 of it, and 4 x the ratio is the speed
+            st->ratio = fmin(fmax((SCRATCH_SMOOTH_IN * spec->bx[0]) + (SCRATCH_SMOOTH_POLE * st->ratio), -1.0), 1.0);
+
+            double ratio = st->ratio + (spec->bx[2] * mod / DSP_FULL_SCALE);
+
+            level     = fmin(fmax(64.0 * ((8.0 * fabs(ratio)) - (1.0 / 128.0)), 0.0), 1.0);
+            step      = SCRATCH_RATE_SCALE * (1.0 - (4.0 * fmin(fmax(8.0 * ratio, -1.0), 1.0)));
         } else {
             step = PSHIFT_RATE_SCALE * (1.0 - pitch_shift_ratio(spec, mod));
         }
@@ -13256,7 +13289,7 @@ static void noise_gate_build(tEngineNode * node, tModule * module, uint32_t vari
     node->envOutType      = 0u;
 }
 
-#define PITCH_TRACK_ZERO_HZ    (82.4068892)   // §70.7 - the counter's 0 units is E2
+#define PITCH_TRACK_ZERO_HZ    (329.6275569)  // §70.7 - the counter's 0 units is E4, as the keyboard's
 
 // §70.7a - ZeroCnt, stage by stage: the input read once a 24 kHz tick, the ticks between rising
 // crossings (the last reading <= 0, this one > 0) counted whole, and the count read as a pitch.
@@ -14471,9 +14504,8 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         }
         case eNodeLevConv:
         {
-            // §31 - a straight line from the range it is told to read onto the one it writes, and
-            // then SATURATED: the reference model computes offset + gain x In and clamps the
-            // result to full scale, so an over-range input does not carry on past it.
+            // §31 - a straight line from the range it is told to read onto the one it writes, saturated
+            // at the word (+-4 units, notes §196), not at one unit: an over-range input carries on (§31.1)
             double inLo  = 0.0;
             double inHi  = 0.0;
             double outLo = 0.0;
@@ -14483,7 +14515,7 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
             lev_conv_range(false, spec->levConvIn, &inLo, &inHi);
             lev_conv_range(true, spec->levConvOut, &outLo, &outHi);
             out         = outLo + (((a - inLo) * (outHi - outLo)) / (inHi - inLo));
-            value[n][0] = (out > 1.0) ? 1.0 : ((out < -1.0) ? -1.0 : out);
+            value[n][0] = dsp_saturate(out);
             break;
         }
         case eNodeLevAdd:
@@ -14624,10 +14656,10 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         }
         case eNodeValSw12:
         {
-            // §68.2 - Out 2 while Ctrl equals the value, Out 1 otherwise
+            // §68.2 - output 0 while Ctrl equals the value, output 1 otherwise: it counts down, as Sw1-2 (§45a)
             bool match = (fabs(signal_in(spec, value, 1) - spec->constant) <= (VALSW_MATCH_UNITS / UNITS_PER_FULL_SCALE));
 
-            value[n][match ? 1 : 0] = a;
+            value[n][match ? 0 : 1] = a;
             publish_module_led(voice, spec, match);   // notes §194 - lit while Out 2 carries In
             break;
         }
@@ -15111,8 +15143,9 @@ static void eval_node(SE_ARG, uint32_t voice, uint32_t n, const tSoundEnginePara
         {
             // §45 - In on the selected output, nothing on the rest, and which one it is on Ctrl
             uint32_t pick = (spec->select < spec->outCount) ? spec->select : 0u;
+            uint32_t jack = (spec->outCount == 2u) ? (1u - pick) : pick;   // §45a - the two-way switches count down
 
-            value[n][pick]           = a;
+            value[n][jack]           = a;
             value[n][spec->outCount] = ((double)pick * SWSEL_CTRL_UNITS) / UNITS_PER_FULL_SCALE;
             break;
         }

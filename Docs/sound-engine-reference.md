@@ -1059,9 +1059,19 @@ moving the dial off its own setting - so an unmodulated envelope costs nothing a
 what it did before. The stage's words are recomputed from the effective dial into a scratch
 segment, which is why nothing per voice had to be stored.
 
-**NOT yet checked on the hardware:** the Attack and Sustain mod jacks, and ModAHD's. They share
+**Checked on the hardware 2026-10-26** for all seven jacks (A, D, S, R; A, H, D), at +-32 units and full amount. Before that date the following stood: They share
 this one path, so the decay measurement exercises the mechanism, but neither the attack's curve
 under a mod nor the sustain's own law has been measured. to-test.md.
+
+**17.10a ModADSR's Sustain mod (2026-10-26).** The S jack moves a LEVEL, not a time: the decay aims at
+
+    sustain = S/128 + In x Sustain M/128
+
+re-read every tick, floored at 0 and saturated at full (In 1.0 = 64 units; S and Sustain M 127 = 1). So at full
+Sustain M, 32 units take S 64 to full or to zero. The engine had ignored the jack: measured on the G2 at S 64,
+Sustain M 127, the envelope went to full at +32 units and fell to silence at -32, where the engine held S; and at
+Sustain M 64, -8 units lowered the sustain 1.1 dB (0.4375). A rising target is taken at once (the instrument's
+approach from below is not measured). Revert record row 176.
 
 **17.11 EnvMulti, from the reference model (2026-10-02).** Not the stage walker of §17.9: each
 of the four segments carries a PROGRESS word p that starts at 0 when the segment is entered and steps by
@@ -1879,6 +1889,11 @@ affine form is confirmed and the saturation is not optional - an over-range inpu
 rather than carrying on past it. The offset and the gain come from the instrument, which is where
 the two drop-downs land.
 
+**31.1 Over-range inputs carry on (2026-10-25).** The line saturates at the word, four units, not at one: an input
+outside the range LevConv is told to read goes on along the same line. Measured on the G2 with -32 units into a
+Pos input and +32 into a Neg one: +-96 and +-128 units out where the engine had clamped at +-64 (revert record
+row 175). All 36 In/Out type pairs then agree, at +-32 units, within the rig's 0.3%.
+
 ## 32. LevAdd
 
 Added 2026-09-19. Adds its dial to the input, and the dial is a Constant's: Bipolar (value - 64)
@@ -2076,6 +2091,11 @@ which is what an inverter with nothing on it does.
 Two independent two-input gates, each with its own type from `gateTypeStrMap`
 {AND, NAND, OR, NOR, XOR, NXOR}. Gate 1 takes In1_1 and In1_2, gate 2 takes In2_1 and In2_2. The
 types are drop-downs, so they are read raw and cannot be morphed.
+
+**38.2a The Gate's and FlipFlop's types are modes (2026-10-25).** Neither module stores a parameter; each
+Type is a mode, and the engine read it from parameters that do not exist, so every Gate rendered as an AND and
+every FlipFlop as a D-type (revert record row 172). Walked on the G2 with Constants and read through two LevMults:
+all six Gate types on both gates agree with the truth table and with the engine.
 
 ## 38.3 FlipFlop
 
@@ -2420,6 +2440,11 @@ whose switch (index 1) clears the output when off - the instrument swaps a clear
 Added 2026-09-25. In goes to the selected output (0-7) and every other output is zero - the host
 writes a gain of one to the selected output's word and zero to the rest. **Ctrl** is the ninth output,
 4 units a step as on Sw8-1 (§33.1). Unpatched In reads zero. Nine outputs is why `NODE_OUTPUTS` is 9.
+
+**45a The two-way switches count down (2026-10-25).** On Sw1-2 and Sw1-2M the G2 sends the input to output 1 at Sel 0
+and to output 0 at Sel 1; the engine had it the other way round, so a patch read off the G2 played from the wrong jack.
+The two output rows are swapped to match, so the jack drawn first is still the one Sel 0 feeds (revert record row 173).
+Every other selector, Sw1-4, Sw1-8, Sw2-1, Sw4-1, Sw8-1 and the Muxes, counts up, and all route as on the G2.
 
 ## 46. Logic Delay
 
@@ -2813,9 +2838,11 @@ Added 2026-09-27 from the reference model, each checked in a small patch built i
   the engine plays the state the patch stores. Sw4-1 is Sw8-1 with four inputs. Sw1-2 and Sw1-4 are
   Sw1-8 (§45) with two or four outputs, Ctrl coming after them. Every Ctrl is 4 units a step (the
   host writes 0x20000 a step), and on a momentary switch 4 units when held.
-- **68.2 ValSw1-2** sends In to Out 2 once Ctrl reaches the value, and to Out 1 below it, as ValSw2-1
-  does (§34). **It switches at EQUALITY** (settled 2026-09-27, as §34): the module tests |Ctrl - value| <= 1/2
-  unit, not the manual's "lower limit" (revert record row 75).
+- **68.2 ValSw1-2** sends In to output 0 while Ctrl equals the value and to output 1 otherwise. **It switches
+  at EQUALITY** (settled 2026-09-27, as §34): the module tests |Ctrl - value| <= 1/2 unit, not the manual's
+  "lower limit" (revert record row 75) - confirmed on the G2 2026-10-25, a sweep of Ctrl from 0 to 63 units at
+  value 32 switching at 32 units alone. The outputs count down, as Sw1-2's (§45a): the engine had them the
+  other way round and the rows are swapped to match (revert record row 174).
 - **68.3 Mux8-1 / Mux1-8.** The step is Ctrl's word >> 17 (4 units a step), clamped to 0..7. Mux8-1
   passes the chosen input and Mux1-8 puts In on the chosen output, both at a gain of exactly one.
   **Mux8-1X is not built**: the reference model shifts the crossfade weights in ways reading it does not
@@ -2917,10 +2944,12 @@ been compared with the instrument yet.
   - **PShift ratio.** Coarse is a quarter semitone a step (+-16 semitones), interpolated linearly between
     the semitone table's entries. Fine is +-50 cents (127 = +49.2). Pitch M is v/128 (127 = 1) at **half
     a semitone a unit**.
-  - **Scratch ratio.** A word R = (v - 64)/512 (127 = 1/8) passes a one-pole s = 0.01 R + 0.99 s +
-    Ratio M x input (the input's word, NOT through the 0.01: a few hundredths of a unit move it as far as
-    the whole dial), saturated to +-1. The speed is 4 x clamp(8s), +-4, backwards below 64. Both gains
-    are scaled by clamp(64 x (8|s| - 1/128), 0, 1), which is silent at 64 and full from 66.
+  - **Scratch ratio.** A word R = (v - 64)/512 (127 = 1/8) passes a one-pole s = 0.01 R + 0.99 s, saturated
+    to +-1. The Ratio M input is added to it for the tick only and never stored: u = s + Ratio M x the
+    input's word (positive faster), so a steady input offsets the speed and does not run away (2026-10-26: the engine had
+    added it into s, and +1 unit at Ratio M 64 ran to full speed where the G2 crept at a tenth; revert
+    record row 179). The speed is 4 x clamp(8u), +-4, backwards below 64. Both gains are scaled by
+    clamp(64 x (8|u| - 1/128), 0, 1), which is silent at 64 and full from 66.
   - **What a capture would check.** With a short window the jump is a large fraction of a cycle, so the
     output's carrier can cancel into sidebands at the crossfade rate (440 Hz at Coarse 112 in 12.5 ms
     reads 880 +- 40). That is the structure itself, not the engine.
@@ -2993,8 +3022,9 @@ been compared with the instrument yet.
   Checked against the reference model run together: the gate opens and shuts on the same sample, Out within 1e-5
   and Env within 1e-4 over 40 000 samples of bursts at five settings.
 
-- **70.7 PitchTrack** (the reference model, 2026-10-03). Pitch 0 is E2 (82.41 Hz), 12 units an
-  octave, as ZeroCnt's (§70.7a). Every part runs on every 96 kHz sample; see the end of this section.
+- **70.7 PitchTrack** (the reference model, 2026-10-03). Pitch 0 is E4 (329.63 Hz), 12 units an
+  octave, as ZeroCnt's (§70.7a) - measured on the G2 2026-10-26 at 41 Hz to 659 Hz; the engine had
+  E2, two octaves low, until then (revert record row 178). Every part runs on every 96 kHz sample; see the end of this section.
   - **Gate.** |In| passes a two-stage follower: the first stage attacks instantly and releases by
     0x2746/2^23 a sample, the second follows it up and releases by 0x1a10/2^23. Gate goes high when the
     second stage exceeds Threshold (v/128 units of a full-scale signal, 127 = 1) and low below 3/4 of it.
@@ -3015,8 +3045,8 @@ been compared with the instrument yet.
     them at 96 kHz.
 - **70.7a ZeroCnt, exactly (2026-09-27):** the Track stage reads its input once a 24 kHz tick, counts the
   ticks between rising crossings (the last reading at or below 0, this one above) WHOLE, and the Calc stage
-  turns the count into 12 log2((24 000 / count) / 82.41 Hz) units - the table's law to 0.01 units. So the
-  reading steps: 440 Hz, 54.5 ticks, reads 28.9 or 29.4 by turns, not 29.0 (revert record row 88).
+  turns the count into 12 log2((24 000 / count) / 329.63 Hz) units (E4, §70.7) - the table's law to 0.01 units. So the
+  reading steps: 440 Hz, 54.5 ticks, reads 4.9 or 5.4 by turns, not 5.0 (revert record row 88).
 - **70.8 Vocoder** (the reference model, 2026-10-03; confirmed on the G2 2026-10-25 with a 110 Hz saw carrier
   and a sine modulator at 300 Hz, 1 kHz and 3 kHz, Emphasis off and on - within 0.15 dB). Two stages: converters every 96 kHz
   sample, and a band bank on the 24 kHz tick. Words are a quarter of an engine unit.
@@ -3050,9 +3080,9 @@ been compared with the instrument yet.
   on the normalised mantissa, the exponent halved - within about 0.2% of the instrument's exact root. The
   engine reproduces both words for every one of the 2^23 step words. The Character mode picks the
   generator stage: Rnd1 is RndClkA's linear congruence, Rnd2 a 24-bit shift register - shift left one,
-  and XOR 0x872B41 when a bit falls off the top - with the same pre-scale and one-pole after it. Mono
-  clears the generator's word to 0, where the shift register stays: Rnd2 in Mono holds still until a
-  Rst reloads it from Seed. Poly starts each voice from a random word. **RndPattern** (the reference model, 2026-10-02): a loop stage, then - by the Wave mode - Val's
+  and XOR 0x872B41 when a bit falls off the top - with the same pre-scale and one-pole after it. A shift
+  that leaves the word zero puts 0xEF36D7 there instead (2026-10-26), so the register never sticks: from
+  Seed 0 the G2 runs a sequence where the engine had held 0 (revert record row 177). Poly starts each voice from a random word. **RndPattern** (the reference model, 2026-10-02): a loop stage, then - by the Wave mode - Val's
   generator (RndClkA's, Step's square law) or State's gate, then the level shift. Parameters 0 Pattern,
   1 Bank, 2 Step, 3 Loop, 4 Step M, 5 OutType, 6 on; inputs Clk, Rst, Seed, Seed (fine), Step.
   - The loop stage reseeds the generator's word with Pattern (v - 64) x 2^15 + Bank (v - 64) x 2^8 + Seed

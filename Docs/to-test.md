@@ -148,12 +148,6 @@ Confirmed -> delete the line. Check failed -> move it to todo.md.
 - ***OSCDUAL FACE PW / SQR M (2026-10-03)*** - reference §12.1. The face drove PW from the mod-amount
   dial and the reverse. LOOK: on an OscDual, the "PW" dial should now change the pulse width on the G2
   and in the engine, and "SqrM" only scale the PW input.
-- ***LFOSHPA DIR AND MUX8-1X (2026-10-02)*** - reference §28.4, §70.11. LISTEN: an LfoShpA with a negative
-  value in Dir should run backwards, 0 should stop it; a Mux8-1X swept by an LFO should crossfade between
-  neighbouring inputs as on the G2.
-- ***LFO SHP A WAVES (2026-10-01)*** - reference §28.6. LISTEN/LOOK: an LfoShpA's LED and its effect
-  should now follow the G2 at any Shape - Sine leans saw-wards away from 64 (15 Randee dz's FltNord LFO
-  sits at 76), Tri>Sqr squares up, CosBell/TriBell narrow at low Shape. 01, 13, 14 and 15 use it.
 - ***SEQNOTE RECORD AND LFO CLK TEMPO (2026-10-01)*** - reference §58.1, §28.2. LISTEN to 15 Randee dz
   against the G2: the FX bass's occasional re-recorded low notes should now come and go as on the G2,
   the sequence drifting from its stored steps. Its LfoShpAs (Clk range) now run at the dial's division
@@ -270,10 +264,9 @@ Shape mod input, which the engine ignores.
 - ***FLTPHASE (2026-09-27)*** - reference §67, exactly with the reference model. CHECK ON THE
   G2: 11 Cosmic Dream untouched (two FltPhases, Peak and Deep), engine against the G2, by ear. KBT is
   the one path the parts check did not cover.
-- ***DLYSTEREO, METNOISE, RNDCLKA, RNDTRIG (2026-09-26/27)*** - reference §64-§66, from the reference model; none captured yet. CHECK ON THE G2: 15 Randee dz untouched, engine against the G2, by ear -
-  the random triggers' density, the stereo delay's cross-feedback, the metallic hats' colour. A
-  Fireface capture of MetNoise alone (Freq 0/64/127, Colour 0/64/127) would check §66's pitch and
-  filter laws directly.
+- ***DLYSTEREO, METNOISE, RNDCLKA, RNDTRIG (2026-09-26/27)*** - reference §64-§66, from the reference model; all four confirmed module by module on the G2 (10-25/26). CHECK ON THE G2: 15
+  Randee dz untouched, engine against the G2, by ear - the random triggers' density, the stereo delay's
+  cross-feedback, the metallic hats' colour.
 - ***PATCH VOLUME IN THE ENGINE (2026-09-26)*** - reference §63, law measured on the G2. CHECK: the top
   bar's Volume dial in engine mode (app without a G2, and the plug-in) shows on a new patch and turns
   the level down smoothly; a patch with Volume below 127 now plays quieter to match the G2.
@@ -305,9 +298,8 @@ Shape mod input, which the engine ignores.
   connected to anything, so 01 Mini Emulator's filter sweep was wrong in every variation. The DECAY
   jack is measured against the G2 and matches (28/136/500/1536 ms at -32/-16/0/+16 units). CHECK ON
   THE G2: Mini Emulator's filter sweep by ear across the variations, which is what started this.
-  **The ATTACK and SUSTAIN jacks and all of ModAHD's are NOT measured** - they share the one code
-  path the decay proves, but neither the attack's curve under a mod nor the sustain's own law has
-  been checked. `PatchTestFiles/EnvModDecay.pch2` is the rig, ready to reload into a slot.
+  Every jack of both modules was measured on 2026-10-26 (the Sustain jack after a fix, §17.10a), so only
+  the by-ear check of the patch is left.
 - ***PITCH BEND NOW REACHES MonoKey's PITCH (2026-09-20)*** - reference §35.2. It never did, so the
   wheel was dead on any patch whose oscillators have KBT off and take their pitch from MonoKey;
   01 Mini Emulator is that patch and Chris' Lead is not, which is why only one of them bent (CT).

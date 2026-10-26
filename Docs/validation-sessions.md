@@ -62,6 +62,16 @@ Measure a control module through something that turns it into sound - an OscA's 
   and its size depends on where carrier and modulator started - random, and different on the G2 and the
   engine: OscPM at PhM 64 read 14-19 dB out at 1:1 and 0.1 dB with the modulator four semitones down.
   Measure FM at an inharmonic ratio and read the sidebands at fc +- k fm.
+- **A swept effect's rate: measure it on a sine's FM, not on the spectrum.** A spectral statistic of a noise
+  response read the Flanger's sweep 1-10% out on BOTH sides; a sine through it, demodulated, gave the rate to
+  0.06% and the depth to 0.2%. The averaged noise response still checks the comb itself.
+- **ADDMODULE right after NEWPATCH is lost** often enough that a script must DUMP and retry before cabling;
+  once it silently built an empty patch and measured that.
+- **A Constant changed by DEVSET glides** (about 125 ms, notes §61): a logic input it drives flips at the first
+  step, an audio path it scales rises slowly. Time logic against a logic reference - the same Constant through an
+  Invert - not against the Constant itself (it put a 26 ms offset into the logic Delay's edges).
+- **Logic modules read by LED** (LEDDUMP) where they have them - the counters and ADConv walked in seconds; the
+  others read as an OscB through a LevMult whose Mod is the logic output.
 - **An envelope needs the gate on the other channel.** DEVNOTE's hold is the shell's timing, 1.1-1.2 s for a
   requested 1.0, so a release compared by the clock is out by a tenth of a second. Put the Keyboard Gate on
   the second 2-Out input: the capture then carries its own gate edges, the engine is rendered with the hold
@@ -89,6 +99,13 @@ Measure a control module through something that turns it into sound - an OscA's 
   replaces the local copy and the module is gone. `DUMP` after building, before cabling.
 - **A wave's direction needs the rig's polarity**: step a Constant 0 to +1 into the 2-Out and see which
   way the AC-coupled edge goes first (non-inverting on 2026-10-25).
+- **Patching a cable clears a clocked module's state on the G2.** DlyShiftReg read zero on every output when
+  each was patched after clocking values in; patched first, then clocked, every output was right. Cable the
+  output you will read BEFORE building up any held state (S&H, DlyClock, counters, sequencers).
+- **Correlation gain is not a delay's gain.** A cross-correlation peak read at a resampled rate loses height to
+  the fractional part of the lag (0.83 at 1 s, 0.85 on one DlyStereo tap). Read echo gains from the transfer
+  function at the integer lag (S_LR / S_RR per band), which is flat to 0.3% on a plain tap.
+- **The rig adds 0.4 unit to a zero.** A value reading of +-0.40 units is the noise floor, not an offset.
 
 ## 5. What to validate next
 

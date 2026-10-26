@@ -3255,8 +3255,8 @@ const tConnectorLocation connectorLocationList[] = {
     // 17 ValSw1-2
     {moduleTypeValSw1to2,   connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocLeft },     // 17 In
     {moduleTypeValSw1to2,   connectorDirIn,  connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },     // 17 Ctrl
-    {moduleTypeValSw1to2,   connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 17 Out1
     {moduleTypeValSw1to2,   connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 17 Out2
+    {moduleTypeValSw1to2,   connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },     // 17 Out1
     // 18 X-Fade
     {moduleTypeXtoFade,     connectorDirIn,  connectorTypeControl, {{ 70,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },     // 18 In1
     {moduleTypeXtoFade,     connectorDirIn,  connectorTypeControl, {{ 80,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },     // 18 In2
@@ -3611,8 +3611,8 @@ const tConnectorLocation connectorLocationList[] = {
     {moduleTypeFlanger,     connectorDirOut, connectorTypeAudio,   {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 89 Out
     // 90 Sw1-2
     {moduleTypeSw1to2,      connectorDirIn,  connectorTypeControl, {{ -3,    3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorTopRight,    NULL,            labelLocUp   },    // 88 In
-    {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 88 Out1
     {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 88 Out2
+    {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{-10,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, NULL,            labelLocUp   },    // 88 Out1
     {moduleTypeSw1to2,      connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },    // 88 Ctrl
     // 91 FlipFlop
     {moduleTypeFlipFlop,    connectorDirIn,  connectorTypeLogic,   {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Clk",           labelLocLeft },    // 91 Clock
@@ -4075,8 +4075,8 @@ const tConnectorLocation connectorLocationList[] = {
     {moduleTypeMix1to1S,    connectorDirOut, connectorTypeControl, {{ -3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomRight, "R",             labelLocLeft },  // 185 Out R
     // 186 Sw1-2M
     {moduleTypeSw1to2M,     connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  NULL,            labelLocUp   },  // 186 In
-    {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },  // 186 Out1
     {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{ 60,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "2",             labelLocLeft },  // 186 Out2
+    {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{ 50,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },  // 186 Out1
     {moduleTypeSw1to2M,     connectorDirOut, connectorTypeControl, {{  3,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "Ctrl",          labelLocUp   },  // 186 Ctrl
     // 187 Sw2-1M
     {moduleTypeSw2to1M,     connectorDirIn,  connectorTypeControl, {{ 30,   -3}, {CONNECTOR_SIZE, CONNECTOR_SIZE}}, anchorBottomLeft,  "1",             labelLocLeft },  // 187 InOff
