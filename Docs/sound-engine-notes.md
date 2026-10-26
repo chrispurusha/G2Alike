@@ -1250,6 +1250,13 @@ Per voice rather than patch-wide: in Poly each note lands on a voice of its own,
 playing anything, so nothing slides. That is correct. A glide in Poly only happens when a
 voice is reused, which is also what the hardware does.
 
+THE TEST IS TAKEN BEFORE A STEAL DROPS THE GATE (2026-10-26, CT). Outside Legato, a mono note
+change is a steal of the one voice (reference §15.3a): its gate goes down for a pass and the new
+note starts only after that. Reading the gate when the note started therefore always found it
+shut, and Auto never slid into a new note - hold C, press G: no glide; only the return to C
+(notes §189) slid. The steal now records whether the voice was sounding (`stealOverlap`), and
+voice_start_note() takes the overlap as an argument from both of its callers.
+
 ## 71. in `voice_note_on()`
 
 MONO RESTARTS THE ENVELOPES, LEGATO DOES NOT, and that is the whole difference between them.

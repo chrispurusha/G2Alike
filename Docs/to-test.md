@@ -1251,3 +1251,5 @@ from a capture, so they are the ones most likely to be right.
 - RedMonday_DZ (format 19) opened from the file with the G2 connected loads without the failure (2026-10-12: the conversion no longer pads SeqNote to 39 parameters, protocol notes §28)
 - Keys A-D select slots (Controls > Keys A-D Select Slots) and R starts/stops the clock: the topbar follows, the G2 follows, the choice survives a restart; switching back to Keys Play Notes plays again; the plug-in editor A-D/R in Live
 - Plug-in in Live, Controls > Keys Play Notes (the default): with the editor focused, A-K play Live's computer keyboard and V/C set its velocity; Keys A-D Select Slots: A-D pick slots again
+- Plug-in, in Live: the Patch Settings dials (Vibrato Amount/Rate, Glide Time), the Perf Settings tempo and the topbar tempo dial turn, in every dial mode, and a release ends the drag; the same dials still behave in the application (2026-10-26, canvasDrag.c notes §28)
+- Mono + Auto glide: hold C, press G - glides up; release G - C retriggers and glides back (sound-engine-notes §70, 2026-10-26); and the Patch Settings dials turn in the application again (mouseHandle.c notes §26)

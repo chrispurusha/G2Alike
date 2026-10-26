@@ -274,30 +274,11 @@ untouched module, telling the G2 to put each one back where it already is.
 
 ## 22. `tTempoDragTarget`
 
-── The named-rect dial drags, as data ──────────────────────────────────────────────────────────
-
-FIVE ARMS OF cursor_pos()'s IF/ELSE CHAIN WERE TWO GESTURES WRITTEN OUT REPEATEDLY: the tempo dial
-and the performance-settings tempo dial, identical but for which rectangle they sit in; and the
-vibrato amount, vibrato rate and glide time dials, identical but for a module, a parameter index
-and a range. About 100 lines in which the only things that varied were the four values now in the
-tables below. That is the whole of what vst3/plugin-gui-notes.md's second observation asks for —
-the chain reads as a list wanting to be a table — applied to the part of it that is genuinely
-repetition rather than genuinely different work.
-
-Each entry points AT its rectangle rather than copying it: these rectangles are filled in at
-render time, so a copy taken here would be a stale one from start-up. The addresses are constant
-because the rectangles are globals, which is what lets the tables be static.
-
-The remaining arms of the chain are NOT candidates for this. A scrollbar drag, a module drag, a
-cable drag and a rubber band each do genuinely different work; collapsing those would need a
-gesture object, which is observation 1 in that file and a much larger change.
+Moved to canvasDrag.c.md §28 (2026-10-26).
 
 ## 23. in `handle_patch_param_drag_motion()`
 
-The KEY names gPatchParamsEdit.slot while the message is addressed to the slot the caller
-passes, which is gSlot. Both of the arms this replaces did exactly that, so it is preserved
-rather than tidied — the two are kept in step whenever the slot changes (see the patch
-screen's own slot handling), and making them agree here would hide it rather than settle it.
+Moved to canvasDrag.c.md §29 (2026-10-26).
 
 ## 24. `cursor_pos()`
 
@@ -325,6 +306,11 @@ THIS USED TO NAME THE MUTATOR AND ONLY THE MUTATOR, which meant it was not a rul
 patch applied to the one panel somebody noticed it on. The other six had the bug the comment
 described: hovering Synth Settings ran the canvas hover under it, lighting connectors it was
 covering and hiding the cables that go with them. See floating_panels_under() in graphics.c.
+
+NOT WHILE A DIAL IS BEING DRAGGED (2026-10-26, CT). The early return also swallowed the motion of
+every dial inside a panel - Patch Settings' vibrato and glide, the Perf Settings tempo - since the
+drag handlers sit below it, so a press armed the drag and nothing turned. Hover is what it skips;
+a drag in progress goes on through.
 
 ## 27. in `cursor_pos()`
 

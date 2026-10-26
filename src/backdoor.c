@@ -1030,20 +1030,21 @@ static void backdoor_dispatch(const char * cmd, const char * arg) {
     } else if (strcmp(cmd, "SET") == 0) {
         // SET <VA|FX> <index> <param> <value> — set a param's value in the
         // current slot, LOCAL-ONLY (no device write); for inspecting how a
-        // param renders across its range.
+        // param renders across its range. MORPH reaches the patch settings (Glide is index 3).
         char      loc[8]   = {0};
         uint32_t  index    = 0;
         uint32_t  param    = 0;
         uint32_t  value    = 0;
 
         if (sscanf(arg, "%7s %u %u %u", loc, &index, &param, &value) != 4) {
-            backdoor_write_result("ERROR: expected 'SET <VA|FX> <index> <param> <value>'\n");
+            backdoor_write_result("ERROR: expected 'SET <VA|FX|MORPH> <index> <param> <value>'\n");
             return;
         }
-        uint32_t  location = ((loc[0] == 'F') || (loc[0] == 'f')) ? (uint32_t)locationFx : (uint32_t)locationVa;
+        uint32_t  location = ((loc[0] == 'F') || (loc[0] == 'f')) ? (uint32_t)locationFx
+                             : (((loc[0] == 'M') || (loc[0] == 'm')) ? (uint32_t)locationMorph : (uint32_t)locationVa);
         tModule * module   = get_module_slot(gSlot, location, index);
 
-        if ((module == NULL) || (module->type == 0)) {
+        if ((module == NULL) || ((module->type == 0) && (location != (uint32_t)locationMorph))) {
             backdoor_write_result("ERROR: no module at that loc/index\n");
             return;
         }

@@ -1393,6 +1393,151 @@ bool canvas_nudge_param_under_cursor(int delta) {
     }
 }
 
+static uint32_t calc_tempo_drag_value(double xCoord, double yCoord, double x, double y, tRectangle rotaryRect) {
+    int      newVal = 0;
+    double   angle  = 0.0;
+    uint32_t value  = 0;
+
+    if (synthlib_dial_mode() == eDialModeVertical) {
+        newVal     = (int)gGlobalSettings.masterClock + (int)((gDragPrevY - yCoord) * 241.0 / 200.0);
+        gDragPrevY = yCoord;
+
+        if (newVal < 30) {
+            newVal = 30;
+        }
+
+        if (newVal > 240) {
+            newVal = 240;
+        }
+        value      = (uint32_t)newVal;
+    } else if (synthlib_dial_mode() == eDialModeHorizontal) {
+        newVal     = (int)gGlobalSettings.masterClock + (int)((xCoord - gDragPrevX) * 241.0 / 200.0);
+        gDragPrevX = xCoord;
+
+        if (newVal < 30) {
+            newVal = 30;
+        }
+
+        if (newVal > 240) {
+            newVal = 240;
+        }
+        value      = (uint32_t)newVal;
+    } else {
+        angle = calculate_mouse_angle((tCoord){x, y}, rotaryRect);
+        value = angle_to_value(angle, 211) + 30;
+    }
+    return value;
+}
+
+// notes §28
+
+typedef struct {
+    bool *       active;       // which gXxxDragging flag arms this drag
+    tRectangle * rotaryRect;   // dial position, for rotary mode's absolute angle
+} tTempoDragTarget;
+
+static const tTempoDragTarget      sTempoDragTargets[]      = {
+    {&gTempoDragging,     &gTopbarControls[topbarTempoDialId].rectangle},
+    {&gPerfTempoDragging, &gPerfSettingsPanelRects.masterClock         },
+};
+
+typedef struct {
+    bool *       active;
+    uint32_t     moduleIndex;  // the patchModule* inside the Morph location
+    uint32_t     param;
+    uint32_t     range;        // number of values the dial has; the clamp is 0 .. range - 1
+    tRectangle * rotaryRect;
+} tPatchParamDragTarget;
+
+static const tPatchParamDragTarget sPatchParamDragTargets[] = {
+    {&gVibAmountDragging, patchModuleVibrato, VIBRATO_DEPTH, 101, &gPatchParamRects[pPVibratoAmount]},
+    {&gVibRateDragging,   patchModuleVibrato, VIBRATO_RATE,  128, &gPatchParamRects[pPVibratoRate]  },
+    {&gGlideTimeDragging, patchModuleGlide,   GLIDE_SPEED,   128, &gPatchParamRects[pPGlideTime]    },
+};
+
+// Returns true if one of these drags was active and consumed the motion, so the caller's chain can
+// carry on to the next gesture exactly as the separate arms did.
+static bool handle_tempo_drag_motion(double xCoord, double yCoord, double x, double y) {
+    for (size_t i = 0; i < (sizeof(sTempoDragTargets) / sizeof(sTempoDragTargets[0])); i++) {
+        if (*sTempoDragTargets[i].active == false) {
+            continue;
+        }
+        uint32_t value = calc_tempo_drag_value(xCoord, yCoord, x, y, *sTempoDragTargets[i].rotaryRect);
+
+        if (gGlobalSettings.masterClock != value) {
+            gGlobalSettings.masterClock = (uint8_t)value;
+            send_master_clock_bpm(value);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+static bool handle_patch_param_drag_motion(uint32_t slot, double xCoord, double yCoord, double x, double y) {
+    for (size_t i = 0; i < (sizeof(sPatchParamDragTargets) / sizeof(sPatchParamDragTargets[0])); i++) {
+        const tPatchParamDragTarget * target = &sPatchParamDragTargets[i];
+
+        if (*target->active == false) {
+            continue;
+        }
+        // notes §29
+        tModuleKey                    key    = {(uint32_t)gPatchParamsEdit.slot, (uint32_t)locationMorph, target->moduleIndex};
+        tModule *                     module = get_module(key);
+
+        if (module == NULL) {
+            return true;   // armed on a module that is not there: consumed
+        }
+        uint32_t                      var    = patch_settings_variation(key.slot);
+        uint8_t *                     param  = &module->param[var][target->param].value;
+        int                           newVal = (int)*param;
+
+        if (synthlib_dial_mode() == eDialModeHorizontal) {
+            newVal    += (int)((xCoord - gDragPrevX) * (double)target->range / 200.0);
+            gDragPrevX = xCoord;
+        } else if (synthlib_dial_mode() == eDialModeRotary) {
+            // Absolute angle, so no previous position to update — the incremental modes own gDragPrev*.
+            newVal = (int)angle_to_value(calculate_mouse_angle((tCoord){x, y}, *target->rotaryRect), target->range);
+        } else {
+            newVal    += (int)((gDragPrevY - yCoord) * (double)target->range / 200.0);
+            gDragPrevY = yCoord;
+        }
+
+        if (newVal < 0) {
+            newVal = 0;
+        }
+
+        if (newVal > (int)(target->range - 1)) {
+            newVal = (int)(target->range - 1);
+        }
+
+        if (*param != (uint8_t)newVal) {
+            *param = (uint8_t)newVal;
+            send_param_value(slot, key, target->param, var, (uint32_t)newVal);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+static bool settings_dial_gesture_motion(const tCanvasGestureEvent * event) {
+    return handle_tempo_drag_motion(event->rawX, event->rawY, event->coord.x, event->coord.y)
+           || handle_patch_param_drag_motion(event->slot, event->rawX, event->rawY, event->coord.x, event->coord.y);
+}
+
+static bool settings_dial_gesture_release(const tCanvasGestureEvent * event) {
+    bool was = gTempoDragging || gPerfTempoDragging || gVibRateDragging || gVibAmountDragging || gGlideTimeDragging;
+
+    (void)event;
+    gTempoDragging     = false;
+    gPerfTempoDragging = false;
+    gVibRateDragging   = false;
+    gVibAmountDragging = false;
+    gGlideTimeDragging = false;
+    return was;
+}
+
 // notes §26
 
 typedef struct {
@@ -1452,11 +1597,12 @@ static bool rubber_band_gesture_release(const tCanvasGestureEvent * event) {
 // two rows are ever active at once and the order is a tie-break that should never be needed — but it is
 // written down once here instead of being implicit in two different shells, which is the point.
 static const tCanvasGestureRow sGestures[] = {
-    {"param",      canvasGestureParam,      param_gesture_motion,       param_gesture_release      },
-    {"module",     canvasGestureModule,     module_gesture_motion,      module_gesture_release     },
-    {"cable",      canvasGestureCable,      cable_gesture_motion,       cable_gesture_release      },
-    {"rubberBand", canvasGestureRubberBand, rubber_band_gesture_motion, rubber_band_gesture_release},
-    {"panel",      canvasGesturePanel,      panel_gesture_motion,       NULL                       },   // released by its own click region
+    {"settingsDial", canvasGestureSettingsDial, settings_dial_gesture_motion, settings_dial_gesture_release},
+    {"param",        canvasGestureParam,        param_gesture_motion,         param_gesture_release        },
+    {"module",       canvasGestureModule,       module_gesture_motion,        module_gesture_release       },
+    {"cable",        canvasGestureCable,        cable_gesture_motion,         cable_gesture_release        },
+    {"rubberBand",   canvasGestureRubberBand,   rubber_band_gesture_motion,   rubber_band_gesture_release  },
+    {"panel",        canvasGesturePanel,        panel_gesture_motion,         NULL                         }, // released by its own click region
 };
 
 tCanvasGesture canvas_gesture_motion(const tCanvasGestureEvent * event) {

@@ -1721,6 +1721,7 @@ typedef struct {
     uint32_t stealWait;
     int32_t  stealNote;
     uint8_t  stealVelocity;
+    bool     stealOverlap;    // notes §70 - the voice was sounding a held key when the steal took it
 } tVoice;
 
 static tVoice           gVoiceBank[SOUND_ENGINE_MAX_ENGINES][MAX_VOICES];
@@ -3514,7 +3515,7 @@ static void merge_last_nodes(const tSoundEngineParams * params);
 // The second half of voice_note_on(): everything that starts a note once the voice is settled on.
 // Split out because a STOLEN voice does not start its note here - it fades first (§15.3a), and
 // start_pending_steals() calls this from the render loop when that fade has finished.
-static void voice_start_note(uint32_t chosen, int32_t note, uint8_t velocity,
+static void voice_start_note(uint32_t chosen, int32_t note, uint8_t velocity, bool overlap,
                              const tSoundEngineParams * params) {
     SE_LOCAL;
 
@@ -3523,7 +3524,7 @@ static void voice_start_note(uint32_t chosen, int32_t note, uint8_t velocity,
     voice->stealWait          = 0;
 
     // notes §70
-    voice->glideActive        = voice->gate;
+    voice->glideActive        = overlap;
 
     // notes §71
     if ((voice->gate == false) || (atomic_load(&gEngineLegato) == false)) {
@@ -3596,13 +3597,14 @@ static void voice_note_on(int32_t note, uint8_t velocity, const tSoundEnginePara
     // LEGATO DOES NOT DO IT. The instrument skips the gate drop outright in Legato and does not
     // re-raise the gate while a key is still held, so the note simply moves to the voice.
     if ((stolen == true) && (atomic_load(&gEngineLegato) == false)) {
-        gVoice[chosen].gate          = false;
         gVoice[chosen].stealWait     = (uint32_t)(VOICE_STEAL_GATE_TICKS * gSampleRate / ENV_TICK_HZ) + 1u;
         gVoice[chosen].stealNote     = note;
         gVoice[chosen].stealVelocity = velocity;
+        gVoice[chosen].stealOverlap  = gVoice[chosen].gate;
+        gVoice[chosen].gate          = false;
         return;
     }
-    voice_start_note(chosen, note, velocity, params);
+    voice_start_note(chosen, note, velocity, gVoice[chosen].gate, params);
 }
 
 // §15.3a - called once per sample from the render loop, beside the note queue. The instrument's
@@ -3618,7 +3620,7 @@ static void start_pending_steals(const tSoundEngineParams * params) {
         gVoice[v].stealWait--;
 
         if (gVoice[v].stealWait == 0u) {
-            voice_start_note(v, gVoice[v].stealNote, gVoice[v].stealVelocity, params);
+            voice_start_note(v, gVoice[v].stealNote, gVoice[v].stealVelocity, gVoice[v].stealOverlap, params);
         }
     }
 }

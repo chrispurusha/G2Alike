@@ -49,13 +49,14 @@ void canvas_drag_set_origin(double rawX, double rawY);
 
 // notes §2
 typedef enum {
-    canvasGestureNone       = 0,
-    canvasGestureParam      = 1u << 0,   // a dial or slider, including an Alt morph-offset drag
-    canvasGestureModule     = 1u << 1,   // moving one module or a whole selection
-    canvasGestureCable      = 1u << 2,   // dragging a cable end towards a connector
-    canvasGestureRubberBand = 1u << 3,   // sweeping out a selection over empty canvas
-    canvasGesturePanel      = 1u << 4,   // a patch-settings knob on the front panel (frontPanel.c)
-    canvasGestureAll        = 0x1Fu
+    canvasGestureNone         = 0,
+    canvasGestureParam        = 1u << 0, // a dial or slider, including an Alt morph-offset drag
+    canvasGestureModule       = 1u << 1, // moving one module or a whole selection
+    canvasGestureCable        = 1u << 2, // dragging a cable end towards a connector
+    canvasGestureRubberBand   = 1u << 3, // sweeping out a selection over empty canvas
+    canvasGesturePanel        = 1u << 4, // a patch-settings knob on the front panel (frontPanel.c)
+    canvasGestureSettingsDial = 1u << 5, // tempo, vibrato and glide dials on the topbar and settings panels
+    canvasGestureAll = 0x3Fu
 } tCanvasGesture;
 
 // Everything a phase might need, so the table's rows can share one signature. A shell fills in what

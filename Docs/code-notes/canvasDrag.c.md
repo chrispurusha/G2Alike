@@ -328,3 +328,36 @@ updateCursorMode() in cocoa_window.m). An extra explicit warp on top
 of that was redundant, and two independent warps in a row can land a
 pixel or two off from each other — enough, in SynthEdit's tightly
 packed filter dials, to spill onto a neighbouring control.
+
+## 28. `tTempoDragTarget`
+
+── The named-rect dial drags, as data ──────────────────────────────────────────────────────────
+
+FIVE ARMS OF cursor_pos()'s IF/ELSE CHAIN WERE TWO GESTURES WRITTEN OUT REPEATEDLY: the tempo dial
+and the performance-settings tempo dial, identical but for which rectangle they sit in; and the
+vibrato amount, vibrato rate and glide time dials, identical but for a module, a parameter index
+and a range. About 100 lines in which the only things that varied were the four values now in the
+tables below. That is the whole of what vst3/plugin-gui-notes.md's second observation asks for —
+the chain reads as a list wanting to be a table — applied to the part of it that is genuinely
+repetition rather than genuinely different work.
+
+Each entry points AT its rectangle rather than copying it: these rectangles are filled in at
+render time, so a copy taken here would be a stale one from start-up. The addresses are constant
+because the rectangles are globals, which is what lets the tables be static.
+
+The remaining arms of the chain are NOT candidates for this. A scrollbar drag, a module drag, a
+cable drag and a rubber band each do genuinely different work; collapsing those would need a
+gesture object, which is observation 1 in that file and a much larger change.
+
+**The plug-in missed them for this reason (2026-10-26, CT).** Until 2026-10-26 these handlers were in mouseHandle.c,
+which the plug-in does not compile, and the plug-in's drag path calls only canvas_gesture_motion(). A press armed the
+drag (mousePanels.c and mouseTopbar.c are in both builds), every motion after it was dropped, and the Patch Settings
+dials, the Perf Settings tempo and the topbar tempo would not turn. Nothing cleared the flag on release either. Now
+they are one more row of the gesture table, so both builds' motion and release paths reach them.
+
+## 29. in `handle_patch_param_drag_motion()`
+
+The KEY names gPatchParamsEdit.slot while the message is addressed to the slot the caller
+passes, which is gSlot. Both of the arms this replaces did exactly that, so it is preserved
+rather than tidied — the two are kept in step whenever the slot changes (see the patch
+screen's own slot handling), and making them agree here would hide it rather than settle it.
