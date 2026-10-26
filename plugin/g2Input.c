@@ -39,6 +39,7 @@
 #include "splitView.h"
 #include "fileBrowser.h"
 #include "frontPanel.h"
+#include "misc.h"              // wheel_scroll_speed(), wheel_zoom_speed() - Controls > Scroll / Zoom Speed
 #include "synthlibPopups.h"    // synthlib_popups_dispatch_scroll() — the wheel, as the app routes it
 #include "mouseTopbar.h"
 #include "topbarResourcesAccess.h"
@@ -334,12 +335,16 @@ void g2_input_scroll(double x, double y, double deltaX, double deltaY) {
             uint32_t prevPane = module_pane();
 
             set_module_pane((uint32_t)pane);
-            canvas_zoom_step_at((deltaY > 0.0) ? ZOOM_DELTA : -ZOOM_DELTA, gMouse);
+            double step = ZOOM_DELTA * (double)wheel_zoom_speed() / (double)WHEEL_SPEED_LEVELS;
+
+            canvas_zoom_step_at((deltaY > 0.0) ? step : -step, gMouse);
             set_module_pane(prevPane);
         }
         return;
     }
-    pane_scroll_by((uint32_t)pane, -deltaX, -deltaY);
+    double speed = (double)wheel_scroll_speed() / (double)WHEEL_SPEED_LEVELS;
+
+    pane_scroll_by((uint32_t)pane, -deltaX * speed, -deltaY * speed);
 }
 
 // notes §19
