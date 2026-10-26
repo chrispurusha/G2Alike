@@ -3452,8 +3452,8 @@ other work (seeds, start phases, ready flags) is not zero-dependent before skipp
 OPTIONAL and OFF by default. Below 88.2 kHz the engine runs its graph at twice the device rate, so a 48 kHz
 device costs a 96 kHz graph (§29a). Economy runs the graph at the device rate instead: Experimental > Engine
 Rate in the application (Full / Half), and Settings > Half Rate (economy) in the plug-in, which saves it in
-the project (`economy=`) with its prefs file as the default for a new instance (`engineEconomy`, the
-application's preference too). A stopped engine takes it at its next `sound_engine_set_sample_rate()`; a
+the project (`economy=`) for that instance alone. A new instance always starts at 96 kHz (2026-10-26; until
+then it took the last choice from the prefs file, `engineEconomy`, which is now the application's alone). A stopped engine takes it at its next `sound_engine_set_sample_rate()`; a
 RUNNING one at the start of its next block, on the audio thread (`engine_render_slot()`), which then flags
 the document (`sound_engine_take_rate_changed()`) and the plug-in's rebuild worker rebuilds the snapshots
 built at the old rate. The switch clears that engine's node state and its voices - a voice left sounding

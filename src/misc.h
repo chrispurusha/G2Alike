@@ -47,6 +47,14 @@ void load_saved_settings(void);
 
 void save_zoom_factor(double zoom);
 
+// Controls > Scroll Speed and Zoom Speed: how far one wheel notch moves, 1 to 10, 10 being the full
+// step (WHEEL_SCROLL_STEP, ZOOM_DELTA) and each level a tenth of it. Kept in G2Alike's settings file.
+#define WHEEL_SPEED_LEVELS    (10u)
+uint32_t wheel_scroll_speed(void);
+uint32_t wheel_zoom_speed(void);
+void save_wheel_scroll_speed(uint32_t level);
+void save_wheel_zoom_speed(uint32_t level);
+
 // File > Open Recent. Implemented in persistence.c beside the other prefs-backed state.
 // recent_files_load() is called by load_saved_settings(); recent_files_add() by on_file_opened().
 #define RECENT_FILES_MAX    (10)

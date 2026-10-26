@@ -427,8 +427,7 @@ static void action_toggle_plugin_economy(int index) {
     bool on = (sound_engine_economy() == false);
 
     (void)index;
-    sound_engine_set_economy(on);
-    prefs_set_int(PREF_KEY_ECONOMY, on ? 1 : 0);    // the default for new instances; a project keeps its own
+    sound_engine_set_economy(on);    // this instance only: its project saves it, and a new one starts at 96 kHz
 }
 
 // soundEngine notes §202 - the engine's extra threads, for this instance; applied at its next block
@@ -602,14 +601,42 @@ static void action_keys_select_slots(int index) {
     note_entry_set_keys_play_notes(false);
 }
 
+static void action_scroll_speed(int index) {
+    save_wheel_scroll_speed(gContextMenu.items[index].param);
+}
+
+static void action_zoom_speed(int index) {
+    save_wheel_zoom_speed(gContextMenu.items[index].param);
+}
+
+// Controls > Scroll Speed / Zoom Speed: levels 1-10, the current one starred
+static void fill_wheel_speed_menu(tMenuItem items[WHEEL_SPEED_LEVELS + 1u], void (*action)(int index), uint32_t current) {
+    static const char * plain[WHEEL_SPEED_LEVELS]   = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
+    static const char * starred[WHEEL_SPEED_LEVELS] = {"* 1", "* 2", "* 3", "* 4", "* 5", "* 6", "* 7", "* 8", "* 9", "* 10"};
+
+    for (uint32_t i = 0; i < WHEEL_SPEED_LEVELS; i++) {
+        items[i] = (tMenuItem){
+            ((i + 1u) == current) ? starred[i] : plain[i], (tRgb)RGB_GREY_3, action, i + 1u, NULL, 0, 0.0
+        };
+    }
+
+    items[WHEEL_SPEED_LEVELS] = (tMenuItem){
+        NULL, (tRgb)RGB_BLACK, NULL, 0, NULL, 0, 0.0
+    };
+}
+
 void open_controls_menu(tCoord anchor) {
+    static tMenuItem scrollSpeed[WHEEL_SPEED_LEVELS + 1u];
+    static tMenuItem zoomSpeed[WHEEL_SPEED_LEVELS + 1u];
     static tMenuItem items[]      = {
-        {"* Rotary",              (tRgb)RGB_GREY_3, action_dial_mode_rotary,     0, NULL, 0, 0.0},
-        {"* Vertical",            (tRgb)RGB_GREY_3, action_dial_mode_vertical,   0, NULL, 0, 0.0},
-        {"* Horizontal",          (tRgb)RGB_GREY_3, action_dial_mode_horizontal, 0, NULL, 0, 0.0},
-        {"Keys Play Notes",       (tRgb)RGB_GREY_3, action_keys_play_notes,      0, NULL, 0, 0.0},
-        {"Keys A-D Select Slots", (tRgb)RGB_GREY_3, action_keys_select_slots,    0, NULL, 0, 0.0},
-        {NULL,                    (tRgb)RGB_BLACK,  NULL,                        0, NULL, 0, 0.0},
+        {"* Rotary",              (tRgb)RGB_GREY_3, action_dial_mode_rotary,     0, NULL,        0, 0.0},
+        {"* Vertical",            (tRgb)RGB_GREY_3, action_dial_mode_vertical,   0, NULL,        0, 0.0},
+        {"* Horizontal",          (tRgb)RGB_GREY_3, action_dial_mode_horizontal, 0, NULL,        0, 0.0},
+        {"Keys Play Notes",       (tRgb)RGB_GREY_3, action_keys_play_notes,      0, NULL,        0, 0.0},
+        {"Keys A-D Select Slots", (tRgb)RGB_GREY_3, action_keys_select_slots,    0, NULL,        0, 0.0},
+        {"Scroll Speed",          (tRgb)RGB_GREY_3, NULL,                        0, scrollSpeed, 0, 0.0},
+        {"Zoom Speed",            (tRgb)RGB_GREY_3, NULL,                        0, zoomSpeed,   0, 0.0},
+        {NULL,                    (tRgb)RGB_BLACK,  NULL,                        0, NULL,        0, 0.0},
     };
 
     // notes §4
@@ -625,6 +652,8 @@ void open_controls_menu(tCoord anchor) {
 
     items[3].label = notes ? "* Keys Play Notes" : "Keys Play Notes";
     items[4].label = notes ? "Keys A-D Select Slots" : "* Keys A-D Select Slots";
+    fill_wheel_speed_menu(scrollSpeed, action_scroll_speed, wheel_scroll_speed());
+    fill_wheel_speed_menu(zoomSpeed, action_zoom_speed, wheel_zoom_speed());
 
     open_context_menu(anchor, items, 0, 0.0);
 }

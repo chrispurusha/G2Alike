@@ -709,11 +709,13 @@ void scroll_event(double x, double y) {
         uint32_t prevPane = module_pane();
 
         set_module_pane((uint32_t)hovered);
-        canvas_zoom_step_at(y * ZOOM_DELTA, coord);
+        canvas_zoom_step_at(y * ZOOM_DELTA * (double)wheel_zoom_speed() / (double)WHEEL_SPEED_LEVELS, coord);
         set_module_pane(prevPane);
     } else {
         // Content pixels per notch, relative to THAT PANE's own position — see pane_scroll_by().
-        pane_scroll_by((uint32_t)hovered, -x * WHEEL_SCROLL_STEP, -y * WHEEL_SCROLL_STEP);
+        double step = WHEEL_SCROLL_STEP * (double)wheel_scroll_speed() / (double)WHEEL_SPEED_LEVELS;
+
+        pane_scroll_by((uint32_t)hovered, -x * step, -y * step);
     }
 //    LOG_DEBUG("Area: %f %f - size: %i %i - barY %f %f %f \n", moduleArea.size.w,moduleArea.size.h, width,height, gScrollState.yBar, gScrollState.yRectangle.size.h,gScrollState.yRectangle.coord.y);
 

@@ -137,8 +137,48 @@ void save_zoom_factor(double zoom) {
 }
 
 // The last folder browsed lives in the APPLICATION's settings file, for the plug-in too, so either
-// opens where the other left off.
-#define G2ALIKE_PREFS_APP_NAME    "G2Alike"
+// opens where the other left off. The wheel speeds do the same.
+#define G2ALIKE_PREFS_APP_NAME     "G2Alike"
+#define PREF_WHEEL_SCROLL_SPEED    "wheelScrollSpeed"
+#define PREF_WHEEL_ZOOM_SPEED      "wheelZoomSpeed"
+
+// Read once and cached: the wheel asks on every notch
+static uint32_t wheel_speed(const char * key, uint32_t * cache) {
+    if (*cache == 0u) {
+        const char * saved = prefs_get_string_from(G2ALIKE_PREFS_APP_NAME, key, NULL);
+        long         level = (saved != NULL) ? strtol(saved, NULL, 10) : (long)WHEEL_SPEED_LEVELS;
+
+        *cache = ((level < 1) || (level > (long)WHEEL_SPEED_LEVELS)) ? WHEEL_SPEED_LEVELS : (uint32_t)level;
+    }
+    return *cache;
+}
+
+static void save_wheel_speed(const char * key, uint32_t * cache, uint32_t level) {
+    char text[8] = {0};
+
+    *cache = ((level < 1u) || (level > WHEEL_SPEED_LEVELS)) ? WHEEL_SPEED_LEVELS : level;
+    snprintf(text, sizeof(text), "%u", *cache);
+    prefs_set_string_in(G2ALIKE_PREFS_APP_NAME, key, text);
+}
+
+static uint32_t sWheelScrollSpeed;
+static uint32_t sWheelZoomSpeed;
+
+uint32_t wheel_scroll_speed(void) {
+    return wheel_speed(PREF_WHEEL_SCROLL_SPEED, &sWheelScrollSpeed);
+}
+
+uint32_t wheel_zoom_speed(void) {
+    return wheel_speed(PREF_WHEEL_ZOOM_SPEED, &sWheelZoomSpeed);
+}
+
+void save_wheel_scroll_speed(uint32_t level) {
+    save_wheel_speed(PREF_WHEEL_SCROLL_SPEED, &sWheelScrollSpeed, level);
+}
+
+void save_wheel_zoom_speed(uint32_t level) {
+    save_wheel_speed(PREF_WHEEL_ZOOM_SPEED, &sWheelZoomSpeed, level);
+}
 #define PREF_BROWSER_DIRECTORY    "fileBrowserLastDirectory"
 
 // The sample browser keeps its own folder, so choosing a sample does not move where patches open. Until

@@ -6,7 +6,6 @@ Built-but-unchecked work goes in to-test.md.
 
 General (priority order)
 - Topbar prev/next patch buttons beside the displayed patch name, stepping through the patch browser's current order and selection (category, alpha/numeric, bank and position)
-- Plug-in engine rate per instance: 96 kHz (the default) or 48 kHz eco, chosen per instance and saved in the host's project state so a reopened project keeps it
 - CPU: sound_engine_update_from_patch() runs on every drawn frame (app and plug-in) and rebuilds every slot's graph three times (the snapshot and one probe per morph axis) only to memcmp it against the last - skip the rebuild when nothing the engine reads has changed (a per-slot edit counter: set_param_value() (dataBase notes §11), module/cable writes, modes, morph ranges, variation, perf and synth settings); about 1% of a core in G2Alike in Live (2026-10-12), more with four heavy slots
 - Need a Windows and possibly also Linux test VST3 host application (may as well have MacOS too), for use across all projects which don't have an application. Maybe an optional SynthLib build, since that's shared?
 - Remove any irrelevant items from topbar when running as a plug-in. Tempo can stay and display tempo from host.
@@ -67,7 +66,6 @@ General (priority order)
 - Possible (not definite) inconsistency in the drum synth noise filter sweep on our engine. Although - I think the hardware is also inconsistent for noise filter sweep. May be deliberate. Check against references.
 
 USER REQUESTS (reported 2026-08-22; none blocking)
-- Adjustable mouse wheel scrolling and zoom sensitivity in synth settings - both are too fast
 - Add a top-level Edit menu (Undo, Redo, Cut, Copy, Paste, Delete, Paste Params, Select All)
 - Yellow module-selection border is not obvious enough; try twice the line width and/or more prominent yellow
 - Open Recent for patches loaded from a bank
