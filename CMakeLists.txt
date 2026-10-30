@@ -24,35 +24,37 @@ endif()
 # Xcode treats warnings as errors; a new port usually wants to see them first (cmake -DG2_WERROR=OFF)
 option(G2_WERROR "warnings are errors, as in the Xcode project" ON)
 
+set(SYNTHLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../SynthLib" CACHE PATH "shared SynthLib checkout")
+
 # The synchronized folders SynthLib/src, src, Resources, every source file in them.
 set(G2_SOURCES
-    SynthLib/src/alertDialog.c
-    SynthLib/src/bankBrowser.cpp
-    SynthLib/src/breakpointGraph.c
-    SynthLib/src/clickRegion.c
-    SynthLib/src/contextMenu.c
-    SynthLib/src/fileBrowser.cpp
-    SynthLib/src/floatingPanel.c
-    SynthLib/src/geometry.c
-    SynthLib/src/inputState.c
-    SynthLib/src/inputStateGlfw.c
-    SynthLib/src/menuBar.c
-    SynthLib/src/midiPortDialog.c
-    SynthLib/src/prefs.cpp
-    SynthLib/src/renderBackend.c
-    SynthLib/src/renderBackendGL.c
-    SynthLib/src/synthlibGlobals.c
-    SynthLib/src/synthlibHost.c
-    SynthLib/src/synthlibMidi.c
-    SynthLib/src/synthlibMidiPorts.c
-    SynthLib/src/synthlibPersistence.c
-    SynthLib/src/synthlibPopups.c
-    SynthLib/src/synthlibQueue.c
-    SynthLib/src/synthlibScale.c
-    SynthLib/src/synthlibVersion.c
-    SynthLib/src/synthlibWindow.c
-    SynthLib/src/utils.c
-    SynthLib/src/utilsGraphics.c
+    ${SYNTHLIB_DIR}/src/alertDialog.c
+    ${SYNTHLIB_DIR}/src/bankBrowser.cpp
+    ${SYNTHLIB_DIR}/src/breakpointGraph.c
+    ${SYNTHLIB_DIR}/src/clickRegion.c
+    ${SYNTHLIB_DIR}/src/contextMenu.c
+    ${SYNTHLIB_DIR}/src/fileBrowser.cpp
+    ${SYNTHLIB_DIR}/src/floatingPanel.c
+    ${SYNTHLIB_DIR}/src/geometry.c
+    ${SYNTHLIB_DIR}/src/inputState.c
+    ${SYNTHLIB_DIR}/src/inputStateGlfw.c
+    ${SYNTHLIB_DIR}/src/menuBar.c
+    ${SYNTHLIB_DIR}/src/midiPortDialog.c
+    ${SYNTHLIB_DIR}/src/prefs.cpp
+    ${SYNTHLIB_DIR}/src/renderBackend.c
+    ${SYNTHLIB_DIR}/src/renderBackendGL.c
+    ${SYNTHLIB_DIR}/src/synthlibGlobals.c
+    ${SYNTHLIB_DIR}/src/synthlibHost.c
+    ${SYNTHLIB_DIR}/src/synthlibMidi.c
+    ${SYNTHLIB_DIR}/src/synthlibMidiPorts.c
+    ${SYNTHLIB_DIR}/src/synthlibPersistence.c
+    ${SYNTHLIB_DIR}/src/synthlibPopups.c
+    ${SYNTHLIB_DIR}/src/synthlibQueue.c
+    ${SYNTHLIB_DIR}/src/synthlibScale.c
+    ${SYNTHLIB_DIR}/src/synthlibVersion.c
+    ${SYNTHLIB_DIR}/src/synthlibWindow.c
+    ${SYNTHLIB_DIR}/src/utils.c
+    ${SYNTHLIB_DIR}/src/utilsGraphics.c
     src/appMenuBar.c
     src/audioOutput.c
     src/backdoor.c
@@ -113,7 +115,7 @@ set(G2_SOURCES
 
 # Objective-C: Apple only
 set(G2_APPLE_SOURCES
-    SynthLib/src/renderBackendMetal.m
+    ${SYNTHLIB_DIR}/src/renderBackendMetal.m
     src/misc.mm
 )
 
@@ -136,21 +138,21 @@ else()
 endif()
 
 target_include_directories(G2Alike PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/src"
+    "${SYNTHLIB_DIR}/src"
     ${G2_PLATFORM_INCLUDES}
 )
 
 if(APPLE)
     # the bundled third-party headers and static libraries, as the Xcode project uses them
     target_include_directories(G2Alike SYSTEM PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/ThirdParty/libusb/libusb"
-        "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/ThirdParty/glfw/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/ThirdParty/freetype/include"
+        "${SYNTHLIB_DIR}/ThirdParty/libusb/libusb"
+        "${SYNTHLIB_DIR}/ThirdParty/glfw/include"
+        "${SYNTHLIB_DIR}/ThirdParty/freetype/include"
     )
     target_link_libraries(G2Alike PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/ThirdParty/glfw/build/src/libglfw3.a"
-        "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/ThirdParty/freetype/build/libfreetype.a"
-        "${CMAKE_CURRENT_SOURCE_DIR}/SynthLib/ThirdParty/libusb/libusb/.libs/libusb-1.0.a"
+        "${SYNTHLIB_DIR}/ThirdParty/glfw/build/src/libglfw3.a"
+        "${SYNTHLIB_DIR}/ThirdParty/freetype/build/libfreetype.a"
+        "${SYNTHLIB_DIR}/ThirdParty/libusb/libusb/.libs/libusb-1.0.a"
         "-framework Cocoa"
         "-framework Security"
         "-framework IOKit"

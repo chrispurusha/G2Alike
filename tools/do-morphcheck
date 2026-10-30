@@ -42,14 +42,14 @@ SOURCES=(
     "$HERE/src/patchWrite.c"
     "$HERE/plugin/g2HostIo.c"
     "$HERE/plugin/g2Patch.c"
-    "$HERE/SynthLib/src/utils.c"
+    "$HERE/../SynthLib/src/utils.c"
 )
 
 # The two suppressions are do-render's, and for the same reasons: the null platform layer in
 # g2HostIo.c exists to ignore its arguments, and -Wextra fires on loops in moduleResourcesAccess.c
 # that predate these tools.
 cc -O2 -std=gnu11 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare \
-   -I"$HERE/src" -I"$HERE/SynthLib/src" -I"$HERE/plugin" \
+   -I"$HERE/src" -I"$HERE/../SynthLib/src" -I"$HERE/plugin" \
    -o "$OUT" "${SOURCES[@]}" -lm
 
 echo "built $OUT"

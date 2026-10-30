@@ -29,6 +29,7 @@
 set -e
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+SL="${SYNTHLIB_DIR:-$HERE/../SynthLib}"
 SDK="${VST3_SDK:-$HOME/Documents/vst3sdk}"
 
 # Which formats to build. No argument means both.
@@ -160,11 +161,14 @@ SOURCES=(
     "$HERE/src/paramOverview.c"
     "$HERE/src/paramOverlay.c"
     "$HERE/src/midiCcList.c"
-    "$HERE/SynthLib/src/floatingPanel.c"   # moved out of src/ 2026-08-20 — this list is MANUAL
+    "$SL/plugin/synthlibPluginRegistry.c"
+    "$SL/src/synthlibGlobals.c"
+    "$SL/src/synthlibPersistence.c"
+    "$SL/src/floatingPanel.c"   # moved out of src/ 2026-08-20 — this list is MANUAL
     "$HERE/src/helpPanel.c"
     "$HERE/src/virtualKeyboard.c"
     "$HERE/src/patchAdjuster.c"
-    "$HERE/SynthLib/src/alertDialog.c"
+    "$SL/src/alertDialog.c"
     "$HERE/src/canvasCoords.c"
     "$HERE/src/noteStack.c"
     "$HERE/src/canvasDrag.c"
@@ -178,34 +182,34 @@ SOURCES=(
     "$HERE/src/palette.c"
     "$HERE/src/moduleReplace.c"
     "$HERE/src/topbarResourcesAccess.c"
-    "$HERE/SynthLib/src/clickRegion.c"
-    "$HERE/SynthLib/src/synthlibHost.c"
-    "$HERE/SynthLib/src/contextMenu.c"
-    "$HERE/SynthLib/src/menuBar.c"
+    "$SL/src/clickRegion.c"
+    "$SL/src/synthlibHost.c"
+    "$SL/src/contextMenu.c"
+    "$SL/src/menuBar.c"
     # The popup registry. Needed for the WHEEL, which routes through it exactly as the application's
     # scroll_event() does - the plug-in registers nothing of its own but uses SynthLib's own table,
     # so every popup listed above and below gets its scroll for free. See g2_input_scroll().
-    "$HERE/SynthLib/src/synthlibPopups.c"
-    "$HERE/SynthLib/src/utils.c"
+    "$SL/src/synthlibPopups.c"
+    "$SL/src/utils.c"
     # Modifier-key state. Platform-free by design, which is what lets the same predicates answer from
     # GLFW's mods in the application and an NSEvent's flags here — see SynthLib/src/inputState.h.
-    "$HERE/SynthLib/src/inputState.c"
+    "$SL/src/inputState.c"
     # The state blob and the parameter formatting, shared by BOTH wrappers so a project saved from
     # the Audio Unit and one saved from the VST3 hold the identical bytes.
-    "$HERE/SynthLib/plugin/synthlibPluginState.c"
+    "$SL/plugin/synthlibPluginState.c"
     # The file-gated diagnostic log: `touch /tmp/g2alike-log`, read /tmp/g2alike.log (g2Plugin.c notes §16)
-    "$HERE/SynthLib/plugin/synthlibLog.c"
+    "$SL/plugin/synthlibLog.c"
     # The application's renderer, unchanged. It includes GLFW's header for the GL declarations but
     # makes no GLFW CALL, so it needs the include path below and not the library — which is the
     # whole reason the editor's drawing can appear in a plug-in at all.
-    "$HERE/SynthLib/src/utilsGraphics.c"
+    "$SL/src/utilsGraphics.c"
     # THE RENDER BACKEND, AND THERE IS ONLY ONE OF THEM HERE. renderBackendGL.c is deliberately NOT
     # in this list: SYNTHLIB_NO_GL_BACKEND below compiles its declaration out of renderBackend.c, so
     # a GL table is neither linked nor reachable. The file itself is untouched in SynthLib - it is
     # still the application's default and will be the only backend on Windows and Linux.
-    "$HERE/SynthLib/src/renderBackend.c"
-    "$HERE/SynthLib/src/synthlibVersion.c"
-    "$HERE/SynthLib/src/geometry.c"
+    "$SL/src/renderBackend.c"
+    "$SL/src/synthlibVersion.c"
+    "$SL/src/geometry.c"
 )
 
 # Plain Objective-C: the view is an AppKit subclass, which needs the runtime but no C++. Kept out of
@@ -218,14 +222,14 @@ SOURCES=(
 # movement. The file now refuses to compile without ARC, so this cannot quietly come back.
 OBJC_SOURCES=(
     "$HERE/plugin/g2View.m"
-    "$HERE/SynthLib/src/renderBackendMetal.m"
+    "$SL/src/renderBackendMetal.m"
 )
 
 # C++ the plug-in needs whatever format it is wrapped in.
 CXX_SOURCES=(
-    "$HERE/SynthLib/src/prefs.cpp"
-    "$HERE/SynthLib/src/fileBrowser.cpp"
-    "$HERE/SynthLib/src/bankBrowser.cpp"
+    "$SL/src/prefs.cpp"
+    "$SL/src/fileBrowser.cpp"
+    "$SL/src/bankBrowser.cpp"
 )
 
 # ------------------------------------------------------------------------------------------------
@@ -235,7 +239,7 @@ CXX_SOURCES=(
 # The VST3 wrapper. Built against pluginterfaces/ ONLY: public.sdk and vstgui are not compiled, so
 # there is no CMake anywhere in this.
 VST3_CXX_SOURCES=(
-    "$HERE/SynthLib/plugin/synthlibPluginVst3.cpp"
+    "$SL/plugin/synthlibPluginVst3.cpp"
     "$SDK/pluginterfaces/base/funknown.cpp"
     "$SDK/pluginterfaces/base/coreiids.cpp"
     # The one file taken from public.sdk. It contains no logic at all - it exists solely to
@@ -249,17 +253,17 @@ VST3_CXX_SOURCES=(
 )
 
 VST3_OBJCXX_SOURCES=(
-    "$HERE/SynthLib/plugin/synthlibPluginVst3View.mm"
+    "$SL/plugin/synthlibPluginVst3View.mm"
 )
 
 # The Audio Unit wrapper. AUv2 written straight against the C API - no AUBase, no CoreAudio Utility
 # Classes, for the same reason the VST3 half does not use public.sdk.
 AU_C_SOURCES=(
-    "$HERE/SynthLib/plugin/synthlibPluginAu.c"
+    "$SL/plugin/synthlibPluginAu.c"
 )
 
 AU_OBJC_SOURCES=(
-    "$HERE/SynthLib/plugin/synthlibPluginAuView.m"
+    "$SL/plugin/synthlibPluginAuView.m"
 )
 
 # ------------------------------------------------------------------------------------------------
@@ -318,22 +322,22 @@ echo "Formats: ${FORMATS}"
 # now, and that spelling goes when they move onto this wrapper too.
 DEFS=(-DSYNTHLIB_VERSION_STRING="\"$VERSION_STRING\"" -DSYNTHLIB_NO_GL_BACKEND=1 -DSYNTHLIB_PLUGIN_BUILD=1)
 
-INCLUDES=(-I"$HERE/src" -I"$HERE/SynthLib/src" -I"$HERE/SynthLib/plugin" -I"$HERE/plugin"
+INCLUDES=(-I"$HERE/src" -I"$SL/src" -I"$SL/plugin" -I"$HERE/plugin"
           # Headers only. GLFW's is here because utilsGraphics.c includes it for the GL
           # declarations; freetype's because the text renderer is built on it. The bundled copies
           # are used rather than Homebrew's so the deployment target matches the application's —
           # see "Docs/Third Party build notes.md".
-          -I"$HERE/SynthLib/ThirdParty/glfw/include"
-          -I"$HERE/SynthLib/ThirdParty/freetype/include")
+          -I"$SL/ThirdParty/glfw/include"
+          -I"$SL/ThirdParty/freetype/include")
 
 VST3_INCLUDES=(-I"$SDK")
 
 # freetype is the one real library the renderer needs. The static build is taken so each bundle stays
 # self-contained — a host will not go looking in Homebrew for it.
-FREETYPE_LIB="$HERE/SynthLib/ThirdParty/freetype/build/libfreetype.a"
+FREETYPE_LIB="$SL/ThirdParty/freetype/build/libfreetype.a"
 
 ARCHS=(-arch arm64 -arch x86_64)
-MIN=-mmacosx-version-min=11.5
+MIN=-mmacosx-version-min=12.0
 
 COMMON_LIBS=(-framework CoreFoundation -framework Cocoa -framework Metal -framework QuartzCore)
 AU_LIBS=(-framework AudioToolbox -framework AudioUnit -framework CoreAudio)
@@ -476,7 +480,7 @@ build_vst3() {
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>0.1.0</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>LSMinimumSystemVersion</key><string>11.5</string>
+    <key>LSMinimumSystemVersion</key><string>12.0</string>
 </dict>
 </plist>
 PLIST
@@ -505,9 +509,16 @@ build_au() {
     for src in "${AU_OBJC_SOURCES[@]}"; do
         local obj="$OBJDIR/au_$(basename "${src%.*}").om"
         clang $ARCHS $MIN -O2 -std=gnu11 -fobjc-arc "${WARNFLAGS[@]}" "${DEFS[@]}" "${INCLUDES[@]}" \
-              -DSYNTHLIB_AU_VIEW_CLASS=$AU_VIEW_CLASS -x objective-c -c "$src" -o "$obj"
+              -x objective-c -c "$src" -o "$obj"
         objects+=("$obj")
     done
+
+    # The one class that must be compiled into the product - see synthlibAuViewFactory.h
+    local factory="$OBJDIR/auViewFactory.m"
+    print "#import \"synthlibAuViewFactory.h\"\nSYNTHLIB_AU_VIEW_FACTORY($AU_VIEW_CLASS)" > "$factory"
+    clang $ARCHS $MIN -O2 -std=gnu11 -fobjc-arc "${WARNFLAGS[@]}" "${DEFS[@]}" "${INCLUDES[@]}" \
+              -x objective-c -c "$factory" -o "$OBJDIR/au_auViewFactory.om"
+    objects+=("$OBJDIR/au_auViewFactory.om")
 
     rm -rf "$out"
     mkdir -p "$out/Contents/MacOS"
@@ -539,7 +550,7 @@ build_au() {
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>0.1.0</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <key>LSMinimumSystemVersion</key><string>11.5</string>
+    <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>AudioComponents</key>
     <array>
         <dict>

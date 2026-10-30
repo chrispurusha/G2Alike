@@ -179,7 +179,6 @@ static tG2Plugin * enter(void * inst) {
 // notes §4
 
 // notes §16 - `touch /tmp/g2alike-log`, then read /tmp/g2alike.log
-const char gSynthLibLogName[] = "g2alike";
 
 // notes §16 - a rebuild reads the patch the editor and the host write, so it holds the database's read lock
 static void update_from_patch_locked(void) {
@@ -1014,6 +1013,19 @@ static const tSynthLibPluginSet gVariants = {
     .count    = 1
 };
 
-const tSynthLibPluginSet * synthlib_plugin_variants(void) {
+static const tSynthLibPluginSet * plugin_variants(void) {
     return &gVariants;
+}
+
+SYNTHLIB_PLUGIN_REGISTER(plugin_variants, "g2alike")
+
+static void dial_mode_changed(tDialMode mode) {
+    prefs_set_int(G2_PREF_DIAL_MODE, (long)mode);
+}
+
+// What the shared code calls through. Rotary before the hook, so the default isn't stored as a choice.
+__attribute__((constructor)) static void g2_register_hooks(void) {
+    synthlib_set_redraw_hook(g2_view_request_redraw);
+    synthlib_set_dial_mode(eDialModeRotary);
+    synthlib_set_dial_mode_hook(dial_mode_changed);
 }

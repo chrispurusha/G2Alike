@@ -47,11 +47,14 @@ eval "$(sed -n '/^SOURCES=(/,/^)/p; /^CXX_SOURCES=(/,/^)/p' $ROOT/do-plugin | se
 
 SOURCES+=(
     "$ROOT/plugin/g2ViewWin.c"
-    "$ROOT/SynthLib/src/renderBackendGL.c"
+    "$ROOT/../SynthLib/src/renderBackendGL.c"
+    "$ROOT/../SynthLib/src/synthlibGlobals.c"
+    "$ROOT/../SynthLib/src/synthlibPersistence.c"
+    "$ROOT/../SynthLib/plugin/synthlibPluginRegistry.c"
 )
 VST3_CXX=(
-    "$ROOT/SynthLib/plugin/synthlibPluginVst3.cpp"
-    "$ROOT/SynthLib/plugin/synthlibPluginVst3ViewWin.cpp"
+    "$ROOT/../SynthLib/plugin/synthlibPluginVst3.cpp"
+    "$ROOT/../SynthLib/plugin/synthlibPluginVst3ViewWin.cpp"
     "$SDK/pluginterfaces/base/funknown.cpp"
     "$SDK/pluginterfaces/base/coreiids.cpp"
     "$SDK/public.sdk/source/vst/vstinitiids.cpp"
@@ -63,8 +66,8 @@ VST3_CXX=(
 VERSION_STRING=${G2_WIN_VERSION:-$(git -C $ROOT describe --tags --always --dirty 2>/dev/null || echo 'development build')}
 DEFS=(-DSYNTHLIB_VERSION_STRING="\"$VERSION_STRING\"" -DSYNTHLIB_PLUGIN_BUILD=1
       -D_USE_MATH_DEFINES -D_POSIX_THREAD_SAFE_FUNCTIONS=200112L)
-INCLUDES=(-I$ROOT/src -I$ROOT/SynthLib/src -I$ROOT/SynthLib/plugin -I$ROOT/plugin
-          -I$ROOT/SynthLib/ThirdParty/glfw/include -I$DEPS/include/freetype2 -isystem $SDK)
+INCLUDES=(-I$ROOT/src -I$ROOT/../SynthLib/src -I$ROOT/../SynthLib/plugin -I$ROOT/plugin
+          -I$ROOT/../SynthLib/ThirdParty/glfw/include -I$DEPS/include/freetype2 -isystem $SDK)
 # Not -Werror yet: the Windows application has four warnings to fix first (Docs/windows-port-plan.md)
 FLAGS=(-O2 -include $ROOT/platform/windows/winCompat.h)
 

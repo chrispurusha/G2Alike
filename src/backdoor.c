@@ -35,7 +35,7 @@ extern "C" {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Weverything"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "../SynthLib/ThirdParty/glfw/deps/stb_image_write.h"
+#include "../../SynthLib/ThirdParty/glfw/deps/stb_image_write.h"
 #pragma clang diagnostic pop
 
 #include <ctype.h>

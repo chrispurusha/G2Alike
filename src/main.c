@@ -26,6 +26,8 @@ extern "C" {
 
 #include "defs.h"
 #include "synthlibDefs.h"
+#include "synthlibVersion.h"
+#include "usbLog.h"
 #include "types.h"
 #include "graphics.h"
 #include "dataBase.h"
@@ -86,6 +88,10 @@ int main(int argc, char ** argv) {
     // notes §2
     prefs_init("G2Alike");
 
+    SYNTHLIB_APP_INIT();
+#ifdef ENABLE_USB_LOG
+    gSynthLibLogSink = usb_log_text;
+#endif
     init_graphics();
 
     register_sleep_wake_notifications();

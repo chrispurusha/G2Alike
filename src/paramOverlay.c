@@ -131,8 +131,7 @@ static void queue_row(tRectangle rectangle, const char * label, bool textAnchor)
     double     rowHeight  = textHeight + 2.0;
 
     // draw_button() insets its text from the rect it is handed by the padding it adds around it.
-    // Recover that from draw_button_bounds() rather than reaching for the constant, which isn't
-    // visible to G2Alike's own sources - see the G2ALIKE branch in synthlibDefs.h.
+    // Recover that from draw_button_bounds() rather than reaching for the constant.
     double     buttonPad  = draw_button_bounds((tRectangle){
         {0.0, 0.0}, {0.0, 0.0}
     }).size.w / 2.0;

@@ -49,6 +49,7 @@ static void action_about(int index) {
     (void)index;
 
     // notes §5
+    SYNTHLIB_APP_INIT();
     snprintf(text, sizeof(text), "%s\n\nEngine: %s",
              synthlib_about_text("G2Alike"), sound_engine_status_text());
     show_alert("About", text);

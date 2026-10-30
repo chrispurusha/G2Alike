@@ -22,7 +22,7 @@
 
 #include <math.h>
 
-// defs.h FIRST — it defines G2ALIKE, and synthlibDefs.h gates the colour palette and the bar's own
+// defs.h carries this application's palette and layout values
 // TOP_BAR_HEIGHT on it. Including them the other way round leaves every RGB_* undefined.
 #include "defs.h"
 #include "synthlibDefs.h"

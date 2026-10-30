@@ -1,7 +1,4 @@
-**The app now targets macOS 12.0, these libraries are still built at 11.5 (2026-09-21).**
-That is deliberate and safe - a library built to a LOWER minimum links into a higher-target
-app without complaint; it is the other way round that produces the "built for newer macOS"
-warning. Leave the numbers below alone unless the libraries are being rebuilt anyway.
+**The apps, plug-ins and these libraries all target macOS 12.0.**
 
 # These are the kinds of commands I used to pull in and build the 3rd party libraries.
 # Needs some rationalising and potentially adding to one of the existing readme files.
@@ -24,7 +21,7 @@ cd ThirdParty/freetype
 cmake -B build \
       -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-      -DCMAKE_OSX_DEPLOYMENT_TARGET=11.5 \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
       -DFT_DISABLE_PNG=ON \
       -DFT_DISABLE_ZLIB=ON \
       -DFT_DISABLE_BZIP2=ON \
@@ -42,7 +39,7 @@ cmake -B build \
     -DGLFW_BUILD_TESTS=OFF \
     -DGLFW_BUILD_DOCS=OFF \
     -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-    -DCMAKE_OSX_DEPLOYMENT_TARGET=11.5
+    -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 
 cmake --build build --config Release
 

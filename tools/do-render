@@ -46,7 +46,7 @@ SOURCES=(
 #                            edit it to suit — that belongs with the progressive warnings work in
 #                            todo.md, where the same change gets made once for every target.
 cc -O2 -std=gnu11 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare \
-   -I"$HERE/src" -I"$HERE/SynthLib/src" \
+   -I"$HERE/src" -I"$HERE/../SynthLib/src" \
    -o "$OUT" "${SOURCES[@]}" -lm
 
 echo "built $OUT"

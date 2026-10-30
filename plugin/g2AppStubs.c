@@ -209,10 +209,6 @@ void device_op_end(void) {
 // The application's Controls menu calls this when the dial mode changes. Route it to the plug-in's
 // own prefs so the setting persists here too — synthlib_set_dial_mode() already writes it, so this
 // only has to not throw the value away.
-void synthlib_save_dial_mode(tDialMode mode) {
-    prefs_set_int(G2_PREF_DIAL_MODE, (long)mode);
-}
-
 // Ends a dial drag. The application also restores the cursor it hid; there is nothing hidden here.
 void finish_param_drag(void) {
     (void)canvas_param_drag_release();
@@ -255,11 +251,6 @@ void undo_push_paste(uint32_t slot, uint32_t location, uint32_t anchorCol, uint3
 
 // notes §6
 
-// notes §7
-void synthlib_request_redraw(void) {
-    g2_view_request_redraw();
-}
-
 // The application's wake-the-render-loop wrapper (graphics.c). It is one line there too — this is
 // not a stub so much as the same function, since synthlib_request_redraw() above already does the
 // right thing in a plug-in. Every menu action calls it.
@@ -281,14 +272,3 @@ void undo_push_module_replace(tModuleKey key, const tClipboardModule * before,
     (void)after;
 }
 
-// notes §10
-static tDialMode gDialMode = eDialModeRotary;
-
-tDialMode synthlib_dial_mode(void) {
-    return gDialMode;
-}
-
-void synthlib_set_dial_mode(tDialMode mode) {
-    gDialMode = mode;
-    prefs_set_int(G2_PREF_DIAL_MODE, (long)mode);
-}

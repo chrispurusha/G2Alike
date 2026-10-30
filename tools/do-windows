@@ -32,7 +32,7 @@ done
 TRIPLE=$ARCH-w64-mingw32
 OUT=$ROOT/build-cross-$ARCH
 DEPS=$OUT/deps
-THIRD=$ROOT/SynthLib/ThirdParty
+THIRD=$ROOT/../SynthLib/ThirdParty
 TOOLCHAIN=$ROOT/cmake/toolchain-windows.cmake
 JOBS=$(sysctl -n hw.ncpu)
 

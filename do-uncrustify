@@ -2,13 +2,13 @@
 
 # To run: ./do-uncrustify
 #
-# Formats this project's sources and the shared SynthLib submodule.
-# SynthLib changes land in that submodule's own working tree, so they are
+# Formats this project's sources and the shared SynthLib checkout beside it.
+# SynthLib changes land in that checkout, so they are
 # reviewed and committed in the SynthLib repo, not this one.
 
 setopt null_glob
 
-for dir in src SynthLib/src; do
+for dir in src ../SynthLib/src; do
     if [[ ! -d $dir ]]; then
         echo "skipping $dir - not found"
         continue

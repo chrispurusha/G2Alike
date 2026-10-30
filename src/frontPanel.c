@@ -28,7 +28,7 @@ extern "C" {
 #include <stdio.h>
 #include <string.h>
 
-#include "defs.h"           // first: it defines G2ALIKE, which synthlibDefs.h reads
+#include "defs.h"           // this application's values for the shared defs
 #include "frontPanel.h"
 #include "synthlibDefs.h"
 #include "synthlibGlobals.h"

@@ -21,7 +21,50 @@
 #ifndef __DEFS_H__
 #define __DEFS_H__
 
-#define G2ALIKE
+// SynthLib has one set of defaults and no per-application switches. These are this application's
+// own values for the names it shares with synthlibDefs.h, so that header comes first and any
+// include order gives the same result. Values SynthLib itself needs at run time go through
+// configure_synthlib_theme().
+#include "synthlibDefs.h"
+
+#define RGB_GREEN                    {0.0, 0.8, 0.0}
+#undef RGB_BACKGROUND_GREY
+#define RGB_BACKGROUND_GREY          {0.8, 0.8, 0.8}
+#undef RGB_GREY_2
+#define RGB_GREY_2                   {0.2, 0.2, 0.2}
+#undef RGB_GREY_3
+#define RGB_GREY_3                   {0.3, 0.3, 0.3}
+#undef RGB_GREY_5
+#define RGB_GREY_5                   {0.5, 0.5, 0.5}
+#undef RGB_GREY_7
+#define RGB_GREY_7                   {0.7, 0.7, 0.7}
+#define RGB_GREY_9                   {0.9, 0.9, 0.9}
+#undef RGB_GREEN_ON
+#define RGB_GREEN_ON                 {0.3, 0.7, 0.3}
+#define RGB_GREEN_3                  {0.0, 0.3, 0.0}
+#define RGB_GREEN_7                  {0.0, 0.7, 0.0}
+#define RGB_CONTEXT_MENU_GREEN       {0.2, 0.6, 0.2}
+#define RGB_YELLOW_7                 {0.7, 0.7, 0.0}
+#define RGB_RED_7                    {0.7, 0.0, 0.0}
+#define RGB_RED_5                    {0.7, 0.2, 0.2}
+#define RGB_ORANGE_0                 {0.8, 0.7, 0.5}
+#undef RGB_ORANGE_1
+#define RGB_ORANGE_1                 {0.8, 0.3, 0.1}
+#undef RGB_ORANGE_2
+#define RGB_ORANGE_2                 {0.8, 0.5, 0.2}
+#define RGBA_BLACK_ON_TRANSPARENT    {0.0, 0.0, 0.0, 1.0}
+
+#undef TOP_BAR_HEIGHT
+#define TOP_BAR_HEIGHT           (80.0)
+// notes §4
+#undef SCROLLBAR_WIDTH
+#define SCROLLBAR_WIDTH          (11.0)
+#define MODULE_TITLE_X_OFFSET    (3.0)
+#define MODULE_TITLE_Y_OFFSET    (20.0)
+#define MODULE_AREA_X_MARGINS    ((MODULE_MARGIN * 2.0) + SCROLLBAR_WIDTH)
+#define MODULE_AREA_Y_MARGINS    ((MODULE_MARGIN * 2.0) + TOP_BAR_HEIGHT + SCROLLBAR_WIDTH)
+#define MODULE_AREA_X_WIDTH      ((double)renderWidth - (MODULE_AREA_X_MARGINS))
+#define MODULE_AREA_Y_HEIGHT     ((double)renderHeight - (MODULE_AREA_Y_MARGINS))
 
 // notes §1
 

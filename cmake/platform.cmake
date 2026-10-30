@@ -30,8 +30,8 @@ if(WIN32)
     set(G2_WINDOWS_SWAPS
         src/audioOutput.c               platform/windows/audioOutputWin.c
         src/midiInput.c                 platform/windows/midiInputWin.c
-        SynthLib/src/synthlibMidi.c     platform/windows/synthlibMidiWin.c
-        SynthLib/src/synthlibMidiPorts.c platform/windows/synthlibMidiPortsWin.c
+        ${SYNTHLIB_DIR}/src/synthlibMidi.c     platform/windows/synthlibMidiWin.c
+        ${SYNTHLIB_DIR}/src/synthlibMidiPorts.c platform/windows/synthlibMidiPortsWin.c
     )
     list(LENGTH G2_WINDOWS_SWAPS swapCount)
     math(EXPR lastPair "${swapCount} - 1")
