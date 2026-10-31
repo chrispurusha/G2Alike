@@ -540,6 +540,11 @@ rm -f "$DMG"
 
 echo "==> creating $DMG"
 
+# No pin in this project's history any more, so the release says which SynthLib it was built from.
+SYNTHLIB_COMMIT="$(git -C ../SynthLib describe --always --dirty --abbrev=12)"
+print "\nBuilt with SynthLib $SYNTHLIB_COMMIT" >> "$STAGE/Read Me First.txt"
+print "==> SynthLib $SYNTHLIB_COMMIT"
+
 # macOS 27 deprecates `hdiutil create` in favour of `diskutil image create from`. That makes an APFS
 # volume where hdiutil made HFS+ - readable on macOS 10.13 and later, below every minimum here - and the
 # older systems that lack it keep the hdiutil line, whose volume names are capped at 27 characters.

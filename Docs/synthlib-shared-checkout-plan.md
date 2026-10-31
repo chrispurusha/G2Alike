@@ -5,17 +5,27 @@ instead of a submodule inside each.
 
 ## State
 
-- `GitHub/SynthLib` is cloned at 3a683e8 with ThirdParty submodules. freetype, glfw and libusb are
-  built there (libusb is used by G2Alike and GenBridge only).
-- Steps 1-3 below are done, uncommitted: all build paths in all eight siblings now point at
-  `../SynthLib`. `$SYNTHLIB_DIR` overrides it in every script and in CMake.
-- Uncommitted in `GitHub/SynthLib` itself: all the library changes below, including two new headers.
-- The submodules are still in place but no longer used by any build. Removing them is step 4.
+DONE 2026-10-30: one checkout, one `libSynthLib.a`, every macOS product links it. How to build and use
+it is in `SynthLib/Docs/build.md`; this file is the record of how it got there. All changes are
+uncommitted at the time of writing.
+
+- No sibling lists a SynthLib source on macOS. Windows still compiles them, separately.
+- Submodules and `.gitmodules` are gone from all eight siblings. libusb is linked by G2Alike only;
+  GenBridge never linked it, despite the note below.
 - No CI exists: the `.github` folders hold only FUNDING.yml.
-- Verified 2026-10-30 with every embedded `SynthLib` renamed away: `do-plugin all --no-install` for
-  G2Alike, GenBridge, MidiSeqTool, MidiSyncTool, Pulse2Alike, TiAlike, and Xcode Debug for EmuUtility,
-  G2Alike, GenBridge (both schemes), SynthEdit. Compile and link only; nothing run or loaded.
-- Not exercised: `do-release`, CMake and the Windows scripts, `tools/do-*`, `do-poc`.
+- Verified on an M4: `do-build check` (every object, both architectures), `plugin/test/do-test`, `auval`
+  on all six installed AU types, `vst3check` on GenBridge, every editor opened in `vst3host` and `auhost`
+  (MidiSeqTool has none, as before; its AU was built, not installed or validated), all four apps' Xcode
+  Debug, and EmuUtility, SynthEdit and G2Alike launched and drawing.
+- Second pass, same day: all seven `do-release` built to a scratch folder (test version, no tag), each `.dmg`
+  universal, macOS 12.0, signed, recording SynthLib's hash; apps from them run on arm64 and under Rosetta; `auval`
+  on seven AU types on both architectures; Pulse2Alike, TiAlike and G2Alike (a real `.prf2`) bit-identical
+  to the pre-library bundles through an offline VST3 render, arm64 and x86_64; saved state byte-identical and loadable
+  both ways; twelve plug-in binaries loaded into one process.
+- That pass found two breaks, both fixed: the build without the VST3 SDK failed (`-I""` swallowed `-c`), and
+  Pulse2Alike's `do-p2render` no longer linked. It now links the library.
+- Not exercised: the Windows scripts (lists checked against disk only), a run in a DAW, GenBridge's and
+  MidiSyncTool's audio paths and GenBridge Monitor's window.
 
 ## Findings
 
@@ -116,22 +126,18 @@ Verified: `plugin/test/do-test` passes, all plug-ins and apps build, four AUs lo
 Not yet checked: Windows, whose list `do-windows-plugin` was updated by hand. Code-notes in
 `SynthLib/Docs` still describe `pluginStubs.c` and the old symbols.
 
-### Remaining before a real libSynthLib.a
+### Built (2026-10-30)
 
-| Item | Plan |
-|---|---|
-| `SYNTHLIB_PLUGIN_BUILD`, `SYNTHLIB_NO_GL_BACKEND` | no effect on macOS. Windows is a separate platform build (owner, 2026-10-30), so these can stay there |
-| `plugin/` VST3 wrappers | build within the library, with the SDK as a build input |
+`SYNTHLIB_PLUGIN_BUILD` and `SYNTHLIB_NO_GL_BACKEND` have no effect on macOS; Windows is a separate
+platform build (owner, 2026-10-30), so they stay there. G2Alike's own sources still use the first.
 
-### Building it
-
-- `SynthLib/` gets its own build, producing `libSynthLib.a` in one known place, arm64 and x86_64.
-  Products link it plus the ThirdParty libs, and stop listing SynthLib sources. That removes the
-  manual lists in the `do-plugin` scripts, a known source of errors, and GenBridge's per-file entries.
-- A static library pulls in only the object files a product uses, so most dead-code removal comes
-  for free. Add `-Wl,-dead_strip` at the final link for the rest.
-- Decide who rebuilds it: a script in SynthLib run by each product's build, so a stale library
-  can't be linked by accident.
+- `SynthLib/do-build` and its `Makefile` build each architecture and join them. Sources are found by
+  wildcard, so no list needs keeping. Every product runs it before linking.
+- The VST3 wrappers and the SDK's six files are in the library, the SDK being a build input.
+- Third-party libraries build out of tree into `build/`, so a re-run no longer needs a directory deleted.
+- Plug-ins link with `-Wl,-dead_strip`. Against the same scripts compiling from source: bundles 90-99% of
+  their old size, and the only exports lost are SDK helpers nothing called.
+- `do-build check` links every object with `-all_load`, which is the decoupling test and stays as one.
 
 ## What is lost: the pin
 
@@ -145,31 +151,19 @@ needs the "clone SynthLib beside it" step.
 
 ## Migration order
 
-1. Build libusb in the shared checkout; confirm which siblings use it.
-2. In every script, make the default `SL="${SYNTHLIB_DIR:-$HERE/../SynthLib}"`, keeping the
-   override. Bring G2Alike's `do-plugin` and tools onto `$SL`.
-3. Point Xcode at `../SynthLib`, CMake likewise (define it once, `SYNTHLIB_DIR`).
-4. One sibling at a time, TiAlike first, as it needs only its script: build, load in a host, then
-   `git rm SynthLib`, drop `.gitmodules`, commit. G2Alike last, as it's the largest.
-5. Add the build-everything-third-party steps as a script in SynthLib; update READMEs, the
-   THIRD_PARTY.md files, `Third Party build notes.md`, and the submodule section of CLAUDE.md.
-6. Record the SynthLib hash in `do-release`.
-
-Check before step 4: anyone else (CT?) building from a fresh clone.
+All six steps done. A fresh clone needs SynthLib beside it; each README says so.
 
 ## LTO and dead-code removal
 
 Unmeasured so far. What's known:
 
 - Xcode targets already have `DEAD_CODE_STRIPPING = YES`. No `LLVM_LTO` setting anywhere.
-- No `do-plugin`, `do-release` or CMake file passes `-dead_strip` or `-flto`. The plug-ins are where
-  the unused SynthLib code is likely to be going unstripped.
+- Nothing passes `-flto` yet.
 
 Would they work? Yes, both are standard on macOS with clang, and neither needs the shared
 checkout. Suggested order:
 
-1. Add `-Wl,-dead_strip` to the plug-in links. It's cheap and low risk; check that the VST3/AU entry
-   points are kept (they're exported, so they should be), then compare bundle sizes.
+1. `-Wl,-dead_strip` on the plug-in links: done, entry points kept, sizes above.
 2. Try `-flto=thin` on a Release plug-in and measure size and DSP load. It also needs to be in
    the compile step, not just the link. Inlining across SynthLib and the engine could help, but the
    engines' hot loops mostly sit within one file already, so expect a small gain. Keep it only if

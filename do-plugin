@@ -161,14 +161,9 @@ SOURCES=(
     "$HERE/src/paramOverview.c"
     "$HERE/src/paramOverlay.c"
     "$HERE/src/midiCcList.c"
-    "$SL/plugin/synthlibPluginRegistry.c"
-    "$SL/src/synthlibGlobals.c"
-    "$SL/src/synthlibPersistence.c"
-    "$SL/src/floatingPanel.c"   # moved out of src/ 2026-08-20 — this list is MANUAL
     "$HERE/src/helpPanel.c"
     "$HERE/src/virtualKeyboard.c"
     "$HERE/src/patchAdjuster.c"
-    "$SL/src/alertDialog.c"
     "$HERE/src/canvasCoords.c"
     "$HERE/src/noteStack.c"
     "$HERE/src/canvasDrag.c"
@@ -182,88 +177,11 @@ SOURCES=(
     "$HERE/src/palette.c"
     "$HERE/src/moduleReplace.c"
     "$HERE/src/topbarResourcesAccess.c"
-    "$SL/src/clickRegion.c"
-    "$SL/src/synthlibHost.c"
-    "$SL/src/contextMenu.c"
-    "$SL/src/menuBar.c"
-    # The popup registry. Needed for the WHEEL, which routes through it exactly as the application's
-    # scroll_event() does - the plug-in registers nothing of its own but uses SynthLib's own table,
-    # so every popup listed above and below gets its scroll for free. See g2_input_scroll().
-    "$SL/src/synthlibPopups.c"
-    "$SL/src/utils.c"
-    # Modifier-key state. Platform-free by design, which is what lets the same predicates answer from
-    # GLFW's mods in the application and an NSEvent's flags here — see SynthLib/src/inputState.h.
-    "$SL/src/inputState.c"
-    # The state blob and the parameter formatting, shared by BOTH wrappers so a project saved from
-    # the Audio Unit and one saved from the VST3 hold the identical bytes.
-    "$SL/plugin/synthlibPluginState.c"
-    # The file-gated diagnostic log: `touch /tmp/g2alike-log`, read /tmp/g2alike.log (g2Plugin.c notes §16)
-    "$SL/plugin/synthlibLog.c"
-    # The application's renderer, unchanged. It includes GLFW's header for the GL declarations but
-    # makes no GLFW CALL, so it needs the include path below and not the library — which is the
-    # whole reason the editor's drawing can appear in a plug-in at all.
-    "$SL/src/utilsGraphics.c"
-    # THE RENDER BACKEND, AND THERE IS ONLY ONE OF THEM HERE. renderBackendGL.c is deliberately NOT
-    # in this list: SYNTHLIB_NO_GL_BACKEND below compiles its declaration out of renderBackend.c, so
-    # a GL table is neither linked nor reachable. The file itself is untouched in SynthLib - it is
-    # still the application's default and will be the only backend on Windows and Linux.
-    "$SL/src/renderBackend.c"
-    "$SL/src/synthlibVersion.c"
-    "$SL/src/geometry.c"
 )
 
-# Plain Objective-C: the view is an AppKit subclass, which needs the runtime but no C++. Kept out of
-# the Objective-C++ pass below so the C++ is confined to the files that have to speak it — a VST3
-# interface is a C++ vtable, and that is the only reason any C++ is here at all.
-#
-# THE METAL BACKEND BELONGS HERE, NOT IN SOURCES ABOVE, and the difference is -fobjc-arc. Listed with
-# the C files it compiled without ARC, so every Metal buffer it created was leaked: the editor grew by
-# gigabytes a minute and got slower with every frame, from 4 ms to 44 ms in forty seconds of pointer
-# movement. The file now refuses to compile without ARC, so this cannot quietly come back.
+# -fobjc-arc: g2View.m is an AppKit subclass.
 OBJC_SOURCES=(
     "$HERE/plugin/g2View.m"
-    "$SL/src/renderBackendMetal.m"
-)
-
-# C++ the plug-in needs whatever format it is wrapped in.
-CXX_SOURCES=(
-    "$SL/src/prefs.cpp"
-    "$SL/src/fileBrowser.cpp"
-    "$SL/src/bankBrowser.cpp"
-)
-
-# ------------------------------------------------------------------------------------------------
-# FORMAT-SPECIFIC
-# ------------------------------------------------------------------------------------------------
-
-# The VST3 wrapper. Built against pluginterfaces/ ONLY: public.sdk and vstgui are not compiled, so
-# there is no CMake anywhere in this.
-VST3_CXX_SOURCES=(
-    "$SL/plugin/synthlibPluginVst3.cpp"
-    "$SDK/pluginterfaces/base/funknown.cpp"
-    "$SDK/pluginterfaces/base/coreiids.cpp"
-    # The one file taken from public.sdk. It contains no logic at all - it exists solely to
-    # instantiate the VST interface IIDs that the headers only declare - so taking it does not
-    # pull in the helper classes or their build system.
-    "$SDK/public.sdk/source/vst/vstinitiids.cpp"
-    # Likewise for the GUI-side interface IDs — IPlugView and friends, which the editor needs.
-    "$SDK/public.sdk/source/common/commoniids.cpp"
-    "$SDK/pluginterfaces/base/ustring.cpp"
-    "$SDK/pluginterfaces/base/conststringtable.cpp"
-)
-
-VST3_OBJCXX_SOURCES=(
-    "$SL/plugin/synthlibPluginVst3View.mm"
-)
-
-# The Audio Unit wrapper. AUv2 written straight against the C API - no AUBase, no CoreAudio Utility
-# Classes, for the same reason the VST3 half does not use public.sdk.
-AU_C_SOURCES=(
-    "$SL/plugin/synthlibPluginAu.c"
-)
-
-AU_OBJC_SOURCES=(
-    "$SL/plugin/synthlibPluginAuView.m"
 )
 
 # ------------------------------------------------------------------------------------------------
@@ -300,42 +218,20 @@ fi
 echo "Version: $VERSION_STRING"
 echo "Formats: ${FORMATS}"
 
-# METAL ONLY ON macOS, SINCE 2026-09-09.
-#
-# The plug-in used to build either backend - its view's SUPERCLASS differed between them
-# (NSOpenGLView against NSView) so the choice had to be made here rather than at run time. Metal is
-# the only one now: it is what ships, both sibling plug-ins have only ever had it, and the OpenGL
-# half was an unreachable second surface implementation that still had to keep compiling.
-#
-# WHAT IS GONE IS macOS-SPECIFIC OPENGL. SynthLib's renderBackendGL.c is untouched, is still what the
-# APPLICATION uses by default, and will be the only backend when there are Windows and Linux versions
-# - where a plug-in's view is an HWND or an X11 window and could not have used a line of what was
-# removed from g2View.m anyway.
-#
-# SYNTHLIB_NO_GL_BACKEND is what makes it Metal ONLY rather than Metal by default: it compiles the
-# GL table's declaration out of renderBackend.c, so renderBackendGL.c is not in the source list
-# above, -framework OpenGL is not on the link line below, and gfx_backend_available() answers false
-# for OpenGL if anything ever asks.
-#
-# SYNTHLIB_PLUGIN_BUILD is "this is a plug-in, there is no GLFW". It was called G2_VST3_BUILD until
-# there were two formats; the sibling plug-ins still pass the old name, which SynthLib accepts for
-# now, and that spelling goes when they move onto this wrapper too.
-DEFS=(-DSYNTHLIB_VERSION_STRING="\"$VERSION_STRING\"" -DSYNTHLIB_NO_GL_BACKEND=1 -DSYNTHLIB_PLUGIN_BUILD=1)
+# SYNTHLIB_PLUGIN_BUILD selects the plug-in's side of this project's own sources; SynthLib does not use it
+# on macOS.
+DEFS=(-DSYNTHLIB_VERSION_STRING="\"$VERSION_STRING\"" -DSYNTHLIB_PLUGIN_BUILD=1)
 
 INCLUDES=(-I"$HERE/src" -I"$SL/src" -I"$SL/plugin" -I"$HERE/plugin"
-          # Headers only. GLFW's is here because utilsGraphics.c includes it for the GL
-          # declarations; freetype's because the text renderer is built on it. The bundled copies
-          # are used rather than Homebrew's so the deployment target matches the application's —
-          # see "Docs/Third Party build notes.md".
+          # Headers only: SynthLib's name GLFW's constants and freetype's types.
           -I"$SL/ThirdParty/glfw/include"
           -I"$SL/ThirdParty/freetype/include")
 
-VST3_INCLUDES=(-I"$SDK")
-
 # freetype is the one real library the renderer needs. The static build is taken so each bundle stays
 # self-contained — a host will not go looking in Homebrew for it.
-FREETYPE_LIB="$SL/ThirdParty/freetype/build/libfreetype.a"
-
+"$SL/do-build"
+SYNTHLIB_LIB="$SL/build/libSynthLib.a"
+FREETYPE_LIB="$SL/build/libfreetype.a"
 ARCHS=(-arch arm64 -arch x86_64)
 MIN=-mmacosx-version-min=12.0
 
@@ -359,12 +255,6 @@ COMMON_OBJECTS=()
 for src in "${SOURCES[@]}"; do
     obj="$OBJDIR/$(basename "${src%.*}").o"
     clang $ARCHS $MIN -O2 -std=gnu11 "${WARNFLAGS[@]}" "${DEFS[@]}" "${INCLUDES[@]}" -c "$src" -o "$obj"
-    COMMON_OBJECTS+=("$obj")
-done
-
-for src in "${CXX_SOURCES[@]}"; do
-    obj="$OBJDIR/$(basename "${src%.*}").oxx"
-    clang++ $ARCHS $MIN -O2 -std=gnu++17 "${WARNFLAGS[@]}" "${DEFS[@]}" "${INCLUDES[@]}" -c "$src" -o "$obj"
     COMMON_OBJECTS+=("$obj")
 done
 
@@ -447,24 +337,10 @@ build_vst3() {
     print ""
     print "==> VST3"
 
-    for src in "${VST3_CXX_SOURCES[@]}"; do
-        local obj="$OBJDIR/vst3_$(basename "${src%.*}").oxx"
-        clang++ $ARCHS $MIN -O2 -std=gnu++17 "${WARNFLAGS[@]}" "${DEFS[@]}" \
-                "${INCLUDES[@]}" "${VST3_INCLUDES[@]}" -c "$src" -o "$obj"
-        objects+=("$obj")
-    done
-
-    for src in "${VST3_OBJCXX_SOURCES[@]}"; do
-        local obj="$OBJDIR/vst3_$(basename "${src%.*}").omm"
-        clang++ $ARCHS $MIN -O2 -std=gnu++17 -fobjc-arc "${WARNFLAGS[@]}" "${DEFS[@]}" \
-                "${INCLUDES[@]}" "${VST3_INCLUDES[@]}" -x objective-c++ -c "$src" -o "$obj"
-        objects+=("$obj")
-    done
-
     rm -rf "$out"
     mkdir -p "$out/Contents/MacOS"
 
-    clang++ $ARCHS $MIN -bundle "${objects[@]}" "$FREETYPE_LIB" "${COMMON_LIBS[@]}" -o "$bin"
+    clang++ $ARCHS $MIN -bundle -Wl,-dead_strip -Wl,-S -Wl,-u,_GetPluginFactory "${objects[@]}" "$SYNTHLIB_LIB" "$FREETYPE_LIB" "${COMMON_LIBS[@]}" -o "$bin"
 
     # A bundle needs its Info.plist and the four-character PkgInfo, or the host will not look inside it.
     cat > "$out/Contents/Info.plist" <<PLIST
@@ -499,20 +375,6 @@ build_au() {
     print ""
     print "==> Audio Unit"
 
-    for src in "${AU_C_SOURCES[@]}"; do
-        local obj="$OBJDIR/au_$(basename "${src%.*}").o"
-        clang $ARCHS $MIN -O2 -std=gnu11 "${WARNFLAGS[@]}" "${DEFS[@]}" "${INCLUDES[@]}" \
-              -c "$src" -o "$obj"
-        objects+=("$obj")
-    done
-
-    for src in "${AU_OBJC_SOURCES[@]}"; do
-        local obj="$OBJDIR/au_$(basename "${src%.*}").om"
-        clang $ARCHS $MIN -O2 -std=gnu11 -fobjc-arc "${WARNFLAGS[@]}" "${DEFS[@]}" "${INCLUDES[@]}" \
-              -x objective-c -c "$src" -o "$obj"
-        objects+=("$obj")
-    done
-
     # The one class that must be compiled into the product - see synthlibAuViewFactory.h
     local factory="$OBJDIR/auViewFactory.m"
     print "#import \"synthlibAuViewFactory.h\"\nSYNTHLIB_AU_VIEW_FACTORY($AU_VIEW_CLASS)" > "$factory"
@@ -523,7 +385,7 @@ build_au() {
     rm -rf "$out"
     mkdir -p "$out/Contents/MacOS"
 
-    clang++ $ARCHS $MIN -bundle "${objects[@]}" "$FREETYPE_LIB" \
+    clang++ $ARCHS $MIN -bundle -Wl,-dead_strip -Wl,-S -Wl,-u,_SynthLibAUFactory "${objects[@]}" "$SYNTHLIB_LIB" "$FREETYPE_LIB" \
             "${COMMON_LIBS[@]}" "${AU_LIBS[@]}" -o "$bin"
 
     # THE AudioComponents ARRAY IS HOW macOS FINDS AN AUDIO UNIT AT ALL. Without it the bundle is

@@ -13,6 +13,8 @@ set -o pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$HERE/tools/modulestatus"
 
+"$HERE/../SynthLib/do-build"
+
 cc -O2 -std=gnu11 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare \
    -I"$HERE/src" -I"$HERE/../SynthLib/src" \
    -o "$OUT" \
@@ -20,7 +22,7 @@ cc -O2 -std=gnu11 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-sign-compare 
    "$HERE/src/soundEngine.c" "$HERE/src/paramCurves.c" "$HERE/src/waveModels.c" "$HERE/src/nordSample.c" \
    "$HERE/src/dataBase.c" "$HERE/src/globalVars.c" "$HERE/src/cableChain.c" \
    "$HERE/src/moduleResourcesAccess.c" "$HERE/src/patchParamsResources.c" \
-   "$HERE/src/noteStack.c" "$HERE/src/protocol.c" "$HERE/../SynthLib/src/utils.c" \
+   "$HERE/src/noteStack.c" "$HERE/src/protocol.c" "$HERE/../SynthLib/build/libSynthLib.a" \
    "$HERE/plugin/g2HostIo.c" "$HERE/tools/modulestatus_stubs.c" -lm
 
 echo "built $OUT" >&2

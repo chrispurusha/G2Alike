@@ -170,7 +170,10 @@ def as_list(value):
 
 
 def expand(path):
-    return path.replace('$(PROJECT_DIR)', '${CMAKE_CURRENT_SOURCE_DIR}').replace('$(SRCROOT)', '${CMAKE_CURRENT_SOURCE_DIR}')
+    return path.replace('$(PROJECT_DIR)/../SynthLib', '${SYNTHLIB_DIR}').replace('$(PROJECT_DIR)', '${CMAKE_CURRENT_SOURCE_DIR}').replace('$(SRCROOT)', '${CMAKE_CURRENT_SOURCE_DIR}')
+
+
+SYNTHLIB_SOURCES = '../SynthLib/src'
 
 
 def read_target(model):
@@ -181,7 +184,8 @@ def read_target(model):
     assert len(apps) == 1, 'expected one application target'
     target   = apps[0]
 
-    folders    = []
+    # SynthLib is a library on the Mac, so the Xcode target no longer lists it; a port compiles it here.
+    folders    = [SYNTHLIB_SOURCES]
     exceptions = set()
     for gid in target.get('fileSystemSynchronizedGroups', []):
         group = objects[gid]
@@ -215,7 +219,7 @@ def sources(folders, exceptions):
             for name in sorted(filenames):
                 rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
                 if name.endswith(SOURCE_EXTENSIONS) and rel not in exceptions:
-                    found.append(rel)
+                    found.append(rel.replace('../SynthLib', '${SYNTHLIB_DIR}'))
     return found
 
 
@@ -291,7 +295,7 @@ def generate():
     debug_o  = debug.get('GCC_OPTIMIZATION_LEVEL', '0')
     rel_o    = release.get('GCC_OPTIMIZATION_LEVEL', 's')      # Xcode's own default for Release
     werror   = 'ON' if debug.get('GCC_TREAT_WARNINGS_AS_ERRORS') == 'YES' else 'OFF'
-    libs     = [expand(l) for l in as_list(debug.get('OTHER_LDFLAGS')) if l.endswith('.a')]
+    libs     = [expand(l) for l in as_list(debug.get('OTHER_LDFLAGS')) if l.endswith('.a') and 'libSynthLib' not in l]
     objc_flags = ';'.join(f for f, key in (('-fobjc-arc', 'CLANG_ENABLE_OBJC_ARC'), ('-fmodules', 'CLANG_ENABLE_MODULES'))
                           if debug.get(key) == 'YES')
 
@@ -321,7 +325,9 @@ endif()
 # Xcode treats warnings as errors; a new port usually wants to see them first (cmake -DG2_WERROR=OFF)
 option(G2_WERROR "warnings are errors, as in the Xcode project" {werror})
 
-# The synchronized folders {', '.join(folders)}, every source file in them{' except the project\'s exceptions' if exceptions else ''}.
+set(SYNTHLIB_DIR "${{CMAKE_CURRENT_SOURCE_DIR}}/../SynthLib" CACHE PATH "shared SynthLib checkout")
+
+# The synchronized folders {', '.join(f.replace('../', '') for f in folders)}, every source file in them{' except the project\'s exceptions' if exceptions else ''}.
 set(G2_SOURCES
 {cmake_list(portable)}
 )

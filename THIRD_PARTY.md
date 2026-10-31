@@ -1,6 +1,6 @@
 # Third-Party Software
 
-Third-party libraries are maintained in [SynthLib](https://github.com/chrispurusha/SynthLib) and included via git submodule. See SynthLib's THIRD_PARTY.md for the full list. Libraries used by this project:
+Third-party libraries are maintained in [SynthLib](https://github.com/chrispurusha/SynthLib) and linked from the shared checkout beside this project. See SynthLib's THIRD_PARTY.md for the full list. Libraries used by this project:
 
 ---
 

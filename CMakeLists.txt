@@ -28,33 +28,33 @@ set(SYNTHLIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../SynthLib" CACHE PATH "shared Sy
 
 # The synchronized folders SynthLib/src, src, Resources, every source file in them.
 set(G2_SOURCES
-    ${SYNTHLIB_DIR}/src/alertDialog.c
-    ${SYNTHLIB_DIR}/src/bankBrowser.cpp
-    ${SYNTHLIB_DIR}/src/breakpointGraph.c
-    ${SYNTHLIB_DIR}/src/clickRegion.c
-    ${SYNTHLIB_DIR}/src/contextMenu.c
-    ${SYNTHLIB_DIR}/src/fileBrowser.cpp
-    ${SYNTHLIB_DIR}/src/floatingPanel.c
-    ${SYNTHLIB_DIR}/src/geometry.c
-    ${SYNTHLIB_DIR}/src/inputState.c
-    ${SYNTHLIB_DIR}/src/inputStateGlfw.c
-    ${SYNTHLIB_DIR}/src/menuBar.c
-    ${SYNTHLIB_DIR}/src/midiPortDialog.c
-    ${SYNTHLIB_DIR}/src/prefs.cpp
-    ${SYNTHLIB_DIR}/src/renderBackend.c
-    ${SYNTHLIB_DIR}/src/renderBackendGL.c
-    ${SYNTHLIB_DIR}/src/synthlibGlobals.c
-    ${SYNTHLIB_DIR}/src/synthlibHost.c
-    ${SYNTHLIB_DIR}/src/synthlibMidi.c
-    ${SYNTHLIB_DIR}/src/synthlibMidiPorts.c
-    ${SYNTHLIB_DIR}/src/synthlibPersistence.c
-    ${SYNTHLIB_DIR}/src/synthlibPopups.c
-    ${SYNTHLIB_DIR}/src/synthlibQueue.c
-    ${SYNTHLIB_DIR}/src/synthlibScale.c
-    ${SYNTHLIB_DIR}/src/synthlibVersion.c
-    ${SYNTHLIB_DIR}/src/synthlibWindow.c
-    ${SYNTHLIB_DIR}/src/utils.c
-    ${SYNTHLIB_DIR}/src/utilsGraphics.c
+    "${SYNTHLIB_DIR}/src/alertDialog.c"
+    "${SYNTHLIB_DIR}/src/bankBrowser.cpp"
+    "${SYNTHLIB_DIR}/src/breakpointGraph.c"
+    "${SYNTHLIB_DIR}/src/clickRegion.c"
+    "${SYNTHLIB_DIR}/src/contextMenu.c"
+    "${SYNTHLIB_DIR}/src/fileBrowser.cpp"
+    "${SYNTHLIB_DIR}/src/floatingPanel.c"
+    "${SYNTHLIB_DIR}/src/geometry.c"
+    "${SYNTHLIB_DIR}/src/inputState.c"
+    "${SYNTHLIB_DIR}/src/inputStateGlfw.c"
+    "${SYNTHLIB_DIR}/src/menuBar.c"
+    "${SYNTHLIB_DIR}/src/midiPortDialog.c"
+    "${SYNTHLIB_DIR}/src/prefs.cpp"
+    "${SYNTHLIB_DIR}/src/renderBackend.c"
+    "${SYNTHLIB_DIR}/src/renderBackendGL.c"
+    "${SYNTHLIB_DIR}/src/synthlibGlobals.c"
+    "${SYNTHLIB_DIR}/src/synthlibHost.c"
+    "${SYNTHLIB_DIR}/src/synthlibMidi.c"
+    "${SYNTHLIB_DIR}/src/synthlibMidiPorts.c"
+    "${SYNTHLIB_DIR}/src/synthlibPersistence.c"
+    "${SYNTHLIB_DIR}/src/synthlibPopups.c"
+    "${SYNTHLIB_DIR}/src/synthlibQueue.c"
+    "${SYNTHLIB_DIR}/src/synthlibScale.c"
+    "${SYNTHLIB_DIR}/src/synthlibVersion.c"
+    "${SYNTHLIB_DIR}/src/synthlibWindow.c"
+    "${SYNTHLIB_DIR}/src/utils.c"
+    "${SYNTHLIB_DIR}/src/utilsGraphics.c"
     src/appMenuBar.c
     src/audioOutput.c
     src/backdoor.c
@@ -115,7 +115,7 @@ set(G2_SOURCES
 
 # Objective-C: Apple only
 set(G2_APPLE_SOURCES
-    ${SYNTHLIB_DIR}/src/renderBackendMetal.m
+    "${SYNTHLIB_DIR}/src/renderBackendMetal.m"
     src/misc.mm
 )
 
@@ -150,9 +150,9 @@ if(APPLE)
         "${SYNTHLIB_DIR}/ThirdParty/freetype/include"
     )
     target_link_libraries(G2Alike PRIVATE
-        "${SYNTHLIB_DIR}/ThirdParty/glfw/build/src/libglfw3.a"
-        "${SYNTHLIB_DIR}/ThirdParty/freetype/build/libfreetype.a"
-        "${SYNTHLIB_DIR}/ThirdParty/libusb/libusb/.libs/libusb-1.0.a"
+        "${SYNTHLIB_DIR}/build/libglfw3.a"
+        "${SYNTHLIB_DIR}/build/libfreetype.a"
+        "${SYNTHLIB_DIR}/build/libusb-1.0.a"
         "-framework Cocoa"
         "-framework Security"
         "-framework IOKit"

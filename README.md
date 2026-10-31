@@ -102,81 +102,27 @@ Xcode and its command line tools are also required:
 xcode-select --install
 ```
 
-### 1. Clone with submodules
+### 1. Clone beside SynthLib
 
-The third-party libraries (glfw, freetype, libusb) are nested submodules inside SynthLib. The `--recurse-submodules` flag is required — without it the build will fail.
-
-```
-git clone --recurse-submodules https://github.com/chrispurusha/G2Alike.git
-```
-
-If you already cloned without `--recurse-submodules`:
+SynthLib is a shared checkout beside this project, not part of it:
 
 ```
-git submodule update --init --recursive
+git clone --recurse-submodules https://github.com/chrispurusha/SynthLib.git
+git clone https://github.com/chrispurusha/G2Alike.git
 ```
 
-### 2. Update SynthLib (contributors / returning developers)
+A project builds against whatever SynthLib is checked out, so keep it up to date with `git -C ../SynthLib pull`.
 
-SynthLib is a shared library submodule pinned to a specific commit. If SynthLib has been updated since you last pulled, advance the pin before building:
+### 2. Build SynthLib
 
-```
-git submodule update --remote SynthLib
-git add SynthLib && git commit -m "Update SynthLib"
-```
+Nothing to do by hand: each build runs `SynthLib/do-build` first, which builds the library and its third-party
+libraries when they are out of date. See `SynthLib/Docs/build.md`.
 
-Do not manually copy files into the `SynthLib/` directory — this will cause conflicts on the next update.
-
-### 3. Build third-party libraries
-
-All commands run from the root of the cloned repository.
-
-**glfw:**
-
-```
-cmake -S SynthLib/ThirdParty/glfw -B SynthLib/ThirdParty/glfw/build \
-  -DBUILD_SHARED_LIBS=OFF \
-  -DGLFW_BUILD_DOCS=OFF \
-  -DGLFW_BUILD_EXAMPLES=OFF \
-  -DGLFW_BUILD_TESTS=OFF \
-  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
-cmake --build SynthLib/ThirdParty/glfw/build
-```
-
-**freetype:**
-
-```
-cmake -S SynthLib/ThirdParty/freetype -B SynthLib/ThirdParty/freetype/build \
-  -DBUILD_SHARED_LIBS=OFF \
-  -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-  -DFT_DISABLE_BROTLI=ON \
-  -DFT_DISABLE_BZIP2=ON \
-  -DFT_DISABLE_HVF=ON \
-  -DFT_DISABLE_PNG=ON \
-  -DFT_DISABLE_ZLIB=ON
-cmake --build SynthLib/ThirdParty/freetype/build
-```
-
-**libusb:**
-
-```
-cd SynthLib/ThirdParty/libusb
-export CFLAGS="-arch arm64 -arch x86_64"
-export CXXFLAGS="-arch arm64 -arch x86_64"
-export LDFLAGS="-arch arm64 -arch x86_64"
-autoreconf -fi
-./configure --disable-shared --enable-static
-make
-cd ../../..
-```
-
-### 4. Build with Xcode
+### 3. Build with Xcode
 
 Open `G2Alike.xcodeproj` and build normally.
 
-### 5. Code formatting (optional)
+### 4. Code formatting (optional)
 
 After editing source files, run from the repository root:
 
