@@ -422,10 +422,10 @@ void render_patch_params_panel(void) {
     // rows above it - so the dial goes two rows below where the block used to start.
     dialH                             = 20.0;
     snprintf(buf, sizeof(buf), "%u cnt", (unsigned)vibratoAmount);
-    gPatchParamRects[pPVibratoAmount] = render_dial_with_text(mainArea, (tRectangle){{x, (y - 10.0) + (btnH * 2.0)}, {20.0, dialH}}, "Amount", buf, btnH, vibratoAmount, 100, 0, (tRgb)RGB_BACKGROUND_GREY);
+    gPatchParamRects[pPVibratoAmount] = render_dial_with_text(mainArea, (tRectangle){{x, (y - 10.0) + (btnH * 2.0)}, {20.0, dialH}}, "Amount", buf, btnH, vibratoAmount, 101, 0, (tRgb)RGB_BACKGROUND_GREY);
     x                                += get_text_width((char *)"100 cnt", btnH, eCache) + 8.0;
     snprintf(buf, sizeof(buf), "%.2f Hz", vibrato_rate_hz((double)vibratoRate));
-    gPatchParamRects[pPVibratoRate]   = render_dial_with_text(mainArea, (tRectangle){{x, (y - 10.0) + (btnH * 2.0)}, {20.0, dialH}}, "Rate", buf, btnH, vibratoRate, 127, 0, (tRgb)RGB_BACKGROUND_GREY);
+    gPatchParamRects[pPVibratoRate]   = render_dial_with_text(mainArea, (tRectangle){{x, (y - 10.0) + (btnH * 2.0)}, {20.0, dialH}}, "Rate", buf, btnH, vibratoRate, 128, 0, (tRgb)RGB_BACKGROUND_GREY);
     y                                += rowH;
 
     // ── Glide ──────────────────────────────────────────────────────
@@ -433,7 +433,7 @@ void render_patch_params_panel(void) {
     render_text(mainArea, (tRectangle){{boxX + margin, y}, {BLANK_SIZE, btnH}}, "Glide");
     y                                += secH;
     x                                 = render_pp_row(boxX + margin, y, btnH, kPPGlide, kPPGlideCount);
-    gPatchParamRects[pPGlideTime]     = render_dial_with_text(mainArea, (tRectangle){{x, (y - 10.0) + (btnH * 2.0)}, {20.0, dialH}}, "Time", get_glide_time_str(glideTime), btnH, glideTime, 127, 0, (tRgb)RGB_BACKGROUND_GREY);
+    gPatchParamRects[pPGlideTime]     = render_dial_with_text(mainArea, (tRectangle){{x, (y - 10.0) + (btnH * 2.0)}, {20.0, dialH}}, "Time", get_glide_time_str(glideTime), btnH, glideTime, 128, 0, (tRgb)RGB_BACKGROUND_GREY);
     y                                += rowH;
 
     // ── Bend ───────────────────────────────────────────────────────
