@@ -184,6 +184,20 @@ Device" (README, "Windows") worked - the editor went Online, then every send tim
 - The WinUSB steps are in README.md ("Windows") and in `platform/windows/Read Me First.txt`, which
   tools/do-windows puts beside the .exe.
 
+**2026-11-04, Windows (native plug-in build).** The VST3 built ON Windows for the first time, in the Parallels
+VM (Windows 11 on ARM), by `tools/do-windows-plugin.ps1`: llvm-mingw's native `ucrt-aarch64` toolchain and the
+VST3 SDK's two submodules, no MSYS2, CMake or Python. Same 73 C and 11 C++ files as the zsh script (the lists
+are read from it and from `do-plugin`), FreeType compiled directly; `build-win-arm64\G2Alike.vst3`, 5.0 MB,
+exporting GetPluginFactory/InitDll/ExitDll, one warning (`renderParams.c:1098`, `long` is 32 bits). The editor's
+GL context now asks for 4x MSAA (g2ViewWin notes §8) - the jagged drawing CT saw. NOT YET LOADED IN A HOST:
+no host is installed in this VM. Still open: DPI scaling - this VM runs at 200% (192 dpi), so the editor is
+either half-size (a DPI-aware host) or bitmap-stretched (one that is not); IPlugViewContentScaleSupport.
+Build instructions moved from README.md into `Docs/build.md`. Later the same day the EDITOR and the RELEASE
+too: `tools\do-windows.ps1` (sources from `CMakeLists.txt` + `platform.cmake`, GLFW/FreeType/libusb compiled
+directly, libusb's `config.h` written by `tools\windows-common.ps1`) and `do-release-windows.ps1` (both
+architectures, the Mac script's checks). Both exes and both plug-ins build on the VM, with only the four known
+warnings; the arm64 editor starts and opens its window. Not yet tried with the G2 or a patch.
+
 ## Rules that still hold on Windows
 
 - `CLAUDE.md` at the root of the GitHub folder on the Mac carries the project's rules; the essentials: comments

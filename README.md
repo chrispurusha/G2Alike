@@ -40,7 +40,7 @@ run: More info > Run anyway. The plug-in (experimental, VST3 only) is the single
 copy it into `C:\Program Files\Common Files\VST3` (deleting any `G2Alike.vst3` *folder* an older release put
 there) and rescan in the host. Use the zip that matches the
 host - x64 for an ordinary PC, arm64 for a native Windows on ARM host. See
-[Docs/windows-port-plan.md](./Docs/windows-port-plan.md) for how it is built.
+[Docs/build.md](./Docs/build.md) for how it is built.
 
 **The G2 needs Windows' generic USB driver, WinUSB, once** - Clavia's driver will not work with this
 editor. With the G2 connected (in Parallels: Devices > USB & Bluetooth > the G2): Device Manager > the G2,
@@ -84,96 +84,10 @@ as an instrument. It needs a VST3 host; it does not run on its own.
 
 ## Building
 
-### Prerequisites
+See [Docs/build.md](./Docs/build.md): the editor and both plug-in formats on macOS, and the editor and
+the VST3 for Windows - cross-built on the Mac or built on Windows itself.
 
-Install the following via Homebrew (https://brew.sh):
-
-```
-brew install cmake autoconf automake libtool uncrustify
-```
-
-- **cmake** — builds glfw and freetype
-- **autoconf / automake / libtool** — builds libusb
-- **uncrustify** — code formatter (optional, only needed when editing source)
-
-Xcode and its command line tools are also required:
-
-```
-xcode-select --install
-```
-
-### 1. Clone beside SynthLib
-
-SynthLib is a shared checkout beside this project, not part of it:
-
-```
-git clone --recurse-submodules https://github.com/chrispurusha/SynthLib.git
-git clone https://github.com/chrispurusha/G2Alike.git
-```
-
-A project builds against whatever SynthLib is checked out, so keep it up to date with `git -C ../SynthLib pull`.
-
-### 2. Build SynthLib
-
-Nothing to do by hand: each build runs `SynthLib/do-build` first, which builds the library and its third-party
-libraries when they are out of date. See `SynthLib/Docs/build.md`.
-
-### 3. Build with Xcode
-
-Open `G2Alike.xcodeproj` and build normally.
-
-### 4. Code formatting (optional)
-
-After editing source files, run from the repository root:
-
-```
-./do-uncrustify
-```
-
-Note this covers `src/` and `SynthLib/src/` only — **not** `plugin/` or `SynthLib/plugin/`.
-
-## Building the plug-ins (experimental)
-
-The sound engine can also be built as a plug-in, in **two formats from the same sources**: a VST3
-and an Audio Unit. It plays a `.pch2` file rather than talking to a G2, and it renders through the
-same `soundEngine.c` the application uses.
-
-### Prerequisites
-
-Only the VST3 needs anything extra. Download the
-[VST3 SDK](https://github.com/steinbergmedia/vst3sdk) — MIT licensed, so it is compatible with this
-project's GPLv3 — and place it at `~/Documents/vst3sdk`, or point `VST3_SDK` at wherever you put it.
-Only its `pluginterfaces/` directory is compiled, plus one file from `public.sdk` that does nothing
-but instantiate interface IDs. No CMake is involved, and the SDK does **not** need building first.
-
-The Audio Unit needs nothing at all — it is written against the system's own C API — so
-`./do-plugin au` works on a machine that has never downloaded the SDK.
-
-### Build
-
-```
-./do-plugin            # both formats
-./do-plugin vst3       # or just one
-./do-plugin au
-```
-
-Writes `build/G2Alike.vst3` and `build/G2Alike.component` — universal (arm64 + x86_64), ad-hoc
-signed — and **installs each one** into the system-wide plug-in folder, over whatever was there
-before, clearing its quarantine flag:
-
-```
-/Library/Audio/Plug-Ins/VST3/G2Alike.vst3
-/Library/Audio/Plug-Ins/Components/G2Alike.component
-```
-
-Those folders are group-writable on an administrator account, so no `sudo` is needed. Pass
-`--no-install` to build without touching them. As with the application, there is no paid Apple
-Developer membership behind this, so a host would otherwise refuse to load the bundle until its
-quarantine flag was cleared — hence the automatic `xattr`.
-
-An Audio Unit is found through the system's component registry rather than by path, so `do-plugin`
-also restarts `AudioComponentRegistrar` after installing one. If a host still does not list it,
-quit the host and open it again.
+## Using the plug-in
 
 ### Which patch it plays
 

@@ -165,6 +165,13 @@ void apply_top_bar_height(void) {
     synthlib_request_redraw();
 }
 
+#if defined (_WIN32)
+// notes §46: Windows holds the loop in its own modal one while a window edge is dragged; draw from there
+static void window_refresh(void) {
+    render_frame();
+}
+#endif
+
 void init_graphics(void) {
     char              title[128]           = {0};
 
@@ -213,6 +220,9 @@ void init_graphics(void) {
             .character   = char_event,
             .scroll      = scroll_event,
             .windowFocus = window_focus_callback,   // clears held modifiers — see inputState.h
+#if defined (_WIN32)
+            .windowRefresh = window_refresh,
+#endif
         },
     }, NULL);
 

@@ -50,3 +50,13 @@ not leave the pointer hidden, so the tick timer releases the drag once no button
 The document is selected and the context made current BEFORE g2_draw_init(), which sets up the current
 document's top bar and builds the glyph textures in the current context. The backend is chosen
 explicitly (OpenGL, the only one linked on Windows).
+
+## 8. Multisampling
+
+The same fix SynthLib's `synthlibPanelViewWin.c` (its notes §5) made for the AllAlike plug-ins, brought back
+here 2026-11-04: until then the editor's pixel format came from a classic `ChoosePixelFormat()`, which cannot
+ask for samples, so cables, dials and text edges were jagged where the Mac (Metal) and the Windows application
+(GLFW_SAMPLES) draw with `GFX_MSAA_SAMPLES` (4). The hidden root context fetches `wglChoosePixelFormatARB`;
+since a window's pixel format is set once, the root window and context are made again with the multisampled
+format, and every editor uses that format and shares lists with that root. Without the extension, or if the
+driver refuses the format, the plain format stays - jagged but drawn. `gl_init()` enables `GL_MULTISAMPLE`.

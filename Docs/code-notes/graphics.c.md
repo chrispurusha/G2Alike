@@ -304,3 +304,11 @@ label when the parse is done ("Sending to the G2...", usbComms.c notes §78), an
 
 Only the LABEL changes: the op is the same one, still counted in gDeviceOpInProgress, and still ended by
 eRspFileLoad. A stage that arrives after the op has ended is ignored, so it cannot leave a label behind.
+
+## 46. `window_refresh()` - Windows only (2026-11-04)
+
+While a window edge is dragged, Windows runs a modal size loop inside DefWindowProc and `glfwWaitEvents()`
+does not return until the button is let go, so `do_graphics_loop()` drew nothing and the window stayed black
+through the drag, sometimes after it (CT, on the Parallels VM). GLFW calls the window-refresh callback from
+WM_PAINT inside that loop; this draws the frame there, at the size the framebuffer callback has just set.
+`#if defined (_WIN32)` by the port's rule - the Mac compiles exactly what it did.

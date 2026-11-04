@@ -96,10 +96,34 @@ void cursor_release(void) {
 // OpenGL
 // ------------------------------------------------------------------------------------------------
 
+// WGL_ARB_pixel_format and WGL_ARB_multisample, which windows.h does not name
+#define WGL_DRAW_TO_WINDOW_ARB       (0x2001)
+#define WGL_ACCELERATION_ARB         (0x2003)
+#define WGL_SUPPORT_OPENGL_ARB       (0x2010)
+#define WGL_DOUBLE_BUFFER_ARB        (0x2011)
+#define WGL_PIXEL_TYPE_ARB           (0x2013)
+#define WGL_COLOR_BITS_ARB           (0x2014)
+#define WGL_ALPHA_BITS_ARB           (0x201B)
+#define WGL_FULL_ACCELERATION_ARB    (0x2027)
+#define WGL_TYPE_RGBA_ARB            (0x202B)
+#define WGL_SAMPLE_BUFFERS_ARB       (0x2041)
+#define WGL_SAMPLES_ARB              (0x2042)
+
+typedef BOOL (WINAPI * tChoosePixelFormatArb)(HDC, const int *, const FLOAT *, UINT, int *, UINT *);
+
+static int gMsaaFormat = 0;    // notes §8: 0 until the driver offers a multisampled format
+
 static bool set_pixel_format(HDC dc) {
     PIXELFORMATDESCRIPTOR pfd = {0};
 
-    pfd.nSize      = sizeof(pfd);
+    if (gMsaaFormat != 0) {
+        DescribePixelFormat(dc, gMsaaFormat, sizeof(pfd), &pfd);
+
+        if (SetPixelFormat(dc, gMsaaFormat, &pfd) == TRUE) {
+            return true;
+        }
+    }
+    pfd.nSize     = sizeof(pfd);
     pfd.nVersion   = 1;
     pfd.dwFlags    = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
     pfd.iPixelType = PFD_TYPE_RGBA;
@@ -110,6 +134,39 @@ static bool set_pixel_format(HDC dc) {
     int format = ChoosePixelFormat(dc, &pfd);
 
     return (format != 0) && (SetPixelFormat(dc, format, &pfd) == TRUE);
+}
+
+// notes §8: asked of the driver through the root context; the host's own context is put back after
+static void find_msaa_format(void) {
+    HGLRC previousRc = wglGetCurrentContext();
+    HDC   previousDc = wglGetCurrentDC();
+
+    if (wglMakeCurrent(gRootDc, gRootRc) == FALSE) {
+        return;
+    }
+    tChoosePixelFormatArb choose = (tChoosePixelFormatArb)(void *)wglGetProcAddress("wglChoosePixelFormatARB");
+
+    if ((choose != NULL) && (GFX_MSAA_SAMPLES > 1)) {
+        const int attributes[] = {
+            WGL_DRAW_TO_WINDOW_ARB, TRUE,
+            WGL_SUPPORT_OPENGL_ARB, TRUE,
+            WGL_DOUBLE_BUFFER_ARB,  TRUE,
+            WGL_ACCELERATION_ARB,   WGL_FULL_ACCELERATION_ARB,
+            WGL_PIXEL_TYPE_ARB,     WGL_TYPE_RGBA_ARB,
+            WGL_COLOR_BITS_ARB,     32,
+            WGL_ALPHA_BITS_ARB,     8,
+            WGL_SAMPLE_BUFFERS_ARB, 1,
+            WGL_SAMPLES_ARB,        GFX_MSAA_SAMPLES,
+            0
+        };
+        int  format = 0;
+        UINT count  = 0;
+
+        if ((choose(gRootDc, attributes, NULL, 1, &format, &count) == TRUE) && (count > 0)) {
+            gMsaaFormat = format;
+        }
+    }
+    wglMakeCurrent(previousDc, previousRc);
 }
 
 static LRESULT CALLBACK view_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -155,7 +212,43 @@ static bool ensure_root_context(void) {
         return false;
     }
     gRootRc = wglCreateContext(gRootDc);
-    return gRootRc != NULL;
+
+    if (gRootRc == NULL) {
+        return false;
+    }
+    find_msaa_format();
+
+    if (gMsaaFormat == 0) {
+        return true;
+    }
+    // notes §8: a window's pixel format is set once, so the root is made again with the multisampled one
+    HWND  window = CreateWindowExW(0, gClassName, L"", WS_POPUP, 0, 0, 1, 1, NULL, NULL, gModule, NULL);
+    HDC   dc     = (window != NULL) ? GetDC(window) : NULL;
+    HGLRC rc     = ((dc != NULL) && set_pixel_format(dc)) ? wglCreateContext(dc) : NULL;
+
+    if (rc == NULL) {
+        gMsaaFormat = 0;    // keep the plain root, and plain editors with it
+
+        if (dc != NULL) {
+            ReleaseDC(window, dc);
+        }
+
+        if (window != NULL) {
+            DestroyWindow(window);
+        }
+        return true;
+    }
+
+    if (wglGetCurrentContext() == gRootRc) {
+        wglMakeCurrent(NULL, NULL);
+    }
+    wglDeleteContext(gRootRc);
+    ReleaseDC(gRootWindow, gRootDc);
+    DestroyWindow(gRootWindow);
+    gRootWindow = window;
+    gRootDc     = dc;
+    gRootRc     = rc;
+    return true;
 }
 
 static void make_current(tG2Win * w) {
