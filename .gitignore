@@ -25,3 +25,6 @@ tools/morphcheck
 tools/render
 tools/tone
 tools/vst3host
+
+# Finder custom-folder icon: "Icon" + carriage return, an invalid name on Windows
+Icon[]
