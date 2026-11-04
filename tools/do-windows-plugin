@@ -45,12 +45,35 @@ NAME="G2Alike"
 # do-plugin's SOURCES and CXX_SOURCES, with HERE pointing at the project as they expect
 eval "$(sed -n '/^SOURCES=(/,/^)/p; /^CXX_SOURCES=(/,/^)/p' $ROOT/do-plugin | sed "s|\$HERE|$ROOT|g")"
 
+# SynthLib itself: the Mac links libSynthLib.a, so do-plugin no longer names these; Windows compiles them.
+# Not the window/GLFW half (synthlibWindow.c, inputStateGlfw.c) - the host owns the window here.
+SYNTHLIB_SRC=$ROOT/../SynthLib/src
 SOURCES+=(
     "$ROOT/plugin/g2ViewWin.c"
-    "$ROOT/../SynthLib/src/renderBackendGL.c"
-    "$ROOT/../SynthLib/src/synthlibGlobals.c"
-    "$ROOT/../SynthLib/src/synthlibPersistence.c"
+    "$SYNTHLIB_SRC/alertDialog.c"
+    "$SYNTHLIB_SRC/clickRegion.c"
+    "$SYNTHLIB_SRC/contextMenu.c"
+    "$SYNTHLIB_SRC/floatingPanel.c"
+    "$SYNTHLIB_SRC/geometry.c"
+    "$SYNTHLIB_SRC/inputState.c"
+    "$SYNTHLIB_SRC/menuBar.c"
+    "$SYNTHLIB_SRC/renderBackend.c"
+    "$SYNTHLIB_SRC/renderBackendGL.c"
+    "$SYNTHLIB_SRC/synthlibGlobals.c"
+    "$SYNTHLIB_SRC/synthlibHost.c"
+    "$SYNTHLIB_SRC/synthlibPersistence.c"
+    "$SYNTHLIB_SRC/synthlibPopups.c"
+    "$SYNTHLIB_SRC/synthlibVersion.c"
+    "$SYNTHLIB_SRC/utils.c"
+    "$SYNTHLIB_SRC/utilsGraphics.c"
+    "$ROOT/../SynthLib/plugin/synthlibLog.c"
     "$ROOT/../SynthLib/plugin/synthlibPluginRegistry.c"
+    "$ROOT/../SynthLib/plugin/synthlibPluginState.c"
+)
+CXX_SOURCES+=(
+    "$SYNTHLIB_SRC/bankBrowser.cpp"
+    "$SYNTHLIB_SRC/fileBrowser.cpp"
+    "$SYNTHLIB_SRC/prefs.cpp"
 )
 VST3_CXX=(
     "$ROOT/../SynthLib/plugin/synthlibPluginVst3.cpp"
