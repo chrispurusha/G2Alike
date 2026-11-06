@@ -427,7 +427,7 @@ static void action_toggle_plugin_economy(int index) {
     bool on = (sound_engine_economy() == false);
 
     (void)index;
-    sound_engine_set_economy(on);    // this instance only: its project saves it, and a new one starts at 96 kHz
+    sound_engine_set_economy(on);    // this instance only: its project saves it, and a new one starts at half rate
 }
 
 // soundEngine notes §202 - the engine's extra threads, for this instance; applied at its next block

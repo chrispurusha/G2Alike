@@ -299,7 +299,7 @@ static void * g2_create(const tSynthLibPluginDesc * desc) {
     }
     note_stack_all_off();
     sound_engine_set_dac_emulation(prefs_get_int(PREF_KEY_DAC_EMULATION, 0) != 0);    // as the dial mode: the prefs file
-    sound_engine_set_economy(false);   // soundEngine notes §205 - a new instance runs at 96 kHz; a project restores its own
+    sound_engine_set_economy(true);    // soundEngine notes §205 - a new instance runs at half rate; a project restores its own
     sound_engine_set_split_mode((prefs_get_int(PREF_KEY_VOICETHREAD, 1) != 0) ? eSplitThreaded : eSplitSerial);   // §202
 
     // All four slots start as the application's new empty patch, so selecting B, C or D in the editor
@@ -857,7 +857,7 @@ static void g2_set_state(void * inst, const void * data, size_t len) {
         sound_engine_set_dac_emulation(state->dac != 0);    // absent keeps the prefs file's setting
     }
     if (state->economy >= 0) {
-        sound_engine_set_economy(state->economy != 0);       // applied at the engine's next block; absent stays 96 kHz
+        sound_engine_set_economy(state->economy != 0);       // applied at the engine's next block; absent stays at half rate
     }
 
     if (state->threads >= 0) {

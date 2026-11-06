@@ -120,4 +120,4 @@ included, since no key could reach them afterwards. The plug-in has the same two
 keyboard plays). It has no note entry, so there *Keys Play Notes* means the host's notes: A-D, and V (the
 voice-area toggle, which Live uses for velocity), are not taken and reach the host. *Keys A-D Select Slots* is
 the old behaviour. R acts either way. The plug-in keeps the choice in its own prefs, apart from the application's,
-and defaults to playing notes like the application.
+and defaults to *Keys A-D Select Slots* (2026-11-06, CT); the application defaults to playing notes.

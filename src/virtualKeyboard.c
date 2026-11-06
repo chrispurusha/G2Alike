@@ -572,9 +572,15 @@ static int32_t held_key_highest_note(void) {
 
 static int gKeysPlayNotes = -1;   // -1 until read from the prefs
 
+#ifdef SYNTHLIB_PLUGIN_BUILD
+#define KEYS_PLAY_NOTES_DEFAULT    (0)   // notes §12 - the plug-in starts with A-D selecting slots
+#else
+#define KEYS_PLAY_NOTES_DEFAULT    (1)
+#endif
+
 bool note_entry_keys_play_notes(void) {
     if (gKeysPlayNotes < 0) {
-        gKeysPlayNotes = (prefs_get_int(PREF_KEY_NOTE_KEYS, 1) != 0) ? 1 : 0;
+        gKeysPlayNotes = (prefs_get_int(PREF_KEY_NOTE_KEYS, KEYS_PLAY_NOTES_DEFAULT) != 0) ? 1 : 0;
     }
     return gKeysPlayNotes != 0;
 }
