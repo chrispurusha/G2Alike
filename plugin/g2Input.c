@@ -37,6 +37,7 @@
 #include "utilsGraphics.h"
 #include "g2Menu.h"
 #include "splitView.h"
+#include "bankBrowser.h"
 #include "fileBrowser.h"
 #include "frontPanel.h"
 #include "misc.h"              // wheel_scroll_speed(), wheel_zoom_speed() - Controls > Scroll / Zoom Speed
@@ -255,7 +256,7 @@ bool g2_input_mouse_event(double x, double y, eClickPhase phase) {
 void g2_input_hover(double x, double y) {
     g2_input_set_mouse(x, y);
 
-    if (handle_file_browser_mouse_move(gMouse) == true) {
+    if ((handle_bank_browser_mouse_move(gMouse) == true) || (handle_file_browser_mouse_move(gMouse) == true)) {   // a browser's scrollbar drags only while it hears the mouse move
         return;
     }
 
