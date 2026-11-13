@@ -1622,6 +1622,16 @@ above). A key released while it is down leaves its voice gated - the envelopes s
 Keyboard module's Gate stays high - and the pedal coming up releases every voice it was holding. A
 new note on such a voice clears the hold; All Notes Off releases them regardless.
 
+**26.4 Morph group modes (2026-11-13).** Each of the eight groups has a mode beside its knob - the Morph
+settings module's parameters 8-15, stored per variation like the knobs (0-7): **Knob**, or the group's
+controller (Wheel, Vel, Keyb, Aft.Tch, Sust.Pd, Ctrl.Pd, P.Stick, G.Wh2; group 5 has a third, G.Wh1).
+In Knob mode the group's amount is the knob, dial/127, for every voice alike - so Vel and Keyb in Knob mode no
+longer move per voice; otherwise it is the controller, as before (velocity and key per voice, §26.2; the
+G2X's global wheels from CC 96 and 97 on the slot's own row). Read in `morph_amount()` for the variation the
+slot plays. A new patch has every group on its controller (dataBase.c's new-patch values), so only patches
+that set a group to Knob change. The mode names are those the instrument's editors show; that the knob is
+the amount in Knob mode is how the instrument behaves - not yet compared on the G2 itself (to-test.md).
+
 ## 27. OscShpB and OscShpA wave shapes
 
 Checked 2026-09-17 against the reference model, at 187.5 Hz and Shape 0, 32, 64, 96

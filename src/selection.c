@@ -202,6 +202,28 @@ void selection_add_rect(tRectangle rect, uint32_t slot, uint32_t location) {
     }
 }
 
+// notes §17 - every morph range the module holds, in every variation, zeroed on the G2 before it is deleted
+static void zero_module_morphs_on_device(tModuleKey key) {
+    tModule * module = get_module(key);
+
+    if ((module == NULL) || !module->active) {
+        return;
+    }
+    uint32_t params = (module->actualParamCount < MAX_NUM_PARAMETERS) ? module->actualParamCount : MAX_NUM_PARAMETERS;
+
+    for (uint32_t variation = 0; variation < NUM_VARIATIONS_USB; variation++) {
+        for (uint32_t param = 0; param < params; param++) {
+            for (uint32_t group = 0; group < NUM_MORPHS; group++) {
+                if (module->param[variation][param].morphRange[group] != 0) {
+                    LOG_DEBUG("zeroing morph: module %u param %u group %u variation %u (was %u)\n", key.index, param, group,
+                              variation, module->param[variation][param].morphRange[group]);
+                    send_param_morph(key.slot, key, param, group, variation, 0);
+                }
+            }
+        }
+    }
+}
+
 // Send cables-then-module delete to the G2 and remove from local DB.
 void delete_module_and_cables(tModuleKey key) {
     uint32_t        slot          = key.slot;
@@ -252,6 +274,7 @@ void delete_module_and_cables(tModuleKey key) {
     // the entries can still be read back and the module they point at still exists — remove_controller
     // _entry() clears a shadow flag on the module's own parameter.
     clear_assignments_for_module(key);
+    zero_module_morphs_on_device(key);   // notes §17
 
     // notes §4
     if (  gParamFocus.valid

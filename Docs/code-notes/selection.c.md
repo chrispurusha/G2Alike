@@ -178,3 +178,13 @@ Return value deliberately ignored: a paste into a column already full to MAX_ROW
 case this cannot place, and unwinding a whole paste - modules, cables and the index remap
 above - is a bigger job than the case is worth. It leaves the paste where it landed rather
 than corrupting the columns around it, which is what the old MAX_ROWS clamp did.
+
+## 17. `zero_module_morphs_on_device()`
+
+A module deleted from the G2 while it still holds a morph range leaves the instrument corrupted until it is
+switched off: from then on every add of DrumSynth, CompLev, Mux8-1X or Clip is refused (error 3) and the slot is
+renamed "Error". Knob and MIDI CC assignments left behind do not do it. Found by another editor's hardware tests
+(NordModularG2-Editor, 2026-11). So `delete_module_and_cables()` zeroes each range the module holds, in every
+variation the G2 keeps (ten, the Mutator's included), after its knob, global knob and MIDI CC assignments and
+before the delete. The writes are unacknowledged (as every morph-range write is) and go in order on the same queue
+as the delete; a module holds a handful, far below the bursts of a hundred and more that were seen to lose values.

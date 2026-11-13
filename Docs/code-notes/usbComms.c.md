@@ -811,3 +811,14 @@ canvas is told to draw it (`call_full_patch_change_notify()`, now BEFORE the pus
 the push, which writes it to the instrument and is the slow part. Between them the busy overlay is given
 its second label (graphics.c notes §45) - "Sending to the G2..." - so the wait is explained rather than
 looking like a load that has not finished.
+
+## 79. Bytes that arrive with a timeout, in `int_rec()` and `rcv_extended()`
+
+An interrupt read on 0x81 that times out just as a header arrives comes back `LIBUSB_ERROR_TIMEOUT` with all 16 bytes
+in the buffer: `usb_bulk_transfer_sync()` cancels the transfer, and a transfer that completes during the cancel still
+reports its `actual_length`. `int_rec()` used to return on the timeout code without looking, so the header was lost,
+the bulk it announced stayed unread on 0x82, and every later bulk read took the message before its own - the G2
+appearing to stop answering, until a power cycle. Found by another editor's long hardware runs (NordModularG2-Editor,
+2026-10), as the root cause of its hangs. Now a timeout that brought bytes is taken as a read. `rcv_extended()` got
+the same rule; it already used a complete message that came with a timeout, but only because its failure path fell
+through to the length and CRC checks. The interrupt reads stay 16 bytes, so one read never swallows the next header.

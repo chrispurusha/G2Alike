@@ -1253,3 +1253,4 @@ from a capture, so they are the ones most likely to be right.
 - Plug-in in Live, Controls > Keys Play Notes (off by default since 11-06): with the editor focused, A-K play Live's computer keyboard and V/C set its velocity; Keys A-D Select Slots: A-D pick slots again
 - Plug-in, in Live: the Patch Settings dials (Vibrato Amount/Rate, Glide Time), the Perf Settings tempo and the topbar tempo dial turn, in every dial mode, and a release ends the drag; the same dials still behave in the application (2026-10-26, canvasDrag.c notes §28)
 - Mono + Auto glide: hold C, press G - glides up; release G - C retriggers and glides back (sound-engine-notes §70, 2026-10-26); and the Patch Settings dials turn in the application again (mouseHandle.c notes §26)
+- Morph knobs (reference §26.4): a group in Knob mode follows its knob - turn one on the G2 and in the editor and compare; Vel/Keyb in Knob mode no longer track per voice; G.Wh1/G.Wh2 from a G2X

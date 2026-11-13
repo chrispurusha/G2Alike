@@ -802,6 +802,10 @@ static double type_ii_attenuator(double dial) {
 #define MORPH_GROUP_KEYBOARD      (2)    // §26.2 - per voice, from its note
 #define MORPH_GROUP_AFTERTOUCH    (3)
 #define MORPH_GROUP_SUSTAIN       (4)    // §26.3 - the sustain pedal, which also holds the notes
+#define MORPH_GROUP_GWHEEL2       (7)    // §26.4 - the G2X's Global Wheel 2
+#define MORPH_MODE_PARAM          (8)    // §26.4 - the Morph settings module's group modes, parameters 8-15
+#define MORPH_MODE_KNOB           (0)
+#define MORPH_MODE_GWHEEL1        (2)    // group 5's third choice
 
 // patchModuleVibrato's Mod setting, in the order the patch-settings dropdown offers them.
 typedef enum {
@@ -2614,12 +2618,44 @@ static double glide_tick_coeff(double setting, bool lin) {
     return 2.0 * (GLIDE_Q23 - floor(GLIDE_Q23 * exp(-log(100.0) / ticks))) / GLIDE_Q23;
 }
 
+// §26.4 - a group's amount, 0..1: its knob in Knob mode, otherwise its controller - velocity and key per voice,
+// the G2X's global wheels from CC 96 and 97. The mode and the knob are the slot's, in the variation it plays.
+static double morph_amount(const tModule * module, uint32_t variation, uint32_t group) {
+    SE_LOCAL;
+
+    const tModule * morphs = get_module_slot(module->key.slot, (uint32_t)locationMorph, (uint32_t)patchModuleMorph);
+    uint32_t        mode   = 1u;
+
+    if ((morphs != NULL) && morphs->active && (variation < NUM_VARIATIONS_USB)) {
+        mode = morphs->param[variation][MORPH_MODE_PARAM + group].value;
+
+        if (mode == MORPH_MODE_KNOB) {
+            return (double)morphs->param[variation][group].value / 127.0;
+        }
+    }
+
+    if (group == MORPH_GROUP_VELOCITY) {
+        return sBuildAxis[eAxisVelocity];
+    }
+
+    if (group == MORPH_GROUP_KEYBOARD) {
+        return sBuildAxis[eAxisKey];
+    }
+
+    if ((group == MORPH_GROUP_SUSTAIN) && (mode == MORPH_MODE_GWHEEL1)) {
+        return (double)atomic_load(&gMidiCcValue[MIDI_ROW_THIS][MIDI_CC_GLOBAL_WHEEL_1]) / 127.0;
+    }
+
+    if (group == MORPH_GROUP_GWHEEL2) {
+        return (double)atomic_load(&gMidiCcValue[MIDI_ROW_THIS][MIDI_CC_GLOBAL_WHEEL_2]) / 127.0;
+    }
+    return (double)atomic_load(&gMorphMilli[group]) / 1000.0;
+}
+
 // A parameter's value with every morph applied. morphRange is a SIGNED 8-bit offset from the dialled
 // value — under 128 it is positive, at or above it is that value minus 256 — so a morph sweeps the
 // parameter from where the knob sits towards its morph target as the controller moves.
 static double param_value(tModule * module, uint32_t variation, uint32_t index) {
-    SE_LOCAL;
-
     const tParam * param = &module->param[variation][index];
     double         value = (double)param->value;
     uint32_t       group = 0;
@@ -2632,9 +2668,7 @@ static double param_value(tModule * module, uint32_t variation, uint32_t index) 
         }
         {
             int32_t offset = (raw < 128) ? (int32_t)raw : ((int32_t)raw - 256);
-            double  amount = (group == MORPH_GROUP_VELOCITY) ? sBuildAxis[eAxisVelocity]
-                             : (group == MORPH_GROUP_KEYBOARD) ? sBuildAxis[eAxisKey]
-                             : ((double)atomic_load(&gMorphMilli[group]) / 1000.0);
+            double  amount = morph_amount(module, variation, group);   // §26.4
 
             value += (double)offset * amount;
         }

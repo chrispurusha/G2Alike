@@ -1478,6 +1478,10 @@ static int rcv_extended(int dataLength, int * response, unsigned int timeout_ms)
         }
         //LOG_DEBUG("RX Ext Delta %dms largest %dms\n", (int)timeDelta, (int)largestDelta);
 
+        if ((retVal == LIBUSB_ERROR_TIMEOUT) && (readLength > 0)) {   // notes §79 - the bytes are the message
+            retVal = LIBUSB_SUCCESS;
+        }
+
         if (retVal == LIBUSB_SUCCESS) {
             if (readLength > 0) {
                 uint8_t responseType = buff[0];
@@ -1553,6 +1557,13 @@ static int int_rec(tPoll poll, int expectedResponse, unsigned int timeout_ms) {
             largestDelta = timeDelta;
         }
         //LOG_DEBUG("RX Int Delta %dms largest %dms\n", (int)timeDelta, (int)largestDelta);
+
+        // notes §79 - a header that arrived as the read timed out is a header: dropping it leaves its bulk
+        // unread, and every later bulk read one message behind
+        if ((retVal == LIBUSB_ERROR_TIMEOUT) && (readLength > 0)) {
+            LOG_DEBUG("int_rec: %d bytes arrived with a timeout - kept\n", readLength);
+            retVal = LIBUSB_SUCCESS;
+        }
 
         if (retVal == LIBUSB_SUCCESS) {
             if (readLength > 0) {
@@ -3136,6 +3147,9 @@ static int send_set_morph_range(uint32_t slot, tParamMorphData * paramMorphData)
     uint8_t  buff[SEND_MESSAGE_SIZE] = {0};
     uint32_t bitPos                  = BYTE_TO_BIT(COMMAND_OFFSET);
 
+    LOG_DEBUG("SET_MORPH_RANGE slot %u loc %u module %u param %u group %u value %u negative %u variation %u\n", slot,
+              paramMorphData->moduleKey.location, paramMorphData->moduleKey.index, paramMorphData->param,
+              paramMorphData->paramMorph, paramMorphData->value, paramMorphData->negative, paramMorphData->variation);
     usb_cmd_slot(buff, &bitPos, slot, COMMAND_WRITE_NO_RESP, SUB_COMMAND_SET_MORPH_RANGE);
     write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->moduleKey.location);
     write_bit_stream(buff, &bitPos, 8, (uint8_t)paramMorphData->moduleKey.index);

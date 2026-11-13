@@ -276,3 +276,9 @@ constant: restore the block, `reverb_step()`, the IR renderer and the node field
 | 177 | RndClkB Rnd2 shift register (§70.9) | a zero word stayed zero | a shift to zero is replaced by 0xEF36D7 - measured on the G2 from Seed 0 | `3c7c365` `src/soundEngine.c` random_draw_with() |
 | 178 | PitchTrack / ZeroCnt zero (§70.7, §70.7a) | 0 units = E2, 82.41 Hz | 0 units = E4, 329.63 Hz - measured on the G2 at four pitches | `3c7c365` `src/soundEngine.c` PITCH_TRACK_ZERO_HZ |
 | 179 | Scratch Ratio M (§70.3) | the input added into the one-pole's state | added to the smoothed word for the tick only - measured on the G2 | `3c7c365` `src/soundEngine.c` the Scratch control tick |
+
+## 2026-11-13
+
+| # | What | Old | New | Old code at |
+|---|---|---|---|---|
+| 180 | Morph group amounts (§26.4) | always the controller - the patch's knobs (Morph module params 0-7) and modes (8-15) never read; groups 7 and 8 never moved | each group's mode: Knob uses the knob (dial/127, every voice alike), otherwise the controller as before; G.Wh1 (group 5, mode 2) and G.Wh2 (group 8) from CC 96/97 | `9a1b8a0` `src/soundEngine.c` `param_value()` |
