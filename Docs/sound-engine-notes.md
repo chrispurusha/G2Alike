@@ -4028,3 +4028,14 @@ sequencer's rate; not sample-exact.
 Level was value/128 like a G2 level dial, so it could only turn a sample down (the default, 100, was -2 dB). It is
 now value/64: 0 silent, 64 the sample as it is, 127 about +6 dB; a new Sampler starts at 64. A Sampler saved before
 this with Level at 100 now plays about 4 dB louder.
+
+## 227. Fixed point for the Phaser, Chorus and Flanger (`sound_engine_set_fixed_point()`) (2026-11-13, CT)
+
+Off by default, and with it off nothing changes. On, the three effects store every word as the instrument does:
+truncated to its 24-bit step - the Phaser's allpass states, feedback and output (full scale 1.0, a step of 2^-23),
+the Flanger's line, feedback and output, and the Chorus's line and output (engine units, a step of 1/0x200000,
+`fixed_word()`). The values already saturate to the 24-bit range everywhere (§196); this adds the resolution, so
+quiet tails and feedback ring down as words do rather than in doubles. Truncation (floor), as an arithmetic shift
+does; whether the instrument rounds at any of these points has not been checked against its parts. Asked for by
+AllAlike's ModAlike (a Float/Fixed button); not yet offered in the application's menus or G2Alike's plug-in.
+Wider use - the Comb Filter, Osc String, Resonator, OverDrive's feedback - is on `todo.md`.

@@ -746,19 +746,24 @@ static double lfo_shape_dial(double v) {
 #define DLYSGL_PARAM_TIMEMOD       (1)         // §52 - DlySingleB: Time 0, Time M 1; the range is mode 0
 #define DSP_WORD_PER_ENGINE        (2097152.0) // 0x200000, 64 units: the engine's 1.0 as a 24-bit word
 
-#define FXIN_PARAM_ACTIVE          (1)
-#define FXIN_PARAM_PAD             (2) // db12PadStrMap: +6 dB, 0 dB, -6 dB, -12 dB
+// notes §227 - a value as the instrument stores it: truncated to its 24-bit step (engine units)
+static double fixed_word(double v) {
+    return floor(v * DSP_WORD_PER_ENGINE) / DSP_WORD_PER_ENGINE;
+}
+
+#define FXIN_PARAM_ACTIVE    (1)
+#define FXIN_PARAM_PAD       (2)       // db12PadStrMap: +6 dB, 0 dB, -6 dB, -12 dB
 
 // §9.1
-#define MAX_NODE_INPUTS            (10)
+#define MAX_NODE_INPUTS      (10)
 
-#define MAX_BACK_EDGES             (16) // notes §192
+#define MAX_BACK_EDGES       (16)       // notes §192
 
 // §9.3
-#define NODE_OUTPUTS               (9)
+#define NODE_OUTPUTS         (9)
 
 // §9.2
-#define MAX_NODE_LEVELS            (12)
+#define MAX_NODE_LEVELS      (12)
 
 // Which connector carries the signal into each module. Everything the walk follows is a module's
 // FIRST input; LevMult and 2toOut take a second as well.
@@ -1860,6 +1865,8 @@ static double                 gDacCoefRateBank[SOUND_ENGINE_MAX_ENGINES];
 #define gDacCoefRate      (gDacCoefRateBank[SE])
 static _Atomic bool           gDacEmulationBank[SOUND_ENGINE_MAX_ENGINES] = {[(0) ... SOUND_ENGINE_MAX_ENGINES - 1] = false};
 #define gDacEmulation     (gDacEmulationBank[SE])
+static _Atomic bool           gFixedPointBank[SOUND_ENGINE_MAX_ENGINES];   // notes §227
+#define gFixedPoint       (gFixedPointBank[SE])
 #define gOutHistoryPos    (gOutHistoryPosBank[SE])
 
 static double                 gOscDecimateBank[SOUND_ENGINE_MAX_ENGINES][OSC_DECIMATE_TAPS];
@@ -2484,6 +2491,18 @@ static void set_dac_emulation_one(bool on) {
     atomic_store(&gDacEmulation, on);
 }
 
+static void set_fixed_point_one(bool on) {
+    SE_LOCAL;
+
+    atomic_store(&gFixedPoint, on);
+}
+
+bool sound_engine_fixed_point(void) {
+    SE_LOCAL;
+
+    return atomic_load(&gFixedPoint);
+}
+
 bool sound_engine_dac_emulation(void) {
     SE_LOCAL;
 
@@ -2972,6 +2991,11 @@ void sound_engine_set_drone_mode(bool on) {
 
 void sound_engine_set_dac_emulation(bool on) {
     FOR_EACH_SLOT_ENGINE(set_dac_emulation_one(on));
+}
+
+// notes §227
+void sound_engine_set_fixed_point(bool on) {
+    FOR_EACH_SLOT_ENGINE(set_fixed_point_one(on));
 }
 
 static void set_economy_one(bool on) {
@@ -9664,12 +9688,15 @@ static double chorus_tap(uint32_t line, uint32_t ch, double input, int32_t phase
     double tap1  = chorus_quantise(CHORUS_TAP1_MAX - (CHORUS_TAP1_SPAN * u)) * scale;
     double tap2  = chorus_quantise(CHORUS_TAP2_MIN + (CHORUS_TAP2_SPAN * u)) * scale;
 
-    gChorusLine[line][ch][gChorusWrite[line][ch]] = (float)input;
+    bool   fixed = atomic_load(&gFixedPoint);   // notes §227
+
+    gChorusLine[line][ch][gChorusWrite[line][ch]] = (float)(fixed ? fixed_word(input) : input);
 
     double wet   = chorus_read(line, ch, tap1) + chorus_read(line, ch, tap2);
+    double out   = (input * (1.0 - (0.5 * amount))) + (wet * 0.5 * amount);
 
     gChorusWrite[line][ch]                        = (gChorusWrite[line][ch] + 1u) % CHORUS_SAMPLES;
-    return (input * (1.0 - (0.5 * amount))) + (wet * 0.5 * amount);
+    return fixed ? fixed_word(out) : out;
 }
 
 // §19.2 - the right channel reads the LFO a quarter cycle on; the LFO steps at CHORUS_TICK_HZ.
@@ -10172,6 +10199,11 @@ static double phaser_sat(double x) {
     return (x > 1.0) ? 1.0 : ((x < -1.0) ? -1.0 : x);
 }
 
+// notes §227 - the Phaser works in words of full scale 1.0: on its 24-bit step when fixed
+static double phaser_word(double x, bool fixed) {
+    return fixed ? (floor(x * DSP_WORD_SCALE) / DSP_WORD_SCALE) : x;
+}
+
 static double phaser_step(uint32_t voice, uint32_t n, const tEngineNode * spec, double input) {
     SE_LOCAL;
 
@@ -10180,7 +10212,8 @@ static double phaser_step(uint32_t voice, uint32_t n, const tEngineNode * spec, 
     }
     double * st       = gLadder[voice][n];
     bool     typeII   = (spec->select != 0u);
-    double   in       = phaser_sat(input / 4.0);
+    bool     fixed    = atomic_load(&gFixedPoint);   // notes §227 - every stored word on its 24-bit step
+    double   in       = phaser_word(phaser_sat(input / 4.0), fixed);
     uint32_t ticks    = (uint32_t)lround(gSampleRate / PHASER_TICK_HZ);
 
     if (gPulseCount[voice][n] == 0u) {
@@ -10219,25 +10252,25 @@ static double phaser_step(uint32_t voice, uint32_t n, const tEngineNode * spec, 
 
         a         = t + (2.0 * g * s);
         b         = b - a;
-        st[3 + k] = phaser_sat(a);
+        st[3 + k] = phaser_word(phaser_sat(a), fixed);
         b         = b - (2.0 * c * s);
-        w         = phaser_sat(b);
-        st[k]     = phaser_sat(s + (2.0 * g * w));
+        w         = phaser_word(phaser_sat(b), fixed);
+        st[k]     = phaser_word(phaser_sat(s + (2.0 * g * w)), fixed);
         a         = (a + w) - (2.0 * c * st[k]);
 
         if (k == 1u) {
-            mid = phaser_sat(a);
+            mid = phaser_word(phaser_sat(a), fixed);
         }
         b         = a;
     }
 
-    double chain = (sections == 3u) ? phaser_sat(a) : mid;
+    double chain = (sections == 3u) ? phaser_word(phaser_sat(a), fixed) : mid;
     double dry   = typeII ? (4200000.0 / 8388608.0) : (0x47FFFF / 8388608.0);
     double wet   = typeII ? (0x4EF6D8 / 8388608.0) : (0x453000 / 8388608.0);
 
     st[6] = chain;
 
-    return phaser_sat((in * dry) + (chain * wet)) * 4.0;
+    return phaser_word(phaser_sat((in * dry) + (chain * wet)), fixed) * 4.0;
 }
 
 // §56 - FltVoice. The control stage places the vowel (-1 the first, 0 the second, +1 the third), shifts
@@ -13035,13 +13068,22 @@ static double flanger_step(const tEngineNode * spec, uint32_t voice, double inpu
 
         st->delay[0] = (double)(word >> 14) + 1.0 + ((double)((word >> 9) & 31u) / 32.0);
     }
-    gFxBuf[l][write] = (float)dsp_saturate((FLANGER_IN_GAIN * input) + (2.0 * spec->bx[2] * st->feedback));
+    bool          fixed = atomic_load(&gFixedPoint);   // notes §227
+    double        line  = dsp_saturate((FLANGER_IN_GAIN * input) + (2.0 * spec->bx[2] * st->feedback));
+
+    gFxBuf[l][write] = (float)(fixed ? fixed_word(line) : line);
     gFxBufWrite[l]   = write;
 
     double        wet   = ring_read_lagrange(gFxBuf[l], size, write, st->delay[0] * scale);
+    double        out   = dsp_saturate((FLANGER_MIX_GAIN * 2.0 * input) + ((FLANGER_MIX_GAIN + 0.5) * wet));
 
     st->feedback     = dsp_saturate((FLANGER_MIX_GAIN * 2.0 * input) + (FLANGER_MIX_GAIN * wet));
-    return dsp_saturate((FLANGER_MIX_GAIN * 2.0 * input) + ((FLANGER_MIX_GAIN + 0.5) * wet));
+
+    if (fixed) {
+        st->feedback = fixed_word(st->feedback);
+        out          = fixed_word(out);
+    }
+    return out;
 }
 
 // §70.3 - PShift's pitch ratio: Coarse in quarter semitones (interpolated between semitone steps),

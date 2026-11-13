@@ -91,6 +91,9 @@ bool sound_engine_drone_mode(void);
 // Whether the outputs roll off at the top as the G2's converter and output stage do (on by default).
 void sound_engine_set_dac_emulation(bool on);
 bool sound_engine_dac_emulation(void);
+// notes §227 - the Phaser, Chorus and Flanger store their words on the instrument's 24-bit step (off by default)
+void sound_engine_set_fixed_point(bool on);
+bool sound_engine_fixed_point(void);
 
 // notes §4
 void sound_engine_set_output_level_db(double db);
