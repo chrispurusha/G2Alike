@@ -365,3 +365,16 @@ put there - but the G2 writes each slot's real notes, so a slot with notes kept 
 slot B has notes) loaded C's modules into B, D's into C, and left D (its effects) empty (CT 2026-10-12: the factory
 file failed where the same performance from the G2 worked). It now moves on at each slot's description, and the
 writer saves each slot's notes (it wrote them empty, so a performance saved by the editor lost them).
+
+## 30. The current-note section (`0x69`), written back as it was read (`write_stored_current_note()`)
+
+Each patch carries a current-note section: the last key event (note, attack and release velocity) and one entry per
+voice, as 7-bit fields after a 5-bit count. The G2 sends it only in answer to a `0x68` request, which
+`send_get_patch_data()` makes with every patch read, and a file holds it too; both land in `gNote2[slot]`. The G2
+applies the section when a patch is sent to it, which is what lets an arpeggiator or sequencer start with no key held
+(another editor's hardware tests, NordModularG2-Editor, 2026-11). The writers used to replace it with a fixed default -
+one voice entry in a `.pch2` and on the wire, one per voice in a `.prf2` - so a patch read from the G2 or a file lost
+its own. Now `write_current_note_2()` and `write_current_note_2_perf()` write the stored section byte for byte when it
+is whole (its count's entries fit in what was read), and fall back to the default otherwise: a new patch, an Init, a
+cleared slot. The G2 takes a section whose entry count differs from the patch's voices (the other editor's default is
+two entries, whatever the voices), so a voice count changed after reading needs no rewrite.

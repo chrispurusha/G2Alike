@@ -1642,6 +1642,11 @@ static int int_rec(tPoll poll, int expectedResponse, unsigned int timeout_ms) {
 // USB send functions
 // ---------------------------------------------------------------------------
 
+// notes §80 - a message as send_message() will send it, length word and CRC included
+static bool fits_g2_message(uint32_t pos) {
+    return (pos - COMMAND_OFFSET + 4u) <= G2_MAX_SEND_BYTES;
+}
+
 static int send_message(uint8_t * buff, int pos) {
     int                    msgLength    = pos - COMMAND_OFFSET;
     int                    actualLength = 0;
@@ -1651,6 +1656,11 @@ static int send_message(uint8_t * buff, int pos) {
     static double          largestDelta = 0.0f;
 
     if (msgLength <= 0) {
+        return EXIT_FAILURE;
+    }
+
+    if (!fits_g2_message((uint32_t)pos)) {   // notes §80
+        LOG_ERROR("send_message: %d bytes refused - the G2 takes at most %d in one message\n", msgLength + 4, G2_MAX_SEND_BYTES);
         return EXIT_FAILURE;
     }
     crc          = calc_crc16(&buff[COMMAND_OFFSET], msgLength);
@@ -1936,6 +1946,9 @@ static int send_bank_clear(uint8_t domain, uint32_t bank, uint32_t location) {
     return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_CLEAR, USB_RECV_ACK_MS);
 }
 
+#define BANK_PUSH_TOO_LARGE    (2)   // notes §80 - send_bank_download_push(): refused before sending
+static uint32_t sRestoreTooLarge;    // notes §80 - entries a Restore Everything skipped; USB thread only
+
 // notes §29
 static int send_bank_download_push(uint8_t domain, uint32_t bank, uint32_t location,
                                    const char * name, const uint8_t * content, uint32_t contentLen) {
@@ -1958,6 +1971,11 @@ static int send_bank_download_push(uint8_t domain, uint32_t bank, uint32_t locat
     byteStart = BIT_TO_BYTE(bitPos);
     memcpy(&buff[byteStart], content, contentLen);
     bitPos   += BYTE_TO_BIT(contentLen);
+
+    if (!fits_g2_message(BIT_TO_BYTE(bitPos))) {   // notes §80
+        LOG_ERROR("send_bank_download_push: %s is too large for the G2 (%u bytes), skipped\n", name, contentLen);
+        return BANK_PUSH_TOO_LARGE;
+    }
     return send_and_receive(buff, BIT_TO_BYTE(bitPos), SUB_RESPONSE_PATCH_BANK_UPLOAD, USB_RECV_DATA_MS);
 }
 
@@ -2173,9 +2191,11 @@ static int restore_bank(uint32_t sourceBank, uint32_t destBank, const char * src
     const char * manifestPrefix     = isPerf ? "PerfBank" : "PatchBank";
     uint32_t     written            = 0;
     uint32_t     cleared            = 0;
+    uint32_t     tooLarge           = 0;
     bool         aborted            = false;
     const char * alertTitle         = isPerf ? "Performance Bank Restore" : "Patch Bank Restore";
-    char         msg[256]           = {0};
+    char         msg[512]           = {0};
+    char         tooLargeNames[192] = {0};
 
     memset(fileNames, 0, sizeof(fileNames));
 
@@ -2239,18 +2259,31 @@ static int restore_bank(uint32_t sourceBank, uint32_t destBank, const char * src
             // backup-collision suffix) — the name that actually sticks on the device is the one
             // embedded in the content itself, per send_bank_download_push above.
             strncpy(pushName, fileNames[location], CLAVIA_NAME_SIZE);
-            ext                 = strrchr(pushName, '.');
+            ext    = strrchr(pushName, '.');
 
             if (ext != NULL) {
                 *ext = '\0';
             }
-            suffix              = strrchr(pushName, '(');
+            suffix = strrchr(pushName, '(');
 
             if ((suffix != NULL) && (suffix != pushName)) {
                 *suffix = '\0';
             }
+            int pushed = send_bank_download_push(domain, destBank, location, pushName, sBankRestoreContent, sBankRestoreContentLen);
 
-            if (send_bank_download_push(domain, destBank, location, pushName, sBankRestoreContent, sBankRestoreContentLen) != EXIT_SUCCESS) {
+            // notes §80 - too large for the G2: skipped, the location left as it was, and named in the report
+            if (pushed == BANK_PUSH_TOO_LARGE) {
+                tooLarge++;
+                sRestoreTooLarge++;
+
+                if (strlen(tooLargeNames) + strlen(pushName) + 4 < sizeof(tooLargeNames)) {
+                    snprintf(tooLargeNames + strlen(tooLargeNames), sizeof(tooLargeNames) - strlen(tooLargeNames), "%s%s",
+                             (tooLargeNames[0] != '\0') ? ", " : "", pushName);
+                }
+                continue;
+            }
+
+            if (pushed != EXIT_SUCCESS) {
                 LOG_ERROR("restore_bank: push failed for bank %u location %u\n", destBank, location);
                 aborted = true;
                 break;
@@ -2300,6 +2333,11 @@ static int restore_bank(uint32_t sourceBank, uint32_t destBank, const char * src
             snprintf(msg, sizeof(msg),
                      "Restore of %s Bank %u complete: %u written, %u location%s cleared",
                      typeLabel, destBank + 1, written, cleared, cleared == 1 ? "" : "s");
+        }
+
+        if (tooLarge > 0) {
+            snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
+                     ". %u skipped as too large for the G2 to receive, left as they were: %s", tooLarge, tooLargeNames);
         }
         gBankRestoreActive = false;
         post_alert_response(alertTitle, msg);
@@ -3555,7 +3593,7 @@ static int restore_everything(const char * srcFolder) {
     const char * settingsStatus     = "failed";
     bool         aborted            = false;
     char         manifestPath[1280] = {0};
-    char         msg[256]           = {0};
+    char         msg[512]           = {0};
 
     if (!device_ready()) {
         LOG_ERROR("restore_everything: G2 is not connected\n");
@@ -3564,6 +3602,7 @@ static int restore_everything(const char * srcFolder) {
     }
     gBankRestoreIsEverything = true;
     gBankRestoreActive       = true;
+    sRestoreTooLarge         = 0;
     call_wake_glfw();
 
     for (uint32_t bank = 0; (bank < NUM_PATCH_BANKS) && !aborted; bank++) {
@@ -3637,6 +3676,11 @@ static int restore_everything(const char * srcFolder) {
                  totalPatches, totalPatches == 1 ? "" : "es", patchBanksRestored, patchBanksRestored == 1 ? "" : "s", patchBanksSkipped,
                  totalPerfs, totalPerfs == 1 ? "" : "s", perfBanksRestored, perfBanksRestored == 1 ? "" : "s", perfBanksSkipped,
                  settingsStatus);
+    }
+
+    if (sRestoreTooLarge > 0) {   // notes §80
+        snprintf(msg + strlen(msg), sizeof(msg) - strlen(msg),
+                 ". %u skipped as too large for the G2 to receive, left as they were (named in the log)", sRestoreTooLarge);
     }
     post_alert_response("Restore Everything", msg);
     return aborted ? EXIT_FAILURE : EXIT_SUCCESS;

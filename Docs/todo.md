@@ -5,9 +5,9 @@ Measurements, reasoning and completed-work narrative do NOT go here.
 Built-but-unchecked work goes in to-test.md.
 
 General (priority order)
-- ***PRIORITY*** Deleting a module must first zero its morph ranges in every variation: another editor's hardware tests found a delete with morphs left the G2 corrupted until power-off (DrumSynth/CompLev/Mux8-1X/Clip adds refused, slot renamed "Error"); delete_module_and_cables() clears knobs/CCs but not morphs (2026-11-13)
-- ***PRIORITY*** int_rec(): an interrupt read that times out as a header arrives has readLength 16 - process it, do not drop it, or every later bulk read runs one message behind (another editor's root cause of "G2 stops answering") (2026-11-13)
-- Outbound messages over 32 KB break the G2 ("Error" slots, may hang): bank restore guards at 64 KB - refuse over 32768 and skip the entry (2026-11-13)
+- Update check (CT 2026-11-14): ask GitHub's releases API for the newest tag at start (opt-out in prefs, at most daily), compare with the build's version, show "Update available" with a link; shared in SynthLib so every app and plug-in gets it
+- Auto-install updates (CT 2026-11-14): investigate whether it is possible - download the .dmg/.zip, verify it, replace the app or the installed plug-ins; unsigned builds mean quarantine to clear, /Library plug-in folders may need admin, a plug-in cannot be replaced while a host has it loaded, and a public repo must never fetch and run anything unverified
+- MPC plug-in (CT 2026-11-14): see AllAlike's todo - the G2Alike plug-in is the heaviest candidate (engines per slot, the canvas editor); consider it only after an Alike works there
 - Patch Mutator: a genome goes as one SET_PARAM per parameter, unacked, and bursts lose values - send it as one acked variation dump; consider auditioning in the hidden variation 9 (2026-11-13)
 - SOUND_ENGINE_MAX_ENGINES as a build setting (#ifndef), so G2AlikeMaths callers reserve fewer engines - ModAlike reserves 738 MB of zero-fill for 128 (owner: to-do, 2026-11-13)
 - SynthLib move to same level as the various projects, under "GitHub" in my case. Installation instructions would need to follow. Used commonly by all siblings, so library build would need to work for all siblings. So many siblings now, it's difficult to handle. We might potentially go for Link Time Optimisation / dead code removal for all siblings. -dead\_strip and -flto options on MacOS? Would they work? Worth doing or not? In progress: Docs/synthlib-shared-checkout-plan.md

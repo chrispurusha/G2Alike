@@ -575,9 +575,18 @@ else
 fi
 echo "signature: ad-hoc, NOT notarized - users must clear quarantine"
 
+# The Windows half of the same release, at the same version (do-release-windows; G2_RELEASE_SKIP_WINDOWS=1
+# leaves it out)
+if [[ -z ${G2_RELEASE_SKIP_WINDOWS:-} ]]; then
+    echo
+    "${0:a:h}/do-release-windows" "$VERSION" "$DIST"
+else
+    echo "windows: NOT built (G2_RELEASE_SKIP_WINDOWS was set)"
+fi
+
 if [[ -n $NEW_TAG ]]; then
     echo
-    echo "$NEW_TAG does not exist yet. Once you are happy with the .dmg:"
+    echo "$NEW_TAG does not exist yet. Once you are happy with the .dmg and the Windows .zip:"
     echo
     echo "    git tag -a $NEW_TAG -m \"$NEW_TAG\""
     echo "    git push origin $NEW_TAG"

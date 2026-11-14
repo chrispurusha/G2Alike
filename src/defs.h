@@ -151,6 +151,7 @@
 #define INTERRUPT_MESSAGE_SIZE               (16)
 #define EXTENDED_MESSAGE_SIZE                (65536)
 #define SEND_MESSAGE_SIZE                    (65536)
+#define G2_MAX_SEND_BYTES                    (32768) // usbComms notes §80 - the most the G2 takes in one message
 
 #define RESPONSE_TYPE_EXTENDED               (0x1)
 #define RESPONSE_TYPE_EMBEDDED               (0x2)

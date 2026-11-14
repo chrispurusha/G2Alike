@@ -2943,6 +2943,9 @@ been compared with the instrument yet.
     of a word (0.834 at 127). The second output o = 0.6 In + 0.3 d is the feedback, so the loop gain
     tops out at 0.5. Out = 0.6 In + 0.8 d, or In with the module off; the ring keeps running while it is
     off.
+  - **Range and FB glide** as every dial does (sound-engine-notes §61, 2026-11-14): a 125 ms line to a new
+    value. Range used to step straight into the delay word, so a turned dial jumped the read by up to 3.4
+    samples a step - zipper, heard first through ModAlike.
 - **70.3 PShift / Scratch** (the reference model, 2026-10-03). The same five stages in both: a
   100 ms line, two taps, a crossfade, and a control stage on the 24 kHz tick:
   - **Taps.** One signed 24-bit phase p, with the second tap at p plus half a cycle. Each tap reads

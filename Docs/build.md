@@ -159,8 +159,8 @@ powershell -ExecutionPolicy Bypass -File do-release-windows.ps1 0.6.1-beta.1   #
   first time (`tools\windows-common.ps1`, shared by all three scripts).
 - `do-release-windows.ps1` takes `./do-release-windows`'s arguments (`beta`, `patch`, ... need git; an explicit
   version does not), builds both architectures from scratch, checks each exe is a GUI program carrying the
-  version, and writes `G2Alike-<version>-windows-<arch>.zip` to the Desktop (`-Dist` elsewhere, `-Arch arm64`
-  for one). `G2_RELEASE_SKIP_PLUGINS=1` leaves the plug-in out. It never makes the tag.
+  version, and writes one `G2Alike-<version>-windows.zip` with an `x64\` and an `arm64\` folder to the Desktop
+  (`-Dist` elsewhere, `-Arch arm64` for one). `G2_RELEASE_SKIP_PLUGINS=1` leaves the plug-in out. It never makes the tag.
 
 ### MSYS2 and CMake
 

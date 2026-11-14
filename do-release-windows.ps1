@@ -1,5 +1,5 @@
 # do-release-windows.ps1 - the Windows release, built ON WINDOWS. The native twin of ./do-release-windows
-# (which cross-builds on the Mac), with the same arguments, the same checks and the same .zips:
+# (which cross-builds on the Mac), with the same arguments, the same checks and the same .zip:
 #
 #   powershell -ExecutionPolicy Bypass -File do-release-windows.ps1 beta      V0.5.0-beta.6 -> V0.5.0-beta.7
 #   ... patch | minor | major | final                                          as ./do-release
@@ -10,8 +10,9 @@
 # The bump keywords and the no-argument form read the git tags, so they need git; an explicit version
 # does not. Never creates or pushes a tag.
 #
-# Writes G2Alike-<version>-windows-x64.zip and -arm64.zip, each holding G2Alike.exe, G2Alike.vst3,
-# "Read Me First.txt" and LICENSE. G2_RELEASE_SKIP_PLUGINS=1 releases the editor alone. -Arch builds one.
+# Writes ONE G2Alike-<version>-windows.zip: "Read Me First.txt" and LICENSE at the top and a folder per
+# architecture (x64, arm64) holding G2Alike.exe and G2Alike.vst3. G2_RELEASE_SKIP_PLUGINS=1 releases the
+# editor alone. -Arch builds one.
 
 param([string]$Bump = '', [string]$Dist = [Environment]::GetFolderPath('Desktop'), [string[]]$Arch = @('x64', 'arm64'))
 . "$PSScriptRoot\tools\windows-common.ps1"
@@ -54,9 +55,13 @@ $versionClean = $version -replace '^[Vv]', ''
 $env:G2_WIN_VERSION = $version
 $withPlugin = -not $env:G2_RELEASE_SKIP_PLUGINS
 $stage = Join-Path ([IO.Path]::GetTempPath()) ("g2release-" + [guid]::NewGuid())
-$zips = @()
+$name = "G2Alike-$versionClean-windows"
+$zip = Join-Path $Dist "$name.zip"
 
 try {
+    New-Item -ItemType Directory -Force $stage | Out-Null
+    Copy-Item "$Root\platform\windows\Read Me First.txt", "$Root\LICENSE" $stage
+
     foreach ($a in $Arch) {
         Write-Host "==> clean Release build, Windows $a"
         & "$Root\tools\do-windows.ps1" -Arch $a | Out-Null    # the app from scratch; the libraries are kept
@@ -74,30 +79,27 @@ try {
             throw "$version is not in $exe"
         }
 
-        $name = "G2Alike-$versionClean-windows-$a"
-        $dir = Join-Path $stage $name
+        $dir = Join-Path $stage $a
         New-Item -ItemType Directory -Force $dir | Out-Null
-        Copy-Item $exe, "$Root\platform\windows\Read Me First.txt", "$Root\LICENSE" $dir
+        Copy-Item $exe $dir
         if ($withPlugin) { Copy-Item "$($t.Out)\G2Alike.vst3" $dir }
-
-        $zip = Join-Path $Dist "$name.zip"
-        Remove-Item $zip -ErrorAction SilentlyContinue
-        Compress-Archive -Path $dir -DestinationPath $zip
-        $zips += $zip
     }
+
+    Remove-Item $zip -ErrorAction SilentlyContinue
+    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip    # no enclosing folder: Extract All makes one
 } finally {
     Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
 }
 
 Write-Host ""
-foreach ($z in $zips) { Write-Host ("done: $z ({0:N1} MB)" -f ((Get-Item $z).Length / 1MB)) }
-if ($withPlugin) { Write-Host "contents: G2Alike.exe, G2Alike.vst3, Read Me First.txt, LICENSE" }
-else { Write-Host "contents: G2Alike.exe, Read Me First.txt, LICENSE - NO plug-in (G2_RELEASE_SKIP_PLUGINS was set)" }
+Write-Host ("done: $zip ({0:N1} MB)" -f ((Get-Item $zip).Length / 1MB))
+if ($withPlugin) { Write-Host "contents: $($Arch -join ', ') (G2Alike.exe, G2Alike.vst3), Read Me First.txt, LICENSE" }
+else { Write-Host "contents: $($Arch -join ', ') (G2Alike.exe), Read Me First.txt, LICENSE - NO plug-in (G2_RELEASE_SKIP_PLUGINS was set)" }
 Write-Host "signature: none - SmartScreen warns on first run (More info > Run anyway)"
 
 if ($newTag) {
     Write-Host ""
-    Write-Host "$newTag does not exist yet. Once you are happy with the .zips (and the Mac .dmg):"
+    Write-Host "$newTag does not exist yet. Once you are happy with the .zip (and the Mac .dmg):"
     Write-Host ""
     Write-Host "    git tag -a $newTag -m `"$newTag`""
     Write-Host "    git push origin $newTag"

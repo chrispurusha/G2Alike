@@ -282,3 +282,4 @@ constant: restore the block, `reverb_step()`, the IR renderer and the node field
 | # | What | Old | New | Old code at |
 |---|---|---|---|---|
 | 180 | Morph group amounts (§26.4) | always the controller - the patch's knobs (Morph module params 0-7) and modes (8-15) never read; groups 7 and 8 never moved | each group's mode: Knob uses the knob (dial/127, every voice alike), otherwise the controller as before; G.Wh1 (group 5, mode 2) and G.Wh2 (group 8) from CC 96/97 | `9a1b8a0` `src/soundEngine.c` `param_value()` |
+| 181 | Flanger Range and FB (§70.2) | the dial's value straight into the delay word and the feedback gain each snapshot | glide to it over 125 ms as every dial does (notes §61), per FX instance in tFxBufState | 647257b |

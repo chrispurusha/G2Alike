@@ -17,10 +17,10 @@
 # Run it with the same argument as ./do-release for the same release, BEFORE the tag is made - both work
 # the next version out from the newest tag. Never creates or pushes the tag.
 #
-# Writes one .zip per architecture - G2Alike-<version>-windows-x64.zip (any PC) and -arm64.zip (Windows on
-# ARM, Parallels on Apple silicon) - each holding "G2Alike.exe", the "G2Alike.vst3" plug-in, "Read Me
-# First.txt" and LICENSE. Both are self-contained and unsigned: SmartScreen warns on the editor's first
-# run, and the Read Me says what to do. The plug-in needs the VST3 SDK (tools/do-windows-plugin);
+# Writes ONE .zip, G2Alike-<version>-windows.zip: "Read Me First.txt" and LICENSE at the top, and a folder per
+# architecture - x64 (any PC) and arm64 (Windows on ARM, Parallels on Apple silicon) - each holding that
+# architecture's "G2Alike.exe" and "G2Alike.vst3" plug-in. Self-contained and unsigned: SmartScreen warns on the
+# editor's first run, and the Read Me says what to do. ./do-release runs this after the .dmg. The plug-in needs the VST3 SDK (tools/do-windows-plugin);
 # G2_RELEASE_SKIP_PLUGINS=1 releases the editor alone.
 # Cross-built by tools/do-windows with llvm-mingw - see Docs/windows-port-plan.md.
 
@@ -143,7 +143,9 @@ VERSION_CLEAN="${VERSION#[Vv]}"
 
 # --- build ---------------------------------------------------------------
 
-ZIPS=()
+name="G2Alike-$VERSION_CLEAN-windows"
+mkdir -p "$STAGE/$name"
+cp "platform/windows/Read Me First.txt" LICENSE "$STAGE/$name/"
 
 for arch in x64 arm64; do
     triple=$([[ $arch == arm64 ]] && echo aarch64 || echo x86_64)
@@ -172,35 +174,30 @@ for arch in x64 arm64; do
         exit 1
     fi
 
-    name="G2Alike-$VERSION_CLEAN-windows-$arch"
-    mkdir -p "$STAGE/$name"
-    cp $out/G2Alike.exe "$STAGE/$name/G2Alike.exe"
-    cp "platform/windows/Read Me First.txt" LICENSE "$STAGE/$name/"
+    mkdir -p "$STAGE/$name/$arch"
+    cp $out/G2Alike.exe "$STAGE/$name/$arch/G2Alike.exe"
 
     if [[ -z $G2_RELEASE_SKIP_PLUGINS ]]; then
-        cp "$out/G2Alike.vst3" "$STAGE/$name/"
+        cp "$out/G2Alike.vst3" "$STAGE/$name/$arch/"
     fi
-
-    zip="$DIST/$name.zip"
-    rm -f "$zip"
-    (cd "$STAGE" && zip -q -r -X "$zip" "$name")
-    ZIPS+=("$zip")
 done
+
+zip="$DIST/$name.zip"
+rm -f "$zip"
+(cd "$STAGE/$name" && zip -q -r -X "$zip" . -x '*.DS_Store')   # no enclosing folder: Extract All makes one
 
 echo
-for zip in $ZIPS; do
-    echo "done: $zip ($(du -h "$zip" | cut -f1))"
-done
+echo "done: $zip ($(du -h "$zip" | cut -f1))"
 if [[ -z $G2_RELEASE_SKIP_PLUGINS ]]; then
-    echo "contents: G2Alike.exe, G2Alike.vst3, Read Me First.txt, LICENSE"
+    echo "contents: x64/ and arm64/ (G2Alike.exe, G2Alike.vst3), Read Me First.txt, LICENSE"
 else
-    echo "contents: G2Alike.exe, Read Me First.txt, LICENSE - NO plug-in (G2_RELEASE_SKIP_PLUGINS was set)"
+    echo "contents: x64/ and arm64/ (G2Alike.exe), Read Me First.txt, LICENSE - NO plug-in (G2_RELEASE_SKIP_PLUGINS was set)"
 fi
 echo "signature: none - SmartScreen warns on first run (More info > Run anyway)"
 
 if [[ -n $NEW_TAG ]]; then
     echo
-    echo "$NEW_TAG does not exist yet. Once you are happy with the .zips (and the Mac .dmg):"
+    echo "$NEW_TAG does not exist yet. Once you are happy with the .zip (and the Mac .dmg):"
     echo
     echo "    git tag -a $NEW_TAG -m \"$NEW_TAG\""
     echo "    git push origin $NEW_TAG"

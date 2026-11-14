@@ -3,13 +3,17 @@ G2Alike for Windows (experimental)
 
 WHAT IS IN HERE
 
-  G2Alike.exe    the editor - one file, nothing to install
-  G2Alike.vst3    the sound engine as a VST3 instrument, editor included (experimental)
+  x64\            for an ordinary PC (Intel or AMD)
+  arm64\          for Windows on ARM (including Parallels on an Apple silicon Mac)
   LICENSE          the GNU General Public License, version 3
 
-Put the editor anywhere and double-click it. Windows 10 or 11: the "x64" download for
-an ordinary PC, "arm64" for Windows on ARM (including Parallels on an Apple
-silicon Mac).
+Each of the two folders holds the same two files, built for that kind of PC:
+
+  G2Alike.exe    the editor - one file, nothing to install
+  G2Alike.vst3    the sound engine as a VST3 instrument, editor included (experimental)
+
+Unpack the zip (right-click > Extract All...), take the editor from the folder
+that matches your PC, put it anywhere and double-click it. Windows 10 or 11.
 
 THE FIRST RUN - "WINDOWS PROTECTED YOUR PC"
 
@@ -59,8 +63,9 @@ its window. It needs no G2. Copy the file "G2Alike.vst3" into
   C:\Program Files\Common Files\VST3
 
 and rescan plug-ins in the host. It loads with an empty patch: open one from its
-own File menu. Use the download that matches the host - x64 for an ordinary PC,
-arm64 for a native Windows on ARM host. Releases before October 2026 installed a
+own File menu. Take it from the folder that matches the HOST - x64 for an ordinary
+PC, and for an x64 host emulated on Windows on ARM (Ableton Live there); arm64 for
+a native Windows on ARM host. Releases before October 2026 installed a
 FOLDER called "G2Alike.vst3" there; delete that folder before copying the file.
 
 PLAYING PATCHES WITHOUT A G2

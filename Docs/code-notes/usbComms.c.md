@@ -822,3 +822,14 @@ appearing to stop answering, until a power cycle. Found by another editor's long
 2026-10), as the root cause of its hangs. Now a timeout that brought bytes is taken as a read. `rcv_extended()` got
 the same rule; it already used a complete message that came with a timeout, but only because its failure path fell
 through to the length and CRC checks. The interrupt reads stay 16 bytes, so one read never swallows the next header.
+
+## 80. At most 32 KB to the G2 in one message (`G2_MAX_SEND_BYTES`, `fits_g2_message()`)
+
+A message to the G2 larger than about 32 KB breaks it: slots come back named "Error", and it may stop answering until
+it is switched off and on. Clavia's own editor fails the same way. Messages FROM the G2 of that size are fine, so a bank
+backup can hold an entry that cannot be sent back. Found by another editor's hardware tests (NordModularG2-Editor,
+2026-11). `send_message()` refuses anything over 32768 bytes (length word and CRC included), so no path can send one.
+The only sender that comes near is bank restore, which puts a whole performance in one message: there
+`send_bank_download_push()` answers `BANK_PUSH_TOO_LARGE` before sending, `restore_bank()` skips that entry, leaves the
+location as it was, carries on, and names the skipped entries in its report (Restore Everything counts them and names
+them in the log). A patch or performance written from the editor goes one slot at a time, far below the limit.

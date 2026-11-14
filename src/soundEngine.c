@@ -1940,13 +1940,21 @@ static float(*gFxBufBank)[FXBUF_INSTANCES][FXBUF_SAMPLES];   // notes §204a - o
 static uint32_t               gFxBufWriteBank[SOUND_ENGINE_MAX_ENGINES][FXBUF_INSTANCES];
 #define gFxBufWrite    (gFxBufWriteBank[SE])
 typedef struct {
-    int32_t phase;      // §70.2/§70.3 - a signed 24-bit LFO or tap phase, stepped on the 24 kHz tick
-    double  tick;       // engine samples since the last 24 kHz tick
-    double  delay[2];   // the taps' delays in 96 kHz samples, as the last tick set them
-    double  gain[2];    // §70.3 - the taps' crossfade gains
-    double  feedback;   // §70.2 - the Flanger's second output, fed back
-    double  ratio;      // §70.3 - Scratch's smoothed ratio word
-    bool    ready;
+    double value;
+    double target;
+    double step;    // per engine sample; 0 once the target is reached
+} tParamRamp;
+
+typedef struct {
+    int32_t    phase;    // §70.2/§70.3 - a signed 24-bit LFO or tap phase, stepped on the 24 kHz tick
+    double     tick;     // engine samples since the last 24 kHz tick
+    double     delay[2]; // the taps' delays in 96 kHz samples, as the last tick set them
+    double     gain[2];  // §70.3 - the taps' crossfade gains
+    double     feedback; // §70.2 - the Flanger's second output, fed back
+    double     ratio;    // §70.3 - Scratch's smoothed ratio word
+    tParamRamp range;    // §70.2 - the Flanger's Range and FB, gliding as every dial does (notes §61)
+    tParamRamp fb;
+    bool       ready;
 } tFxBufState;
 static tFxBufState            gFxStateBank[SOUND_ENGINE_MAX_ENGINES][FXBUF_INSTANCES];
 #define gFxState    (gFxStateBank[SE])
@@ -2307,22 +2315,16 @@ static double     gEnvTickBank[SOUND_ENGINE_MAX_ENGINES][MAX_VOICES][MAX_ENGINE_
 // 96 kHz), and a new value restarts the glide from wherever it has got to
 #define PARAM_RAMP_SAMPLES    (128.0 * 94.0)
 
-typedef struct {
-    double value;
-    double target;
-    double step;    // per engine sample; 0 once the target is reached
-} tParamRamp;
-
 static tParamRamp gSmoothShapeBank[SOUND_ENGINE_MAX_ENGINES][MAX_ENGINE_NODES];
-#define gSmoothShape     (gSmoothShapeBank[SE])
+#define gSmoothShape          (gSmoothShapeBank[SE])
 static tParamRamp gSmoothCutoffBank[SOUND_ENGINE_MAX_ENGINES][MAX_ENGINE_NODES];
-#define gSmoothCutoff    (gSmoothCutoffBank[SE])
+#define gSmoothCutoff         (gSmoothCutoffBank[SE])
 static tParamRamp gSmoothResBank[SOUND_ENGINE_MAX_ENGINES][MAX_ENGINE_NODES];
-#define gSmoothRes       (gSmoothResBank[SE])
+#define gSmoothRes            (gSmoothResBank[SE])
 static tParamRamp gSmoothGainBank[SOUND_ENGINE_MAX_ENGINES][MAX_ENGINE_NODES];
-#define gSmoothGain      (gSmoothGainBank[SE])
+#define gSmoothGain           (gSmoothGainBank[SE])
 static tParamRamp gSmoothLevelBank[SOUND_ENGINE_MAX_ENGINES][MAX_ENGINE_NODES][MAX_NODE_LEVELS];
-#define gSmoothLevel     (gSmoothLevelBank[SE])
+#define gSmoothLevel          (gSmoothLevelBank[SE])
 
 // Where the per-sample smoothing pass leaves its results, for the voice passes to read. Not per
 // voice: a knob is in one place however many notes are sounding, and smoothing it inside the voice
@@ -13093,17 +13095,21 @@ static double flanger_step(const tEngineNode * spec, uint32_t voice, double inpu
         // the instrument draws the start phase at load; drawn from the line here so that a render repeats
         st->phase = chorus_sign24(chorus_scramble(0x9E3779B9u ^ ((l + 1u) * 0x85EBCA6Bu)));
         st->tick  = 4.0 * scale;
+        (void)smooth_to(&st->range, spec->bx[1], 0.0, false);
+        (void)smooth_to(&st->fb, spec->bx[2], 0.0, false);
         st->ready = true;
     }
+    double        range = smooth_to(&st->range, spec->bx[1], PARAM_RAMP_SAMPLES * scale, true);   // notes §61
+    double        fb    = smooth_to(&st->fb, spec->bx[2], PARAM_RAMP_SAMPLES * scale, true);
 
     if (fx_tick(st) == true) {
         st->phase    = chorus_sign24((uint32_t)st->phase + (uint32_t)spec->bx[0]);
-        uint32_t word = (uint32_t)floor(spec->bx[1] * fabs((double)st->phase) / DSP_WORD_SCALE) + FLANGER_MIN_WORD;
+        uint32_t word = (uint32_t)floor(range * fabs((double)st->phase) / DSP_WORD_SCALE) + FLANGER_MIN_WORD;
 
         st->delay[0] = (double)(word >> 14) + 1.0 + ((double)((word >> 9) & 31u) / 32.0);
     }
     bool          fixed = atomic_load(&gFixedPoint);   // notes §227
-    double        line  = dsp_saturate((FLANGER_IN_GAIN * input) + (2.0 * spec->bx[2] * st->feedback));
+    double        line  = dsp_saturate((FLANGER_IN_GAIN * input) + (2.0 * fb * st->feedback));
 
     gFxBuf[l][write] = (float)(fixed ? fixed_word(line) : line);
     gFxBufWrite[l]   = write;

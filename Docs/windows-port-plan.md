@@ -142,7 +142,7 @@ over USB (WinUSB via Device Manager) and plays the sound engine through WASAPI, 
 (`tools/do-windows arm64`) and run in Parallels on Apple silicon. Dial dragging works (hidden pointer, CT 2026-10-04). Since then: no console window in a Release .exe
 (`-mwindows`, cmake/platform.cmake; Debug keeps it for the log), the Recovery folder under %APPDATA%\G2Alike
 beside the prefs (`deviceSync.c`), and `./do-release-windows` - the same version arguments as `./do-release`,
-one .zip per architecture (exe, Read Me with the SmartScreen step, LICENSE) to the Desktop, checking each exe
+one .zip (since 2026-11-14; it was one per architecture) with the Read Me (SmartScreen step) and LICENSE at the top and an x64 and an arm64 folder of exe and plug-in, to the Desktop - `./do-release` runs it after the .dmg - checking each exe
 is a GUI program carrying the version. Still open: the four warnings in the way of -Werror, MIDI input and
 output (stubs), a comparison of patches against the Mac, and testing the plug-in in a real host.
 

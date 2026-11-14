@@ -1234,7 +1234,32 @@ void write_patch_notes(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
     write_bit_stream(buff, &sizeBitPos, 16, BIT_TO_BYTE(*bitPos - sizeBitPos) - 2);
 }
 
+// notes §30 - the current-note section as the G2 or the file gave it, when it holds one whole; false for the default
+static bool write_stored_current_note(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
+    if ((slot >= MAX_SLOTS) || (gNote2Size[slot] < 4u) || (gNote2Size[slot] > sizeof(gNote2[slot]))) {
+        return false;
+    }
+    uint32_t at      = 21;   // past the last key event's note, attack and release
+    uint32_t entries = read_bit_stream(gNote2[slot], &at, 5) + 1u;
+    uint32_t bits    = 26u + (entries * 21u);
+
+    if (BIT_TO_BYTE_ROUND_UP(bits) > gNote2Size[slot]) {
+        return false;
+    }
+    write_bit_stream(buff, bitPos, 8, SUB_RESPONSE_CURRENT_NOTE_2);
+    write_bit_stream(buff, bitPos, 16, gNote2Size[slot]);
+
+    for (uint32_t i = 0; i < gNote2Size[slot]; i++) {
+        write_bit_stream(buff, bitPos, 8, gNote2[slot][i]);
+    }
+
+    return true;
+}
+
 void write_current_note_2(uint32_t slot, uint8_t * buff, uint32_t * bitPos) {
+    if (write_stored_current_note(slot, buff, bitPos)) {   // notes §30
+        return;
+    }
     write_bit_stream(buff, bitPos, 8, SUB_RESPONSE_CURRENT_NOTE_2);
     write_bit_stream(buff, bitPos, 16, 6);
     write_bit_stream(buff, bitPos, 8, 0x80);
@@ -1250,6 +1275,9 @@ void write_current_note_2_perf(uint32_t slot, uint8_t * buff, uint32_t * bitPos)
     uint32_t n          = voiceCount + 1;   // voice list entries = voiceCount + 1
     uint32_t sizeBitPos = 0;
 
+    if (write_stored_current_note(slot, buff, bitPos)) {   // notes §30
+        return;
+    }
     write_bit_stream(buff, bitPos, 8, SUB_RESPONSE_CURRENT_NOTE_2);
 
     sizeBitPos = *bitPos;
