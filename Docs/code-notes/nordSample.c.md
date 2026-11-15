@@ -144,7 +144,7 @@ start L, start R, end L, end R, loop start L and R, loop end L and R, all byte o
 ends inclusive; the left channel whole, then the right; then the rate (u32 at 0x68) and options (u16 at 0x6e,
 bit 0 the loop). The rate is not a round number - 43569 to 44053 Hz in the Celtic Harp - and it is the one to
 play at: at their own rates the samples sit within 3.7 cents of equal-tempered pitch, at 44.1 kHz up to 17.6
-cents sharp, so the tuning is in the rate. As on the E4, the stored loop end is the frame before the loop's
-last. A loop here can sit anywhere in the sample (one 200-frame loop at 3.4 s of a 5 s recording), so a zone
+cents sharp, so the tuning is in the rate. The stored loop end is the loop's last frame (corrected 2026-11-14: it was taken as the frame before,
+from Celtic Harp alone, and Soul Oohs ticked on every loop - SynthLib emuBank notes §3). A loop here can sit anywhere in the sample (one 200-frame loop at 3.4 s of a 5 s recording), so a zone
 carries its own loop end (`loopEnd`); a Nord zone's is its length.
 

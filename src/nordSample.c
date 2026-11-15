@@ -585,9 +585,9 @@ static bool ebl_load(const char * path, tNordZone * zone) {
         }
     }
 
-    // notes §11 - the stored loop end is the frame before the loop's last
+    // notes §11 - the stored loop end is the loop's last frame
     uint32_t        loopS  = (f[4] >= startL) ? ((f[4] - startL) / 2u) : 0u;
-    uint32_t        loopE  = (f[6] >= startL) ? (((f[6] - startL) / 2u) + 2u) : 0u;
+    uint32_t        loopE  = (f[6] >= startL) ? (((f[6] - startL) / 2u) + 1u) : 0u;
 
     memset(zone, 0, sizeof(*zone));
     zone->data       = out;
