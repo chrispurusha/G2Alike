@@ -83,6 +83,7 @@ USER REQUESTS (reported 2026-08-22; none blocking)
 - Add performance keyboard split/layer/zone UI (manual: "Layering Patches")
 - Add a dedicated master-clock/tempo panel
 - Virtual keyboard velocity: two computer-keyboard keys to step it down/up, and matching -/+ buttons in the Virtual Keyboard panel (CT 2026-09-28). Engine only - the G2 plays the editor's notes at 127 whatever is sent (code-notes/virtualKeyboard.c.md §11), so show that when a G2 is connected
+- Module palette sorted A-Z (user request 2026-11-16): module categories and the modules within each in alphabetical order, as a Settings option beside Half Rate (economy), off by default so the G2's own order stays the default
 
 
 MODULES AND GRAPHICS
