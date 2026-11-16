@@ -105,7 +105,6 @@ void render_midi_cc_list_panel(void) {
     tController         sorted[MAX_NUM_CONTROLLERS];
     uint32_t            count                 = 0;
     double              renderW               = 0.0;
-    double              renderH               = 0.0;
     // notes §2
     double              titleH                = 24.0;
     double              btnH                  = (double)STANDARD_BUTTON_TEXT_HEIGHT;
@@ -164,7 +163,6 @@ void render_midi_cc_list_panel(void) {
     boxW                           = (colW * CC_LIST_COLUMNS) + (margin * 2.0);
     boxH                           = titleH + (rowH * (double)(rows + 1)) + (margin * 2.0);
     renderW                        = get_render_width() / gGlobalGuiScale;
-    renderH                        = get_render_height() / gGlobalGuiScale;
 
     if (boxW > (renderW - 20.0)) {
         boxW = renderW - 20.0;

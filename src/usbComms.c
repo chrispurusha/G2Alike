@@ -815,7 +815,6 @@ static int parse_resources_used(uint32_t slot, uint8_t * buff, uint32_t * bitPos
     uint16_t ramRaw     = 0;
     uint32_t qmemRaw    = 0;
     uint16_t rmemRaw    = 0;
-    uint16_t unknown    = 0;
     uint8_t  location   = 0;
     uint8_t  sub        = 0;
     float    cyclesLoad = 0.0f;
@@ -842,7 +841,7 @@ static int parse_resources_used(uint32_t slot, uint8_t * buff, uint32_t * bitPos
         cyclesRed                             = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
         cyclesBlue                            = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
         zpMem                                 = read_bit_stream(buff, bitPos, 8);
-        unknown                               = read_bit_stream(buff, bitPos, 16); // unknown5, discard
+        (void)read_bit_stream(buff, bitPos, 16);                       // unknown5, discard
         xmemV1                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
         ymemV1                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);
         pmemV1                                = read_bit_stream(buff, bitPos, 8) * 128 + read_bit_stream(buff, bitPos, 8);

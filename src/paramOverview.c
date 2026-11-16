@@ -250,7 +250,6 @@ void render_param_overview_panel(void) {
     if (boxW > (renderW - (margin * 2.0))) {
         boxW  = renderW - (margin * 2.0);
         cellW = ((boxW - (margin * 2.0) - rowLabelW) - (PO_CELL_GAP * (NUM_KNOBS_PER_BANK - 1))) / NUM_KNOBS_PER_BANK;
-        gridW = (cellW * NUM_KNOBS_PER_BANK) + (PO_CELL_GAP * (NUM_KNOBS_PER_BANK - 1));
     }
 
     if (boxH > (renderH - (margin * 2.0))) {

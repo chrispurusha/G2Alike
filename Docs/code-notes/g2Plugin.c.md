@@ -287,3 +287,11 @@ In an Audio Unit host the editor could not be resized at all - SynthLib's AU vie
 resizable (its notes §3) - so its text was small with no way to enlarge it short of zooming the module area, which
 leaves the menu and top bar as they are. Now it resizes in every host, and `editorFreeAspect` frees its shape: the
 width scales everything (menu, top bar, modules), the height shows more or less of the patch.
+
+## 20. Pitch bend at its own frame (2026-11-16)
+Each pitch-bend value a block brings is played at its own frame (paramPoints, SynthLib synthlibCtlPoints.h): the
+render stops at each point, the bend is set, and the render goes on. Without it a host hands over only a block's last
+value, so a fast bend moved once a block - 3 to 10 ms apart in Live - as in the AllAlike plug-ins until the same day.
+The morphs are not taken per frame: a morph reaches the sound through a snapshot rebuild on another thread (§14),
+milliseconds long and behind a lock the editor shares, so no frame could time it; more points would only queue more
+rebuilds. Every other parameter settles at a block's last value, as before.

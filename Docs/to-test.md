@@ -1262,3 +1262,4 @@ from a capture, so they are the ones most likely to be right.
 - Double-click a module dial or slider resets it to its default (11-16, moduleGraphics notes §94): the G2 follows, linked variations follow, one Undo puts it back; a quick second click no longer starts a drag
 - AU editor resizes in Logic / Live Professor (11-16, SynthLib AuView notes §3); G2Alike's editor and app window take any shape (g2Plugin §19, graphics §47)
 - Host tempo and transport drive the master clock in the plug-in (11-16, g2Plugin §18, sound-engine-notes §228): a ClkGen on Master follows the DAW's tempo, stops with it, and stays on its beat through loops - check in Logic, Live Professor or Ableton
+- Pitch bend per frame in the plug-in (11-16, g2Plugin notes §20): a fast bend in Live is smooth, not stepping once a block

@@ -1095,7 +1095,7 @@ tRectangle render_paramType1StandardToggle(tModule * module, tRectangle rectangl
 
     if (strMap == NULL || paramValue >= array_size_str_map(strMap)) {
         if (strMap != NULL) {
-            LOG_ERROR("Bad strMap for module type %d %s ParamRef %u ParamIndex %u, map pointer = 0x%lx, Value %u >= Map array size %u\n", module->type, gModuleProperties[module->type].name, paramRef, paramIndex, (unsigned long)strMap, (int)paramValue, array_size_str_map(strMap));
+            LOG_ERROR("Bad strMap for module type %d %s ParamRef %u ParamIndex %u, map pointer = %p, Value %u >= Map array size %u\n", module->type, gModuleProperties[module->type].name, paramRef, paramIndex, (const void *)strMap, (int)paramValue, array_size_str_map(strMap));
         }
         char       debug[64]      = {0};
         snprintf(debug, sizeof(debug), "%u", (int)paramValue);

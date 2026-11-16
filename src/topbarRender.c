@@ -50,7 +50,7 @@ void render_top_bar(void) {
     char        patchNameCopy[CLAVIA_NAME_SIZE + 1] = {0};
     char        buff[32]                            = {0};
     tCommsState commsState                          = gCommsState;
-    char *      commsStateText                      = "Unknown";
+    char *      commsStateText                      = NULL;
     tRgb        commsStateColour                    = (tRgb)RGB_RED_7;
     tRgb        buttonBackgroundColour              = (tRgb)RGB_BACKGROUND_GREY;
     uint32_t    slot                                = gSlot;
@@ -62,7 +62,6 @@ void render_top_bar(void) {
     uint64_t    nowMs                               = (uint64_t)get_time_ms();
     bool        txActive                            = (txTime != 0) && ((nowMs - txTime) < COMMS_LAMP_MS);
     bool        rxActive                            = (rxTime != 0) && ((nowMs - rxTime) < COMMS_LAMP_MS);
-    tRectangle  commsStateRect                      = {0};
 
     set_rgb_colour((tRgb)RGB_GREY_5);
     // Full width now. The strip on the right used to be reserved for the vertical scrollbar, which
@@ -232,20 +231,19 @@ void render_top_bar(void) {
     double boxW    = boxH; // square
     double txrxX   = onlineX + onlineW + 6.0;
 
-    rectangle      = (tRectangle){{
-                                      onlineX, onlineY
-                                  }, {
-                                      onlineW, STANDARD_BUTTON_TEXT_HEIGHT
-                                  }
+    rectangle = (tRectangle){{
+                                 onlineX, onlineY
+                             }, {
+                                 onlineW, STANDARD_BUTTON_TEXT_HEIGHT
+                             }
     };
-    commsStateRect = draw_button(mainArea, rectangle, commsStateText, commsStateColour);
+    (void)draw_button(mainArea, rectangle, commsStateText, commsStateColour);
     draw_button(mainArea, (tRectangle){{txrxX, onlineY}, {boxW, boxH}}, "", txActive ? (tRgb)RGB_GREEN_7 : (tRgb)RGB_BACKGROUND_GREY);
     draw_button(mainArea, (tRectangle){{txrxX, onlineY + boxH + txrxGap}, {boxW, boxH}}, "", rxActive ? (tRgb)RGB_GREEN_7 : (tRgb)RGB_BACKGROUND_GREY);
 #else
     (void)commsState;
     (void)commsStateText;
     (void)commsStateColour;
-    (void)commsStateRect;
     (void)txActive;
     (void)rxActive;
 #endif // SYNTHLIB_PLUGIN_BUILD

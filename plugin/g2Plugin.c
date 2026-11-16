@@ -34,6 +34,7 @@
 #include "defs.h"                   // TARGET_FRAME_BUFF_WIDTH / _HEIGHT - the locked canvas ratio
 
 #include "synthlibPlugin.h"
+#include "synthlibCtlPoints.h"
 
 #include "globalVars.h"             // the document, and the names that are macros onto it
 #include "dataBase.h"               // init_patch(), slot_has_modules()
@@ -154,6 +155,7 @@ typedef struct {
     // This block's notes, in arrival order - which both wrappers make offset order. Audio thread only.
     tG2NoteEvent     events[G2_MAX_EVENTS];
     uint32_t         eventCount;
+    tSynthLibCtlPoints ctl;   // notes §20: this block's pitch bend, each value at its frame
 
     // sound_engine_render() writes INTERLEAVED frames and both plug-in formats hand over one buffer
     // per channel, so it renders here and is de-interleaved out. Bounded by G2_MAX_BLOCK and looped,
@@ -417,6 +419,8 @@ static void apply_note(const tG2NoteEvent * e) {
 // Audio
 // ------------------------------------------------------------------------------------------------
 
+static void g2_set_param(void * inst, uint32_t id, double normalized);
+
 static void g2_process(void * inst,
                        const float * const * in, uint32_t numIn,
                        float ** out, uint32_t numOut,
@@ -432,6 +436,10 @@ static void g2_process(void * inst,
     }
 
     if ((numOut < 2u) || (out == NULL)) {
+        for (uint32_t k = 0; k < g2->ctl.count; k++) {
+            g2_set_param(inst, g2->ctl.point[k].id, g2->ctl.point[k].value);
+        }
+        synthlib_ctl_points_clear(&g2->ctl);
         return;
     }
 
@@ -441,8 +449,24 @@ static void g2_process(void * inst,
     // notes §8
     uint32_t pos = 0;
 
-    for (uint32_t i = 0; i < g2->eventCount; i++) {
-        uint32_t at = (g2->events[i].offset < frames) ? g2->events[i].offset : frames;
+    for (uint32_t i = 0; i <= g2->eventCount; i++) {
+        uint32_t          at = (i < g2->eventCount) ? ((g2->events[i].offset < frames) ? g2->events[i].offset : frames) : frames;
+        tSynthLibCtlPoint c;
+
+        // notes §20: each pitch-bend value at its own frame
+        while (synthlib_ctl_points_due(&g2->ctl, at, &c)) {
+            uint32_t w = (c.offset < frames) ? c.offset : frames;
+
+            if (w > pos) {
+                render_span(g2, in, numIn, out, numOut, pos, w - pos);
+                pos = w;
+            }
+            g2_set_param(inst, c.id, c.value);
+        }
+
+        if (i == g2->eventCount) {
+            break;
+        }
 
         if (at > pos) {
             render_span(g2, in, numIn, out, numOut, pos, at - pos);
@@ -451,6 +475,7 @@ static void g2_process(void * inst,
         apply_note(&g2->events[i]);
     }
     g2->eventCount = 0;
+    synthlib_ctl_points_clear(&g2->ctl);
 
     if (pos < frames) {
         render_span(g2, in, numIn, out, numOut, pos, frames - pos);
@@ -542,6 +567,22 @@ static void g2_set_param(void * inst, uint32_t id, double normalized) {
         // The host hands pitch bend over as 0..1 with 0.5 at rest; the engine wants -1..+1, and
         // decides for itself how many semitones that is from the patch's own Bend setting.
         sound_engine_pitch_bend((normalized * 2.0) - 1.0);
+    }
+}
+
+// notes §20: every value a block brings, at its frame - pitch bend kept for the block; the rest, the morphs included,
+// at once (a morph reaches the sound through a snapshot rebuild off this thread, which no frame can time)
+static void g2_param_points(void * inst, uint32_t id, const tSynthLibParamPoint * points, uint32_t count) {
+    tG2Plugin * g2 = enter(inst);
+
+    if (count == 0u) {
+        return;
+    }
+
+    if (id == (uint32_t)G2_PARAM_BEND) {
+        synthlib_ctl_points_add(&g2->ctl, id, points, count);
+    } else {
+        g2_set_param(inst, id, points[count - 1].value);
     }
 }
 
@@ -998,6 +1039,7 @@ static const tSynthLibPluginDesc gDescriptor = {
         .polyPressure  = g2_poly_pressure,
 
         .setParam      = g2_set_param,
+        .paramPoints   = g2_param_points,
         .getParam      = g2_get_param,
         .paramText     = g2_param_text,
 

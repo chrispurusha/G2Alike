@@ -317,8 +317,8 @@ bool canvas_param_drag_motion(tCoord coord, double rawX, double rawY, bool altHe
     uint32_t   range     = 0;
     uint32_t   value     = 0;
     tParamType paramType = paramTypeCommonDial;
-    uint32_t   slot      = gSlot;
-    uint32_t   variation = gPatchDescr[slot].activeVariation;
+    uint32_t   slot      = 0;
+    uint32_t   variation = 0;
 
     (void)angle;
     (void)value;

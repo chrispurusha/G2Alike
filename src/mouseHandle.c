@@ -287,7 +287,7 @@ void mouse_button(tCoord coord, tMouseButton mouseButton, int mods) {
             // Click on empty module-area space: clear selection and start rubber-band. Shared with
             // the plug-in — see canvasDrag.h.
             if (!found && !gContextMenu.active) {
-                found = canvas_empty_press(coord, shift_modifier_held());
+                (void)canvas_empty_press(coord, shift_modifier_held());
             }
         }
         break;
@@ -385,15 +385,12 @@ void mouse_button(tCoord coord, tMouseButton mouseButton, int mods) {
             // eClickLayerPanel beats everything else's eClickLayerCanvas). Its two legacy fallbacks
             // went the same way, and for the same reasons.
             if (!found) {
-                found = dispatch_click_region(coord, eClickRelease);
+                (void)dispatch_click_region(coord, eClickRelease);
             }
-
             // AFTER dispatch, exactly as before: a press-captured widget owns its own release, and
             // the rubber band must not pre-empt it. That ordering is why canvas_gesture_release()
             // takes a mask instead of always sweeping all four — see canvasDrag.h.
-            if (canvas_gesture_release(&releaseEvent, canvasGestureRubberBand) != canvasGestureNone) {
-                found = true;
-            }
+            (void)canvas_gesture_release(&releaseEvent, canvasGestureRubberBand);
             finish_param_drag();   // the param gesture's release plus this shell's undo and cursor restore
         }
         break;
@@ -411,12 +408,9 @@ void mouse_button(tCoord coord, tMouseButton mouseButton, int mods) {
             found = canvas_right_click(coord, slot, location);
 
             if (!found) {
-                found = handle_module_area_click(coord);
+                (void)handle_module_area_click(coord);
             }
-
-            if (handle_topbar_right_up(coord)) {
-                found = true;
-            }
+            (void)handle_topbar_right_up(coord);
             stop_dragging();
         }
         break;
