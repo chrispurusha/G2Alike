@@ -25,6 +25,7 @@ extern "C" {
 // Disable warnings from external library headers etc.
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "defs.h"
 #include "synthlibDefs.h"
@@ -52,6 +53,7 @@ extern "C" {
 #include "canvasDrag.h"
 #include "clickRegion.h"
 #include "inputState.h"
+#include "utils.h"
 
 // notes §1
 
@@ -115,6 +117,38 @@ static tModule * clicked_module(tModuleKey key) {
     return module;
 }
 
+#define DIAL_DOUBLE_CLICK_MS    (350.0)
+
+// notes §94: a second press on the same dial soon after the first puts it back to its default, as one undoable edit
+static bool dial_double_clicked(tModuleKey key, uint32_t paramIndex) {
+    static tModuleKey lastKey;
+    static uint32_t   lastParam = UINT32_MAX;
+    static double     lastMs    = -1.0e9;
+    double            now       = get_time_ms();
+    bool              same      = (lastParam == paramIndex) && (memcmp(&lastKey, &key, sizeof(key)) == 0);
+    bool              twice     = same && ((now - lastMs) <= DIAL_DOUBLE_CLICK_MS);
+
+    lastKey   = key;
+    lastParam = paramIndex;
+    lastMs    = twice ? -1.0e9 : now;   // a third press starts a new pair
+    return twice;
+}
+
+static void reset_param_to_default(tModule * module, uint32_t variation, uint32_t paramIndex) {
+    uint32_t slot   = module->key.slot;
+    uint32_t oldVal = module->param[variation][paramIndex].value;
+    uint32_t value  = module_param_default(module->type, paramIndex);
+
+    if (oldVal == value) {
+        return;
+    }
+    set_param_value(module, variation, paramIndex, value);
+    send_param_value(slot, module->key, paramIndex, variation, value);
+    send_param_value_to_links(slot, module->key, paramIndex, variation, value);
+    undo_push_param_change(module->key, paramIndex, variation, oldVal, value);
+    synthlib_request_redraw();
+}
+
 // notes §2
 static void param_click_handler(tCoord coord, eClickPhase phase, void * userData) {
     tParamClickCtx * ctx       = (tParamClickCtx *)userData;
@@ -144,6 +178,10 @@ static void param_click_handler(tCoord coord, eClickPhase phase, void * userData
            && paramType != paramTypeBypass && paramType != paramTypeEnable
            && paramType != paramTypePush && paramType != paramTypeCustomData
            && paramType != paramTypeRadioEdit) {
+            if (dial_double_clicked(module->key, ctx->paramIndex)) {   // notes §94
+                reset_param_to_default(module, variation, ctx->paramIndex);
+                return;
+            }
             param_drag_start(module, ctx->paramIndex);
             // notes §4
             click_region_capture_rect(&gParamDragging.rect);

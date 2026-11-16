@@ -1313,3 +1313,10 @@ are drawn dim rather than black, so the scale is visible with nothing playing.
   mark in its place still interrupted the fall. The meter now falls like any other; only clipping holds.
 
 The value arrives already smoothed for display (`level_shown()`, meterDisplay.c notes §2).
+
+## 94. Double-click a dial for its default (2026-11-16, as the AllAlike panels)
+A second press on the same dial within 350 ms puts the parameter back to its module's default - the value a new
+module starts at (`module_param_default()`, the parameter table's default) - instead of starting a drag. It is one
+edit, done the way a finished drag is: the value set, sent to the G2, its linked variations sent the settled value,
+one undo step. Dials and sliders only; switches, menus and buttons keep their own presses. A third press starts a new
+pair, so double-clicking twice does not reset twice.
