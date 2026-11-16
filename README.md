@@ -99,11 +99,17 @@ perfectly correct path still produces silence — and silence looks the same wha
 
 ### Controls
 
-The plug-in is called **G2Alike**, since it plays a patch rather than editing one.
+**The plug-in edits patches as the application does.** Its editor is the application's own canvas: it
+draws the patch, you can add, wire and set modules, and it has the same File, Settings, Controls, Tools,
+View and Help menus. It is the same window whichever format your host loaded - the two wrappers are thin
+shells around one view. What it does not do is talk to a G2: the patch plays on G2Alike's own sound engine.
 
-**Its editor is the application's own canvas.** It draws the patch, with the same File, Settings,
-Controls, Tools, View and Help menus, and it is the same window whichever format your host loaded —
-the two wrappers are thin shells around one view.
+**The editor resizes freely**, in any host and either format: wider makes everything larger - menus, top
+bar and modules - and taller shows more of the patch. The application's window does the same.
+
+**It follows the host's tempo and transport.** Clk-synced modules and a Clock Generator set to Master run at
+the host's tempo, stop when the host stops, and stay on its beat while it plays. A host sends a plug-in no
+MIDI clock, so receiving MIDI clock in Synth Settings has no effect there.
 
 Ten parameters are exposed to the host and are all automatable: **Morph 1-8**, the G2's own
 performance controls, an **Output Level** trim and **Pitch Bend**. Pitch bend, the mod wheel,

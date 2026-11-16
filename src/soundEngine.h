@@ -184,6 +184,9 @@ void sound_engine_detach(void);
 // The current document's index among the engines' owners - for state kept per G2 outside this file (noteStack.c).
 uint32_t sound_engine_index(void);
 
+// notes §228 - a plug-in host's tempo, transport and song position for the calling document, before each block
+void sound_engine_set_host_clock(bool valid, bool tempoValid, double bpm, bool playing, bool beatValid, double beat);
+
 #ifdef __cplusplus
 }
 #endif

@@ -424,9 +424,12 @@ static void g2_process(void * inst,
                        const tSynthLibTransport * transport) {
     tG2Plugin * g2 = enter(inst);
 
-    // The transport is not read. The engine free-runs and has nothing to sync to - a patch is a patch
-    // whether the host is rolling or not.
-    (void)transport;
+    // notes §18 - the host's tempo, play/stop and song position drive the master clock: Clk-synced modules and a
+    // Master Clock Generator follow the DAW
+    if (transport != NULL) {
+        sound_engine_set_host_clock(transport->valid, transport->tempoValid, transport->tempo, transport->playing,
+                                    transport->valid && transport->playing && transport->musicTimeValid, transport->projectTimeMusic);
+    }
 
     if ((numOut < 2u) || (out == NULL)) {
         return;
@@ -952,7 +955,7 @@ static const tSynthLibPluginDesc gDescriptor = {
     .outputs           = gOutputs,
     .numOutputs        = SOUND_ENGINE_OUT_PAIRS,
     .wantsMidiIn       = true,
-    .wantsTransport    = false,
+    .wantsTransport    = true,    // notes §18
 
     // Levels, not events: a morph or the output level delivered twice - once here on the UI thread,
     // once by the host inside a block - is harmless, and on a host that never routes the controller's
@@ -975,6 +978,7 @@ static const tSynthLibPluginDesc gDescriptor = {
     .editorDefaultWidth = 900.0,
     .editorMinWidth     = 640.0,
     .editorAspect       = (double)TARGET_FRAME_BUFF_WIDTH / (double)TARGET_FRAME_BUFF_HEIGHT,
+    .editorFreeAspect   = true,   // notes §19: the module area shows more or less of the patch
     .editorWidthLoad    = g2_editor_width_load,
     .editorWidthSave    = g2_editor_width_save,
 

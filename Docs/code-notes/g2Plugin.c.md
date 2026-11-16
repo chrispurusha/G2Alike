@@ -271,3 +271,19 @@ and the other set's image straight after it, its length in an `other=` line and 
 `othername=`, both before data=. A build from before this reads data= and stops at its length, so it still
 opens such a project - with the other set left out. A record without them leaves the other mode empty.
 
+
+## 18. The host's tempo and transport drive the master clock (2026-11-16, a Logic user's report)
+The plug-in used to ignore the transport, so a Clock Generator on Master, and every Clk-synced module, ran at the
+patch's own master clock whatever the DAW did - in every host, not only Logic. Receiving MIDI clock does not help: a
+host sends a plug-in no clock bytes. Now the descriptor asks for the transport (`wantsTransport`), and each block
+hands the engine the host's tempo, play/stop and song position for the instance's own document
+(`sound_engine_set_host_clock()`, sound-engine-notes §228): the master clock runs at the host's tempo, exactly (not
+rounded to whole BPM as the G2's own clock is), stops and goes back to the top when the host stops, and while it plays
+is locked to the song position, so it stays on the DAW's grid through loops and jumps. A host that says nothing
+leaves the patch's own master clock in charge, as before.
+
+## 19. The editor resizes freely (2026-11-16, a Logic user's report)
+In an Audio Unit host the editor could not be resized at all - SynthLib's AU view never told the host it was
+resizable (its notes §3) - so its text was small with no way to enlarge it short of zooming the module area, which
+leaves the menu and top bar as they are. Now it resizes in every host, and `editorFreeAspect` frees its shape: the
+width scales everything (menu, top bar, modules), the height shows more or less of the patch.

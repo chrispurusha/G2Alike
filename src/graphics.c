@@ -209,6 +209,7 @@ void init_graphics(void) {
         .targetWidth     = TARGET_FRAME_BUFF_WIDTH,
         .targetHeight    = TARGET_FRAME_BUFF_HEIGHT,
         .dialMode        = eDialModeRotary,
+        .freeAspect      = true,   // notes §47: any shape; the module area shows more or less of the patch
         .theme           = gAppTheme,
         .mouseCoord      = get_global_gui_scaled_mouse_coord,
         // notes §6

@@ -4039,3 +4039,13 @@ quiet tails and feedback ring down as words do rather than in doubles. Truncatio
 does; whether the instrument rounds at any of these points has not been checked against its parts. Asked for by
 AllAlike's ModAlike (a Float/Fixed button); not yet offered in the application's menus or G2Alike's plug-in.
 Wider use - the Comb Filter, Osc String, Resonator, OverDrive's feedback - is on `todo.md`.
+
+## 228. A plug-in host's clock (`sound_engine_set_host_clock()`) (2026-11-16)
+
+One per document, set by the plug-in before each block. While set, the master clock's tempo is the host's, clamped to
+the G2's 30-240 BPM but not rounded; it runs while the host plays and is held at the top while it stops. While the
+host plays with a song position, the master clock's phase is not accumulated but set from it: a Master ClkGen's phase
+step a 24 kHz tick at Sync n is bpm x 2^56 / (1,440,000 x 2^n) and a beat is 1,440,000 / bpm ticks, so the phase is
+2^(56 - n) a beat whatever the tempo, and the phase at the block's end is the host's beat there times that. So the
+clock follows loops, jumps and tempo changes with nothing to catch up. With no host clock (the application, a host
+that gives nothing) the G2's own master clock rules, as before.

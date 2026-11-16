@@ -312,3 +312,8 @@ does not return until the button is let go, so `do_graphics_loop()` drew nothing
 through the drag, sometimes after it (CT, on the Parallels VM). GLFW calls the window-refresh callback from
 WM_PAINT inside that loop; this draws the frame there, at the size the framebuffer callback has just set.
 `#if defined (_WIN32)` by the port's rule - the Mac compiles exactly what it did.
+
+## 47. The window takes any shape (2026-11-16, a user's request)
+The window was held to 16:9 (SynthLib locks a window to its target ratio). The canvas scales from the width and the
+module area fills whatever height there is, so G2Alike asks for `freeAspect`: the window can be any shape above its
+minimum, a taller one showing more of the patch. The plug-in's editor does the same (g2Plugin notes §19).

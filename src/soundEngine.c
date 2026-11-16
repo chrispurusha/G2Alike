@@ -1682,18 +1682,46 @@ static uint32_t             gOscOversampleBank[SOUND_ENGINE_MAX_ENGINES] = {[(0)
 #define MASTER_CLOCK_BPM_MIN    (30u)
 #define MASTER_CLOCK_BPM_MAX    (240u)
 
-// notes §200 - the tempo every Clk-synced module and a Master-sourced ClkGen follow: the G2's master clock
-static double engine_master_bpm(void) {
-    uint32_t bpm = gGlobalSettings.masterClock;
+// notes §228 - a plug-in host's tempo, transport and song position, one per document; set before each block
+typedef struct {
+    bool   valid;        // the host said something this block
+    bool   tempoValid;
+    double bpm;
+    bool   playing;
+    bool   beatValid;
+    double beat;         // quarter notes from the song start, at the block's start
+} tHostClock;
+static tHostClock           gHostClockBank[SOUND_ENGINE_MAX_ENGINES / MAX_SLOTS];
 
+// notes §200 - the tempo every Clk-synced module and a Master-sourced ClkGen follow: the G2's master clock, or a
+// plug-in host's tempo (§228)
+static double engine_master_bpm(void) {
+    const tHostClock * host = &gHostClockBank[ENGINE_DOC];
+    uint32_t           bpm  = gGlobalSettings.masterClock;
+
+    if (host->valid && host->tempoValid) {
+        return fmin((double)MASTER_CLOCK_BPM_MAX, fmax((double)MASTER_CLOCK_BPM_MIN, host->bpm));
+    }
     return ((bpm >= MASTER_CLOCK_BPM_MIN) && (bpm <= MASTER_CLOCK_BPM_MAX)) ? (double)bpm : ENGINE_REFERENCE_BPM;
 }
 
-// notes §200 - whether the master clock runs; with none known (no G2, no performance) it is taken as running
+// notes §200 - whether the master clock runs; with none known (no G2, no performance) it is taken as running; in a
+// plug-in host, whether its transport plays (§228)
 static bool engine_master_running(void) {
-    uint32_t bpm = gGlobalSettings.masterClock;
+    const tHostClock * host = &gHostClockBank[ENGINE_DOC];
+    uint32_t           bpm  = gGlobalSettings.masterClock;
 
+    if (host->valid) {
+        return host->playing;
+    }
     return ((bpm >= MASTER_CLOCK_BPM_MIN) && (bpm <= MASTER_CLOCK_BPM_MAX)) ? (gGlobalSettings.masterClockRunning != 0) : true;
+}
+
+// notes §228 - the calling document's host clock, for the block about to render
+void sound_engine_set_host_clock(bool valid, bool tempoValid, double bpm, bool playing, bool beatValid, double beat) {
+    gHostClockBank[ENGINE_DOC] = (tHostClock){
+        .valid = valid, .tempoValid = tempoValid && (bpm > 0.0), .bpm = bpm, .playing = playing, .beatValid = beatValid, .beat = beat,
+    };
 }
 
 
@@ -17264,6 +17292,21 @@ static void master_clock_advance(uint32_t frameCount) {
     if ((engine_master_running() == false) || (rate <= 0.0) || (gPerfStartBank[ENGINE_DOC].holding == true)) {
         for (uint32_t n = 0; n < CLKGEN_SYNC_SETTINGS; n++) {
             atomic_store(&pos->phase[n], 0u);
+        }
+
+        pos->tickRemainder = 0.0;
+        return;
+    }
+    const tHostClock *     host  = &gHostClockBank[ENGINE_DOC];
+
+    // notes §228 - locked to a playing host's song position: the phase at the block's end, 2^(56 - sync) a beat
+    if (host->valid && host->beatValid) {
+        double beats = host->beat + (((double)frameCount * engine_master_bpm()) / (60.0 * rate));
+
+        for (uint32_t n = 0; n < CLKGEN_SYNC_SETTINGS; n++) {
+            double whole = floor(beats * (double)(1u << (8u - n)));   // 2^(56-n) a beat, taken in two parts below
+
+            atomic_store(&pos->phase[n], ((uint64_t)(int64_t)whole << 48) + (uint64_t)llround((beats * (double)(1u << (8u - n)) - whole) * 281474976710656.0));
         }
 
         pos->tickRemainder = 0.0;
