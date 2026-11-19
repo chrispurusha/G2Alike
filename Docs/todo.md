@@ -5,7 +5,7 @@ Measurements, reasoning and completed-work narrative do NOT go here.
 Built-but-unchecked work goes in to-test.md.
 
 General (priority order)
-- Update check (CT 2026-11-14): ask GitHub's releases API for the newest tag at start (opt-out in prefs, at most daily), compare with the build's version, show "Update available" with a link; shared in SynthLib so every app and plug-in gets it
+- Update check (CT 2026-11-14): ask GitHub's releases API for the newest tag at start (opt-out in prefs, at most daily), compare with the build's version, show "Update available" with a link; shared in SynthLib so every app and plug-in gets it. Also apply to other projects.
 - Auto-install updates (CT 2026-11-14): investigate whether it is possible - download the .dmg/.zip, verify it, replace the app or the installed plug-ins; unsigned builds mean quarantine to clear, /Library plug-in folders may need admin, a plug-in cannot be replaced while a host has it loaded, and a public repo must never fetch and run anything unverified
 - MPC plug-in (CT 2026-11-14): see AllAlike's todo - the G2Alike plug-in is the heaviest candidate (engines per slot, the canvas editor); consider it only after an Alike works there
 - Patch Mutator: a genome goes as one SET_PARAM per parameter, unacked, and bursts lose values - send it as one acked variation dump; consider auditioning in the hidden variation 9 (2026-11-13)
